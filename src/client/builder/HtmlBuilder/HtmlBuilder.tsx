@@ -1,0 +1,194 @@
+import {
+    Fragment,
+    jsx,
+    jsxWithLifecycle,
+    useEffect,
+    useRef,
+    useSilentState,
+    useState
+} from "../../jsx-runtime/jsx-runtime";
+import {HtmlClass, HtmlObject, insertEvent} from "./HtmlBuildType";
+import {darkenElement, deleteObjectById, HtmlBuildTraversal} from "./HtmlBuilderUtils";
+import {HtmlBuilderThreeViewer} from "./HtmlBuilderThreeViewer";
+import {HtmlBuilderComponentSelect} from "./HtmlBuilderComponentSelect";
+import {HtmlBuilderViewport} from "./HtmlBuilderViewport";
+import {HtmlBuilderComponentProperties} from "./HtmlBuilderComponentProperties";
+
+interface HtmlBuilderProps {
+    htmlClass:HtmlClass,
+    updateClass: () => void,
+    closeClass: () => void,
+}
+
+export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProps) => {
+
+    const [showOutline, setShowOutline] = useState<boolean>(true);
+    const [centerContent, setCenterContent] = useState<boolean>(false);
+
+    const nextHtmlId = useRef<number>(0);
+
+    const eventCache = useRef<Record<number, Array<{name:string, cb:(evt:Event) => void}>>>({});
+
+    const [htmlBuild, setHtmlBuild,  silentUpdateHtmlBuild, triggerDepsHtmlBuild] = useSilentState<HtmlObject>(/*{
+        type: "block",
+        tag: "div",
+        css: {height:"100%", width:"100%"},
+        id: 0
+    }*/htmlClass.object);
+
+    const [selectedHtmlObject, setSelectedHtmlObject] = useState<HtmlObject>(htmlBuild);
+
+    useEffect(() => {
+        HtmlBuildTraversal(htmlBuild, (object) => {
+            if(object.id != Number.MAX_SAFE_INTEGER) {
+                nextHtmlId.current = Math.max(nextHtmlId.current, object.id + 1);
+            }
+        });
+    }, [htmlBuild]);
+
+    useEffect(() => {
+        if(selectedHtmlObject) {
+            const element = document.querySelector("[data-object-id='"+selectedHtmlObject.id+"']");
+            if(element) {
+                darkenElement(element as  HTMLElement);
+            }
+        }
+    }, [selectedHtmlObject]);
+
+    const drawHtmlObject = (object:HtmlObject): JSX.Element => {
+
+        const addEvents = (el:HTMLElement) => {
+            if(object.events) {
+                eventCache.current[object.id] = [];
+                object.events.forEach((event) => {
+                    const callback =  (evt:Event) => {
+                        const fn = new Function("event", event.call);
+                        fn(evt);
+                    };
+                    el.addEventListener(event.name, callback);
+                    eventCache.current[object.id].push({name: event.name, cb: callback});
+                });
+            }
+        }
+        const removeEvents = (el:HTMLElement) => {
+            if(eventCache.current[object.id]) {
+                eventCache.current[object.id].forEach((event) => {
+                    el.removeEventListener(event.name, event.cb);
+                })
+            }
+        }
+
+        const eventOnMount = (el:HTMLElement) => {
+            addEvents(el);
+        }
+        const eventOnUnMount = (el:HTMLElement) => {
+            removeEvents(el);
+        }
+        const eventOnUpdate = (el:HTMLElement) => {
+            removeEvents(el);
+            addEvents(el);
+        }
+
+        if(object.type == "block") {
+            const style = object.css ?? {};
+            if(showOutline) {
+                style.outline = "1px solid red";
+            } else {
+                style.outline = "none";
+            }
+
+            const onInsert = (e:CustomEvent<insertEvent>) => {
+                if(object.id == Number.MAX_SAFE_INTEGER) return;
+                if(e.detail.component && (object.content == undefined || object.content.id == Number.MAX_SAFE_INTEGER)) {
+                    object.content = {
+                        ...e.detail.component.object,
+                        id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
+                    } as HtmlObject;
+                    if( !e.detail.preview) {
+                        nextHtmlId.current++;
+                        setSelectedHtmlObject(object.content);
+                    }
+                    silentUpdateHtmlBuild();
+                } else if(!e.detail.component && object.content?.id === Number.MAX_SAFE_INTEGER) {
+                    object.content = undefined;
+                    silentUpdateHtmlBuild();
+                }
+            }
+
+            const isInserteable = object.id != Number.MAX_SAFE_INTEGER && (object.content == undefined || object.content.id == Number.MAX_SAFE_INTEGER);
+
+            return jsxWithLifecycle(object.tag, {
+                'data-object-id': object.id,
+                style: { ...object.css, ...style },
+                'data-inserteable': isInserteable ? "true" : "false",
+                onInsert: isInserteable ? onInsert : undefined,
+                children: object.content ? drawHtmlObject(object.content) : jsx(Fragment, {}),
+                onMount: eventOnMount,
+                onUnmount: eventOnUnMount,
+                onUpdate: eventOnUpdate
+            });
+        } else if(object.type == "text") {
+            return jsxWithLifecycle(object.tag, {
+                'data-object-id': object.id,
+                style: { ...object.css },
+                'data-inserteable': "false",
+                children: object.content,
+                onMount: eventOnMount,
+                onUnmount: eventOnUnMount,
+                onUpdate: eventOnUpdate
+            });
+
+        }
+        return <></>
+    }
+
+    const removeObject = (object:HtmlObject) => {
+        deleteObjectById(htmlBuild, object.id);
+        silentUpdateHtmlBuild();
+    }
+
+    return (
+        <div style={{"display": "flex", height:"100vh"}}>
+            <div style={{maxWidth:"300px"}}>
+                <div style={{display:"flex", flexDirection:"column", height:"100%"}}>
+                    <div style={{height:"50%"}}>
+                        <HtmlBuilderThreeViewer object={htmlBuild} selectedObject={selectedHtmlObject} setSelectedObject={setSelectedHtmlObject} removeObject={removeObject} />
+                    </div>
+                    <div>
+                        <HtmlBuilderComponentSelect selectedObject={selectedHtmlObject} />
+                    </div>
+                </div>
+            </div>
+            <div style={{flexGrow: "1"}} id={"htmlBuildDraw"}>
+                <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column"}}>
+                    <div>
+                        <div>
+                            <input checked={showOutline} type={"checkbox"} id="config-outline" value={"true"}
+                                   onChange={(evt) => {
+                                       setShowOutline((evt.target as HTMLInputElement).checked);
+                                   }}/>
+                            <label for={"config-outline"}>Show outline</label>
+
+                            <input checked={centerContent} type={"checkbox"} id="config-center" value={"true"}
+                                   style={{marginLeft:"20px"}}
+                                   onChange={(evt) => {
+                                       setCenterContent((evt.target as HTMLInputElement).checked);
+                                   }}/>
+                            <label for={"config-center"}>Center content</label>
+                        </div>
+
+                    </div>
+                    <div style={{flex: "1", padding: "50px"}}>
+                        <HtmlBuilderViewport>
+                            {drawHtmlObject(htmlBuild)}
+                        </HtmlBuilderViewport>
+                    </div>
+                </div>
+            </div>
+            <div style={{maxWidth: "300px"}}>
+                <HtmlBuilderComponentProperties selectedObject={selectedHtmlObject} invokeUpdate={() => silentUpdateHtmlBuild()}/>
+            </div>
+
+        </div>
+    )
+}

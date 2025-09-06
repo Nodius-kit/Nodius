@@ -1,0 +1,36 @@
+html {
+    font-feature-settings: normal;
+    font-variation-settings: normal;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -moz-tab-size: 4;
+    -o-tab-size: 4;
+    tab-size: 4;
+    display: block;
+}
+
+body {
+    margin: 0;
+    line-height: inherit;
+    display: block;
+}
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    -ms-overflow-style: none;
+    scrollbar-width: thin;
+}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+svg, textarea {
+    vertical-align: middle;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
