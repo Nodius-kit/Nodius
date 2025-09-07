@@ -1,12 +1,14 @@
-import {HtmlObject} from "./HtmlBuildType";
+import {HtmlObject, HtmlType} from "./HtmlBuildType";
 import {useEffect, useState} from "nodius_jsx/jsx-runtime";
+import {convertHtmlObject} from "./HtmlBuilderUtils";
 
 interface HtmlBuilderComponentPropertiesProps {
     selectedObject: HtmlObject,
     invokeUpdate: () => void,
+    replaceObject: (newObject: HtmlObject) => void,
 }
 
-export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate}: HtmlBuilderComponentPropertiesProps) => {
+export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate, replaceObject}: HtmlBuilderComponentPropertiesProps) => {
     const [newCssKey, setNewCssKey] = useState("");
     const [newCssValue, setNewCssValue] = useState("");
     const [newEventName, setNewEventName] = useState("");
@@ -88,14 +90,16 @@ export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate}: H
         }}>
             {/* CSS Properties Section */}
             <div>
+
+
                 <h3 style={{margin: "0 0 8px 0", fontSize: "14px"}}>CSS Properties</h3>
 
                 {selectedObject.type == "text" ? (
                     <div>
                          <textarea
-                             value={selectedObject.content}
+                             value={selectedObject.content["en"]}
                              onInput={(e) => {
-                                 selectedObject.content = (e.target as HTMLInputElement).value;
+                                 selectedObject.content["en"] = (e.target as HTMLInputElement).value;
                                  invokeUpdate();
                              }}
                              style={{
@@ -112,17 +116,32 @@ export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate}: H
                 ) : ""   }
 
                 {/* Existing CSS Properties */}
-                <div style={{display: "flex", flexDirection: "column", gap: "5px", marginBottom: "10px"}}>
-                    <input
-                        type="text"
-                        value={selectedObject.tag}
-                        onInput={(e) => {
-                            selectedObject.tag = (e.target as HTMLInputElement).value;
-                            invokeUpdate();
-                        }}
-                        style={{width: "60px", padding: "2px", fontSize: "11px"}}
-                        placeholder="tag"
-                    />
+                <div style={{display: "flex", flexDirection: "column", gap: "5px", marginBottom: "10px", marginTop:"5px"}}>
+                    <div style={{display:"flex"}}>
+                        <label>Tag: </label>
+                        <input
+                            type="text"
+                            value={selectedObject.tag}
+                            onInput={(e) => {
+                                selectedObject.tag = (e.target as HTMLInputElement).value;
+                                invokeUpdate();
+                            }}
+                            style={{width: "60px", padding: "2px", fontSize: "11px", flex:"1"}}
+                            placeholder="tag"
+                        />
+                    </div>
+                    <div style={{display:"flex"}}>
+                        <label>Type: </label>
+                        <select value={selectedObject.type} onChange={(e) => {
+                            const value = (e.target as HTMLInputElement).value as HtmlType;
+                            replaceObject(convertHtmlObject(selectedObject, value));
+                        }} style={{flex: "1"}}>
+                            <option>block</option>
+                            <option>list</option>
+                            <option>text</option>
+                        </select>
+                    </div>
+
 
                     {/* don't work also */}
                     {Object.entries(selectedObject.css).map(([cssKey, cssValue], i) => (

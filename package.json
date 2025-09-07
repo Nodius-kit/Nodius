@@ -27,6 +27,6 @@
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.2",
     "arangojs": "^10.1.2",
-    "nodius_jsx": "^1.2.8"
+    "nodius_jsx": "^1.4.0"
   }
 }

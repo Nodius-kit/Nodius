@@ -8,7 +8,7 @@ import {
     useState,
 } from "nodius_jsx/jsx-runtime";
 import {HtmlClass, HtmlObject, insertEvent} from "./HtmlBuildType";
-import {darkenElement, deleteObjectById, HtmlBuildTraversal} from "./HtmlBuilderUtils";
+import {darkenElement, deleteObjectById, HtmlBuildTraversal, replaceObjectById} from "./HtmlBuilderUtils";
 import {HtmlBuilderThreeViewer} from "./HtmlBuilderThreeViewer";
 import {HtmlBuilderComponentSelect} from "./HtmlBuilderComponentSelect";
 import {HtmlBuilderViewport} from "./HtmlBuilderViewport";
@@ -30,7 +30,7 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
 
     const eventCache = useRef<Record<number, Array<{name:string, cb:(evt:Event) => void}>>>({});
 
-    const [htmlBuild, setHtmlBuild,  silentUpdateHtmlBuild, triggerDepsHtmlBuild] = useSilentState<HtmlObject>(/*{
+    const [htmlBuild, setHtmlBuild,  silentUpdateHtmlBuild, triggerDepsHtmlBuild] = useSilentState<any>(/*{
         type: "block",
         tag: "div",
         css: {height:"100%", width:"100%"},
@@ -38,6 +38,16 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
     }*/htmlClass.object);
 
     const [selectedHtmlObject, setSelectedHtmlObject] = useState<HtmlObject>(htmlBuild);
+    const replaceObject = (newObject: HtmlObject): void => {
+        // replace object with the same id
+        console.log(replaceObjectById(htmlBuild, newObject));
+        console.log(htmlBuild);
+        if(selectedHtmlObject.id === newObject.id) {
+            setSelectedHtmlObject(newObject);
+            console.log(newObject);
+        }
+        setHtmlBuild({...htmlBuild});
+    }
 
     useEffect(() => {
         HtmlBuildTraversal(htmlBuild, (object) => {
@@ -140,6 +150,7 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
 
         } else if(object.type == "list") {
             const onInsert = (e:CustomEvent<insertEvent>) => {
+                console.log(e);
                 if(object.id == Number.MAX_SAFE_INTEGER) return;
                 const target = e.target as HTMLElement;
                 const direction = getComputedStyle(target).flexDirection as "row"|"column";
@@ -151,15 +162,26 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                         id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
                     } as HtmlObject);
                     silentUpdateHtmlBuild();
-                } else if(object.content.length > 0  && e.detail.component && object.content.some((obj) => obj.id === Number.MAX_SAFE_INTEGER) && !e.detail.preview) {
+                } else if(object.content.length > 0  && e.detail.component && !e.detail.preview) {
                     // replace temporary
-                    object.content = object.content.map((obj) => {
-                        if(obj.id === Number.MAX_SAFE_INTEGER) {
-                            obj.id = nextHtmlId.current;
-                            nextHtmlId.current++;
-                        }
-                        return obj;
-                    });
+                    if(object.content.some((obj) => obj.id === Number.MAX_SAFE_INTEGER)) {
+                        object.content = object.content.map((obj) => {
+                            if (obj.id === Number.MAX_SAFE_INTEGER) {
+                                obj.id = nextHtmlId.current;
+                                nextHtmlId.current++;
+                                setSelectedHtmlObject(obj);
+                            }
+                            return obj;
+                        });
+                    } else {
+                        // fast add
+                        object.content.push({
+                            ...e.detail.component.object,
+                            id: nextHtmlId.current
+                        } as HtmlObject);
+                        nextHtmlId.current++;
+                    }
+
                     silentUpdateHtmlBuild();
                 } else if(object.content.length > 0  && !e.detail.component && object.content.some((obj) => obj.id === Number.MAX_SAFE_INTEGER)) {
                     // remove temporary
@@ -182,38 +204,28 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                             const bounds = child.getBoundingClientRect();
                             if(direction == "row") {
                                 if (posX > bounds.x && posX < bounds.x + bounds.width) {
-                                    // if it's inside
                                     if (posX > bounds.x + (bounds.width)) {
                                         insertAt += 0.5;
-                                        // right
                                     } else {
-                                        //left
                                         insertAt -= 0.5;
                                     }
                                 } else if (posX < bounds.x) {
-                                    // it's previous
                                     insertAt -= 0.5;
                                     break;
                                 } else {
-                                    // it's after
                                     insertAt += 1;
                                 }
                             } else {
                                 if (posY > bounds.y && posY < bounds.y + bounds.height) {
-                                    // if it's inside
                                     if (posY > bounds.y + (bounds.height)) {
                                         insertAt += 0.5;
-                                        // right
                                     } else {
-                                        //left
                                         insertAt -= 0.5;
                                     }
                                 } else if (posY < bounds.y) {
-                                    // it's previous
                                     insertAt -= 0.5;
                                     break;
                                 } else {
-                                    // it's after
                                     insertAt += 1;
                                 }
                             }
@@ -222,7 +234,7 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                         if(indexOfTemporary === -1 || (indexOfTemporary !== insertAt && indexOfTemporary-1 !== insertAt && indexOfTemporary+1 !== insertAt) ) {
                             object.content = insertAtIndex(object.content, insertAt, {
                                 ...e.detail.component.object,
-                                id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
+                                id: Number.MAX_SAFE_INTEGER
                             } as HtmlObject);
                             silentUpdateHtmlBuild();
                         }
@@ -297,7 +309,7 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                 </div>
             </div>
             <div style={{maxWidth: "300px"}}>
-                <HtmlBuilderComponentProperties selectedObject={selectedHtmlObject} invokeUpdate={() => silentUpdateHtmlBuild()}/>
+                <HtmlBuilderComponentProperties selectedObject={selectedHtmlObject} replaceObject={replaceObject} invokeUpdate={silentUpdateHtmlBuild}/>
             </div>
 
         </div>

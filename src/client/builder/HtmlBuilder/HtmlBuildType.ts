@@ -11,6 +11,8 @@ export interface HtmlBase {
     }>
 }
 
+export type HtmlType = "block" | "text" | "list";
+
 export interface HtmlDiv extends HtmlBase {
     type: "block",
     content?: HtmlObject,
@@ -18,7 +20,7 @@ export interface HtmlDiv extends HtmlBase {
 
 export interface HtmlText extends HtmlBase{
     type: "text",
-    content: string
+    content: Record<"en", string>
 }
 
 export interface HtmlList extends HtmlBase {

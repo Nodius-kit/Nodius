@@ -27,7 +27,7 @@ const allComponents:BuilderComponent[] = [
             type: "text",
             tag: "div",
             css: {},
-            content: "Your text here",
+            content: {en: "Your text here"},
             id: 0
         }
     },

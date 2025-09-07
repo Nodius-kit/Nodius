@@ -1,4 +1,5 @@
-import {HtmlObject} from "./HtmlBuildType";
+import {HtmlDiv, HtmlList, HtmlObject, HtmlText, HtmlType} from "./HtmlBuildType";
+import {deepCopy} from "../../../utils/numericUtils";
 
 export const HtmlBuildTraversal = <T>(object:HtmlObject, callBack:(object:HtmlObject) => T | undefined) : T | undefined => {
     const call:T|undefined = callBack(object);
@@ -64,6 +65,7 @@ export const darkenColor = (color: string, amount: number): string => {
     return 'rgba(0, 0, 0, 0.3)'; // Fallback
 }
 
+
 export const deleteObjectById = (obj: HtmlObject, idToDelete: number): boolean => {
 
     if(obj.type == "block" && obj.content) {
@@ -86,4 +88,80 @@ export const deleteObjectById = (obj: HtmlObject, idToDelete: number): boolean =
         }
     }
     return false;
+}
+
+export const replaceObjectById = (source: HtmlObject, toReplace: HtmlObject): boolean => {
+    // Case 1: block with nested content
+    if (source.type === "block") {
+        if (source.content && source.content.id === toReplace.id) {
+            source.content = toReplace;
+            return true;
+        } else if(source.content) {
+            return replaceObjectById(source.content, toReplace);
+        } else {
+            return false;
+        }
+    }
+
+    // Case 2: list with children
+    else if (source.type === "list" && Array.isArray(source.content) && source.content.length > 0) {
+        for (let i = 0; i < source.content.length; i++) {
+            if (source.content[i].id === toReplace.id) {
+                source.content[i] = toReplace;
+                return true;
+            } else {
+                if (replaceObjectById(source.content[i], toReplace)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+};
+
+export const convertHtmlObject = (object:HtmlObject, to:HtmlType):HtmlObject => {
+    if(object.type === "block" && to === "list") {
+        return {
+            ...object,
+            type:"list",
+            content: object.content ? [object.content] : []
+        }
+    } else if(object.type === "block" && to === "text") {
+        return {
+            ...object,
+            type:"text",
+            content: {en: ""}
+        }
+    } else if(object.type === "text" && to === "block") {
+        return {
+            ...object,
+            type:"block",
+            content: {
+                ...deepCopy(object)
+            }
+        }
+    } else if(object.type === "text" && to === "list") {
+        const newObj = deepCopy(object);
+        return {
+            ...newObj,
+            type:"list",
+            content: [
+                object
+            ]
+        }
+    } else if(object.type === "list" && to === "text") {
+        return {
+            ...object,
+            type:"text",
+            content: {en: ""}
+        }
+    } else if(object.type === "list" && to === "block") {
+        return {
+            ...object,
+            type:"block",
+            content: object.content.length > 0 ? object.content[0] : undefined
+        }
+    }
+    return object;
 }

@@ -39,15 +39,13 @@ export const HtmlBuilderThreeViewer = (
                     ) : null}
                 </div>
                 {
-                    object.content != undefined && typeof object.content  !== "string"? (
+                    object.content != undefined &&  object.type !== "text" ? (
                         <div style={{paddingLeft:"2px"}}>
                             {Array.isArray(object.content)
                                 ? object.content.map((item: HtmlObject, i) => (
-                                    <Fragment key={item.id}>
-                                        <span data-i={i}></span>
-                                        <span>test</span>
-                                        {renderHiearchy(item)}
-                                    </Fragment>
+                                    <div key={i}>
+                                    {renderHiearchy(item)}
+                                    </div>
                                 ))
                                 : renderHiearchy(object.content)}
                         </div>
