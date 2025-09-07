@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from "../jsx-runtime";
+import {useCallback, useEffect, useState} from "nodius_jsx/jsx-runtime";
 
 type UseElementSizeReturn<T> = {
     refCallBack: (node: T | null) => void,

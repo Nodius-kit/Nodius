@@ -5,14 +5,15 @@ import {
     useEffect,
     useRef,
     useSilentState,
-    useState
-} from "../../jsx-runtime/jsx-runtime";
+    useState,
+} from "nodius_jsx/jsx-runtime";
 import {HtmlClass, HtmlObject, insertEvent} from "./HtmlBuildType";
 import {darkenElement, deleteObjectById, HtmlBuildTraversal} from "./HtmlBuilderUtils";
 import {HtmlBuilderThreeViewer} from "./HtmlBuilderThreeViewer";
 import {HtmlBuilderComponentSelect} from "./HtmlBuilderComponentSelect";
 import {HtmlBuilderViewport} from "./HtmlBuilderViewport";
 import {HtmlBuilderComponentProperties} from "./HtmlBuilderComponentProperties";
+import {insertAtIndex} from "../../../utils/numericUtils";
 
 interface HtmlBuilderProps {
     htmlClass:HtmlClass,
@@ -89,17 +90,17 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
             addEvents(el);
         }
 
+        const style = object.css ?? {};
+        if(showOutline) {
+            style.outline = "1px solid red";
+        } else {
+            style.outline = "none";
+        }
         if(object.type == "block") {
-            const style = object.css ?? {};
-            if(showOutline) {
-                style.outline = "1px solid red";
-            } else {
-                style.outline = "none";
-            }
 
             const onInsert = (e:CustomEvent<insertEvent>) => {
                 if(object.id == Number.MAX_SAFE_INTEGER) return;
-                if(e.detail.component && (object.content == undefined || object.content.id == Number.MAX_SAFE_INTEGER)) {
+                if(e.detail.component && (object.content == undefined || !e.detail.preview)) {
                     object.content = {
                         ...e.detail.component.object,
                         id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
@@ -115,8 +116,7 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                 }
             }
 
-            const isInserteable = object.id != Number.MAX_SAFE_INTEGER && (object.content == undefined || object.content.id == Number.MAX_SAFE_INTEGER);
-
+            const isInserteable = object.id != Number.MAX_SAFE_INTEGER && (object.content == undefined || object.content.id === Number.MAX_SAFE_INTEGER);
             return jsxWithLifecycle(object.tag, {
                 'data-object-id': object.id,
                 style: { ...object.css, ...style },
@@ -138,6 +138,109 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                 onUpdate: eventOnUpdate
             });
 
+        } else if(object.type == "list") {
+            const onInsert = (e:CustomEvent<insertEvent>) => {
+                if(object.id == Number.MAX_SAFE_INTEGER) return;
+                const target = e.target as HTMLElement;
+                const direction = getComputedStyle(target).flexDirection as "row"|"column";
+
+                if(object.content.length == 0 && e.detail.component) {
+                    // simple push
+                    object.content.push({
+                        ...e.detail.component.object,
+                        id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
+                    } as HtmlObject);
+                    silentUpdateHtmlBuild();
+                } else if(object.content.length > 0  && e.detail.component && object.content.some((obj) => obj.id === Number.MAX_SAFE_INTEGER) && !e.detail.preview) {
+                    // replace temporary
+                    object.content = object.content.map((obj) => {
+                        if(obj.id === Number.MAX_SAFE_INTEGER) {
+                            obj.id = nextHtmlId.current;
+                            nextHtmlId.current++;
+                        }
+                        return obj;
+                    });
+                    silentUpdateHtmlBuild();
+                } else if(object.content.length > 0  && !e.detail.component && object.content.some((obj) => obj.id === Number.MAX_SAFE_INTEGER)) {
+                    // remove temporary
+                    object.content = object.content.filter((obj) => obj.id !== Number.MAX_SAFE_INTEGER);
+                    silentUpdateHtmlBuild();
+                } else if(e.detail.cursorX != undefined && e.detail.cursorY != undefined && e.detail.component) {
+                    // calcul position, relatif to other child
+                    let insertAt = 0.5;
+                    const element = document.querySelector("[data-object-id='"+object.id+"']");
+                    const posX = e.detail.cursorX;
+                    const posY = e.detail.cursorY;
+
+                    if(element) {
+                        const indexOfTemporary = object.content.findIndex((obj) => obj.id === Number.MAX_SAFE_INTEGER);
+                        for(let i = 0; i < element.children.length; i++) {
+                            if(i === indexOfTemporary) {
+                                continue;
+                            }
+                            const child = element.children[i];
+                            const bounds = child.getBoundingClientRect();
+                            if(direction == "row") {
+                                if (posX > bounds.x && posX < bounds.x + bounds.width) {
+                                    // if it's inside
+                                    if (posX > bounds.x + (bounds.width)) {
+                                        insertAt += 0.5;
+                                        // right
+                                    } else {
+                                        //left
+                                        insertAt -= 0.5;
+                                    }
+                                } else if (posX < bounds.x) {
+                                    // it's previous
+                                    insertAt -= 0.5;
+                                    break;
+                                } else {
+                                    // it's after
+                                    insertAt += 1;
+                                }
+                            } else {
+                                if (posY > bounds.y && posY < bounds.y + bounds.height) {
+                                    // if it's inside
+                                    if (posY > bounds.y + (bounds.height)) {
+                                        insertAt += 0.5;
+                                        // right
+                                    } else {
+                                        //left
+                                        insertAt -= 0.5;
+                                    }
+                                } else if (posY < bounds.y) {
+                                    // it's previous
+                                    insertAt -= 0.5;
+                                    break;
+                                } else {
+                                    // it's after
+                                    insertAt += 1;
+                                }
+                            }
+                        }
+                        insertAt = Math.floor(insertAt);
+                        if(indexOfTemporary === -1 || (indexOfTemporary !== insertAt && indexOfTemporary-1 !== insertAt && indexOfTemporary+1 !== insertAt) ) {
+                            object.content = insertAtIndex(object.content, insertAt, {
+                                ...e.detail.component.object,
+                                id: e.detail.preview ? Number.MAX_SAFE_INTEGER : nextHtmlId.current
+                            } as HtmlObject);
+                            silentUpdateHtmlBuild();
+                        }
+                    }
+                }
+            }
+
+            const isInserteable = object.id != Number.MAX_SAFE_INTEGER;
+            return jsxWithLifecycle(object.tag, {
+                'data-object-id': object.id,
+                style: { ...object.css },
+                'data-inserteable': isInserteable ? "true" : "false",
+                onInsert: isInserteable ? onInsert : undefined,
+                children: object.content.map((obj) => drawHtmlObject(obj)),
+                onMount: eventOnMount,
+                onUnmount: eventOnUnMount,
+                onUpdate: eventOnUpdate
+            });
         }
         return <></>
     }
@@ -175,6 +278,14 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
                                        setCenterContent((evt.target as HTMLInputElement).checked);
                                    }}/>
                             <label for={"config-center"}>Center content</label>
+
+                            <button style={{marginLeft:"20px"}} onClick={() => updateClass()}>
+                                save
+                            </button>
+
+                            <button style={{marginLeft:"20px"}} onClick={() => closeClass()}>
+                                close
+                            </button>
                         </div>
 
                     </div>

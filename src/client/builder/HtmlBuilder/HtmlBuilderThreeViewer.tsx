@@ -1,5 +1,5 @@
 import {HtmlObject} from "./HtmlBuildType";
-import {CSSProperties, Fragment} from "../../jsx-runtime/jsx-runtime";
+import {CSSProperties, Fragment} from "nodius_jsx/jsx-runtime";
 
 interface HtmlBuilderThreeViewerProps {
     object:HtmlObject,
@@ -41,15 +41,15 @@ export const HtmlBuilderThreeViewer = (
                 {
                     object.content != undefined && typeof object.content  !== "string"? (
                         <div style={{paddingLeft:"2px"}}>
-                            {Array.isArray(object.content) ? (
-                                <>
-                                    {object.content.map((object:HtmlObject, i) => (
-                                        <Fragment key={i}>
-                                            {renderHiearchy(object)}
-                                        </Fragment>
-                                    ))}
-                                </>
-                            ) : renderHiearchy(object.content)}
+                            {Array.isArray(object.content)
+                                ? object.content.map((item: HtmlObject, i) => (
+                                    <Fragment key={item.id}>
+                                        <span data-i={i}></span>
+                                        <span>test</span>
+                                        {renderHiearchy(item)}
+                                    </Fragment>
+                                ))
+                                : renderHiearchy(object.content)}
                         </div>
                     ) : null
                 }
@@ -58,7 +58,7 @@ export const HtmlBuilderThreeViewer = (
     }
 
     return (
-        <div style={{"display":"flex", flexDirection:"column", height:"100%", width:"100%"}}>
+        <div style={{"display":"flex", flexDirection:"column", height:"100%", width:"100%", overflowY:"auto"}}>
             {renderHiearchy(object)}
         </div>
     )

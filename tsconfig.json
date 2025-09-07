@@ -17,12 +17,12 @@
 
     "baseUrl": ".",
     "jsx": "react-jsx",
-    "jsxImportSource": "src/client"
+    "jsxImportSource": "nodius_jsx"
 
   },
   "include": [
     "src/**/*",
-    "src/client/jsx-runtime/jsx.d.ts"
+    "shims.d.ts"
   ],
   "exclude": [
     "node_modules",

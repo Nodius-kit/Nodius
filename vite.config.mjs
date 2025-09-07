@@ -1,12 +1,14 @@
 
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import JsxVitePlugin from "./src/client/jsx-runtime/jsx-VitePlugin";
+//import JsxVitePlugin from "nodius_jsx/jsx-VitePlugin";
+
+import customJsxPlugin from "./src/JsxVitePlugin2";
 
 export default defineConfig({
-    plugins: [/*JsxVitePlugin()*/],
+    plugins: [customJsxPlugin()],
     esbuild: {
-        jsxImportSource: 'jsx'
+        jsxImportSource: 'nodius_jsx'
     },
 
     build: {

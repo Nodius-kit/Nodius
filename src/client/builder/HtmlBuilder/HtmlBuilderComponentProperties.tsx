@@ -1,5 +1,5 @@
 import {HtmlObject} from "./HtmlBuildType";
-import {useEffect, useState} from "../../jsx-runtime/jsx-runtime";
+import {useEffect, useState} from "nodius_jsx/jsx-runtime";
 
 interface HtmlBuilderComponentPropertiesProps {
     selectedObject: HtmlObject,
@@ -89,8 +89,6 @@ export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate}: H
             {/* CSS Properties Section */}
             <div>
                 <h3 style={{margin: "0 0 8px 0", fontSize: "14px"}}>CSS Properties</h3>
-
-
 
                 {selectedObject.type == "text" ? (
                     <div>
@@ -279,6 +277,7 @@ export const HtmlBuilderComponentProperties = ({selectedObject, invokeUpdate}: H
                             +
                         </button>
                     </div>
+
                     <textarea
                         value={newEventCall}
                         onInput={(e) => setNewEventCall((e.target as HTMLInputElement).value)}

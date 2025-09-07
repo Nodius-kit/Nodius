@@ -73,6 +73,17 @@ export const deleteObjectById = (obj: HtmlObject, idToDelete: number): boolean =
         }else {
             return deleteObjectById(obj.content, idToDelete);
         }
+    } else if(obj.type == "list" && obj.content.length > 0) {
+        for(const child of obj.content) {
+            if(child.id === idToDelete) {
+                obj.content = obj.content.filter((obj) => obj.id !== idToDelete);
+                return true;
+            } else {
+                if(deleteObjectById(child, idToDelete)) {
+                    return true;
+                }
+            }
+        }
     }
     return false;
 }

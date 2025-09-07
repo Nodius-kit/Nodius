@@ -1,4 +1,4 @@
-import {CSSProperties, PropsWithChildren, useMemo, useState} from "../../jsx-runtime/jsx-runtime";
+import {CSSProperties, PropsWithChildren, useMemo, useState} from "nodius_jsx/jsx-runtime";
 import {useElementSize} from "../../jsx-runtime/customHooks/useElementSize";
 
 const VIEWPORT_PRESETS = {
@@ -63,16 +63,17 @@ export const HtmlBuilderViewport = ({
 
         if (orientation === "portrait") {
             return {
-                width: Math.min(width, height),
-                height: Math.max(width, height)
+                width: height,
+                height: width
             };
         } else {
             return {
-                width: Math.max(width, height),
-                height: Math.min(width, height)
+                width: width,
+                height: height
             };
         }
     }, [selectedPreset, customWidth, customHeight, orientation, isCustom]);
+
 
     const viewPortContainerStyle = useMemo(() => {
         const style:CSSProperties = {};
@@ -85,14 +86,15 @@ export const HtmlBuilderViewport = ({
         style.height = viewportDimensions.height + "px";
         style.width = viewportDimensions.width + "px";
 
+
         style.boxShadow = "rgba(0, 0, 0, 0.25) 0px 54px 55px, rgba(0, 0, 0, 0.12) 0px -12px 30px, rgba(0, 0, 0, 0.12) 0px 4px 6px, rgba(0, 0, 0, 0.17) 0px 12px 13px, rgba(0, 0, 0, 0.09) 0px -3px 5px";
 
 
         const scaleX = mainElement.bounds.width / viewportDimensions.width;
         const scaleY = mainElement.bounds.height / viewportDimensions.height;
 
-        style.zoom = Math.min(scaleX, scaleY, 1);
 
+        style.zoom = Math.min(scaleX, scaleY);
 
         return style;
     }, [viewportDimensions, mainElement.bounds]);
@@ -176,7 +178,7 @@ export const HtmlBuilderViewport = ({
                         <input
                             type="number"
                             value={customWidth}
-                            onChange={(e) => {
+                            onInput={(e) => {
                                 const value = parseInt((e.target as HTMLInputElement).value);
                                 setCustomWidth(value);
                                 setIsCustom(true);
@@ -193,9 +195,9 @@ export const HtmlBuilderViewport = ({
                         <input
                             type="number"
                             value={customHeight}
-                            onChange={(e) => {
+                            onInput={(e) => {
                                 const value = parseInt((e.target as HTMLInputElement).value);
-                                setCustomWidth(value);
+                                setCustomHeight(value);
                                 setIsCustom(true);
                             }}
                             style={{

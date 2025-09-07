@@ -1,6 +1,9 @@
 
 import "./public/css/theme.css"
-import {FunctionComponent, render, useCallback, useEffect, useRef, useState} from "./jsx-runtime/jsx-runtime";
+import {FunctionComponent,  render, useCallback, useEffect, useRef, useState} from "nodius_jsx/jsx-runtime";
+
+
+
 import {HtmlBuilder} from "./builder/HtmlBuilder/HtmlBuilder";
 import {HtmlClass, HtmlObject} from "./builder/HtmlBuilder/HtmlBuildType";
 
@@ -40,7 +43,8 @@ export const App = () => {
     }, []);
     const updateHtmlClassAbort = useRef<AbortController|undefined>(undefined);
     const updateClass = useCallback(async () => {
-        console.log(htmlClassEditing);
+
+        if(!htmlClassEditing) return;
         if(updateHtmlClassAbort.current) {
             updateHtmlClassAbort.current.abort();
         }
@@ -56,10 +60,8 @@ export const App = () => {
             }),
         });
         if(response.status === 200) {
-            const json = await response.json();
-            setHtmlClassListing(json);
         }
-    }, []);
+    }, [htmlClassEditing]);
 
     const deleteHtmlClassAbort = useRef<AbortController|undefined>(undefined);
     const deleteClass = async (htmlClass:HtmlClass) => {

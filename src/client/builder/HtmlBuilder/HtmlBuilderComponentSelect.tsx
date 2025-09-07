@@ -1,4 +1,5 @@
 import {BuilderComponent, HtmlObject, HtmlText, insertEvent} from "./HtmlBuildType";
+import {deepCopy} from "../../../utils/numericUtils";
 
 interface HtmlBuilderComponentSelectProps {
     selectedObject:HtmlObject
@@ -29,6 +30,23 @@ const allComponents:BuilderComponent[] = [
             content: "Your text here",
             id: 0
         }
+    },
+    {
+        name:"row",
+        object: {
+            type:"list",
+            tag:"div",
+            css: {
+                display:"flex",
+                paddingTop: "15px",
+                paddingBottom: "15px",
+                paddingRight: "15px",
+                paddingLeft: "15px",
+                minHeight:"50px"
+            },
+            content: [],
+            id: 0
+        }
     }
 ]
 
@@ -51,7 +69,7 @@ export const HtmlBuilderComponentSelect = ({selectedObject}:HtmlBuilderComponent
         if(!search) return;
 
         const element = search.element;
-        const component = search.component;
+        const component = deepCopy(search.component);
 
         if(e.ctrlKey) {
             // fast
@@ -96,25 +114,44 @@ export const HtmlBuilderComponentSelect = ({selectedObject}:HtmlBuilderComponent
             floatingElement.style.left = (e.clientX-rect.width/2) +"px";
             floatingElement.style.top = e.clientY +"px";
 
-            let pointedElement = document.elementFromPoint(e.clientX , e.clientY-2);
+            let pointedElement = document.elementFromPoint(e.clientX , e.clientY-2)!;
             if(pointedElement && pointedElement.hasAttribute("data-inserteable") && pointedElement.getAttribute("data-inserteable") === "false") {
-                pointedElement = pointedElement!.parentElement as HTMLElement;
+                pointedElement = pointedElement.parentElement! as HTMLElement;
             }
-            if(!pointedElement || !pointedElement.hasAttribute("data-inserteable") || pointedElement.getAttribute("data-inserteable") === "false") {
+
+            if(lastPointedElement && pointedElement != lastPointedElement && lastPointedElement.hasAttribute("data-object-id")) {
+                lastPointedElement.dispatchEvent(new CustomEvent<insertEvent>("insert", {
+                    detail: {
+                        cursorX: e.clientX,
+                        cursorY: e.clientY,
+                    }, // tell to reset
+                    bubbles: false,
+                }));
+                lastPointedElement = undefined;
+            }
+
+            /*if(!pointedElement || !pointedElement.hasAttribute("data-inserteable") || pointedElement.getAttribute("data-inserteable") === "false") {
                 if(lastPointedElement != undefined) {
                     lastPointedElement.dispatchEvent(new CustomEvent<insertEvent>("insert", {
-                        detail: {}, // tell to reset
+                        detail: {
+                            cursorX: e.clientX,
+                            cursorY: e.clientY,
+                        }, // tell to reset
                         bubbles: false,
                     }));
                     lastPointedElement = undefined;
                 }
                 return;
-            }
+            }*/
+
+
             lastPointedElement = pointedElement as HTMLElement;
-            pointedElement.dispatchEvent(new CustomEvent("insert", {
+            pointedElement.dispatchEvent(new CustomEvent<insertEvent>("insert", {
                 detail: {
                     component:component,
                     preview:true,
+                    cursorX: e.clientX,
+                    cursorY: e.clientY,
                 },
                 bubbles: false,
             }));
@@ -152,6 +189,7 @@ export const HtmlBuilderComponentSelect = ({selectedObject}:HtmlBuilderComponent
                     {component.name}
                 </div>
             ))}
+
         </div>
     )
 }

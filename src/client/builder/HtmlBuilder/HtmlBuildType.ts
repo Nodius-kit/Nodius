@@ -1,4 +1,4 @@
-import {CSSProperties} from "../../jsx-runtime/jsx-runtime";
+import {CSSProperties} from "nodius_jsx/jsx-runtime";
 
 export interface HtmlBase {
     id: number;
@@ -21,8 +21,13 @@ export interface HtmlText extends HtmlBase{
     content: string
 }
 
+export interface HtmlList extends HtmlBase {
+    type: "list",
+    content: HtmlObject[],
+}
 
-export type HtmlObject = HtmlDiv | HtmlText;
+
+export type HtmlObject = HtmlDiv | HtmlText | HtmlList;
 export const HtmlClassTypeList = ["content"] as const;
 export type HtmlClassType =  typeof HtmlClassTypeList[number];
 
@@ -44,4 +49,6 @@ export interface BuilderComponent {
 export interface insertEvent {
     component?: BuilderComponent,
     preview?:boolean,
+    cursorX: number,
+    cursorY: number,
 }
