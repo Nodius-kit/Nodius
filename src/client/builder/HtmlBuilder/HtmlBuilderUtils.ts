@@ -89,30 +89,32 @@ export const deleteObjectById = (obj: HtmlObject, idToDelete: number): boolean =
     }
     return false;
 }
-
+// Improved replaceObjectById: checks the root object as well
 export const replaceObjectById = (source: HtmlObject, toReplace: HtmlObject): boolean => {
+    // Check if the root object itself should be replaced
+    if (source.id === toReplace.id) {
+        // Copy all properties from toReplace to source (mutate in place)
+        Object.keys(source).forEach(key => {
+            // @ts-ignore
+            delete source[key];
+        });
+        Object.keys(toReplace).forEach(key => {
+            // @ts-ignore
+            source[key] = toReplace[key];
+        });
+        return true;
+    }
+
     // Case 1: block with nested content
-    if (source.type === "block") {
-        if (source.content && source.content.id === toReplace.id) {
-            source.content = toReplace;
-            return true;
-        } else if(source.content) {
-            return replaceObjectById(source.content, toReplace);
-        } else {
-            return false;
-        }
+    if (source.type === "block" && source.content) {
+        return replaceObjectById(source.content, toReplace);
     }
 
     // Case 2: list with children
-    else if (source.type === "list" && Array.isArray(source.content) && source.content.length > 0) {
+    if (source.type === "list" && Array.isArray(source.content) && source.content.length > 0) {
         for (let i = 0; i < source.content.length; i++) {
-            if (source.content[i].id === toReplace.id) {
-                source.content[i] = toReplace;
+            if (replaceObjectById(source.content[i], toReplace)) {
                 return true;
-            } else {
-                if (replaceObjectById(source.content[i], toReplace)) {
-                    return true;
-                }
             }
         }
     }
@@ -125,6 +127,7 @@ export const convertHtmlObject = (object:HtmlObject, to:HtmlType):HtmlObject => 
         return {
             ...object,
             type:"list",
+            css: {...object.css, display:"flex"},
             content: object.content ? [object.content] : []
         }
     } else if(object.type === "block" && to === "text") {
@@ -146,6 +149,7 @@ export const convertHtmlObject = (object:HtmlObject, to:HtmlType):HtmlObject => 
         return {
             ...newObj,
             type:"list",
+            css: {...object.css, display:"flex"},
             content: [
                 object
             ]

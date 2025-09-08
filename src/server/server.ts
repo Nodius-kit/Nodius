@@ -3,6 +3,8 @@ import { spawn } from "child_process";
 import {parseArgs} from "./utils/env";
 import {requestHtmlBuild} from "./request/requestHtmlBuild";
 import {Database} from "arangojs";
+import {ClusterManager, ClusterNode} from "./cluster/clusterManager";
+import {WebSocketManager} from "./cluster/webSocketManager";
 
 const args =  parseArgs();
 
@@ -43,3 +45,29 @@ if(args.get("mode", "production") == "development") {
     });
 }
 requestHtmlBuild.init(app);
+
+export const clusterManager = new ClusterManager(parseInt(args.get("port", "8426")) + 1000);
+export const webSocketManager = new WebSocketManager(parseInt(args.get("port", "8426")) + 2000);
+// Initialize
+clusterManager.initialize();
+
+
+process.on('SIGINT', async () => {
+    console.log('Caught SIGINT, shutting down...');
+    await clusterManager.shutdown();
+    webSocketManager.closeServer();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('Caught SIGTERM, shutting down...');
+    await clusterManager.shutdown();
+    webSocketManager.closeServer();
+    process.exit(0);
+});
+
+process.on('beforeExit', async () => {
+    console.log('Process beforeExit, cleaning up...');
+    await clusterManager.shutdown();
+    webSocketManager.closeServer();
+});

@@ -29,8 +29,7 @@ export default function customJsxPlugin(): Plugin {
                         jsx: 'automatic',
                         jsxFactory: 'jsx',
                         jsxFragment: 'Fragment',
-                    },
-                    include: ['@/jsx-runtime'],
+                    }
                 },
             };
         },

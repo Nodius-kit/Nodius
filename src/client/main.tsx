@@ -1,22 +1,44 @@
 
 import "./public/css/theme.css"
-import {FunctionComponent,  render, useCallback, useEffect, useRef, useState} from "nodius_jsx/jsx-runtime";
+import {render, useCallback, useEffect, useRef, useState} from "nodius_jsx/jsx-runtime";
 
 
 
 import {HtmlBuilder} from "./builder/HtmlBuilder/HtmlBuilder";
-import {HtmlClass, HtmlObject} from "./builder/HtmlBuilder/HtmlBuildType";
-
+import {HtmlClass} from "./builder/HtmlBuilder/HtmlBuildType";
+import {WebGpuExample} from "./schema/motor/webGpuExample";
 
 // App component
 export const App = () => {
 
     const [htmlClassListing, setHtmlClassListing] = useState<HtmlClass[]>([]);
     const [htmlClassEditing, setHtmlClassEditing] = useState<HtmlClass|undefined>(undefined);
+    const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+    const [selectedCategory, setSelectedCategory] = useState<string>("default");
 
     useEffect(() => {
+        retrieveCategories();
         retrieveHtmlClass();
-    }, []);
+    }, [selectedCategory]);
+
+    const retrieveCategoriesAbort = useRef<AbortController|undefined>(undefined);
+    const retrieveCategories = async () => {
+        if(retrieveCategoriesAbort.current) {
+            retrieveCategoriesAbort.current.abort();
+        }
+        retrieveCategoriesAbort.current = new AbortController();
+        const response = await fetch(`http://localhost:8426/api/htmlclass/categories`, {
+            method: "POST",
+            signal: retrieveCategoriesAbort.current.signal,
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
+        if(response.status === 200) {
+            const json = await response.json();
+            setAvailableCategories(json);
+        }
+    };
 
     const retrieveHtmlClassAbort = useRef<AbortController|undefined>(undefined);
     const retrieveHtmlClass = async () => {
@@ -24,7 +46,7 @@ export const App = () => {
             retrieveHtmlClassAbort.current.abort();
         }
         retrieveHtmlClassAbort.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/htmlclass/list`, {
+        const response = await fetch(`http://localhost:8426/api/htmlclass/list/${selectedCategory}`, {
             method: "POST",
             signal: retrieveHtmlClassAbort.current.signal,
             headers: {
@@ -84,6 +106,8 @@ export const App = () => {
         }
     };
 
+
+
     const createHtmlClassAbort = useRef<AbortController|undefined>(undefined);
     const createClass = async () => {
         if(createHtmlClassAbort.current) {
@@ -124,34 +148,60 @@ export const App = () => {
 
     return (
         <div style={{width: "100vw", height: "100vh"}}>
+
             {htmlClassEditing == undefined ? (
                 <div style={{padding:"15px"}}>
-                    <table style={{width:"100%"}}>
-                        <thead>
-                            <tr>
-                                <th>token</th>
-                                <th>action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        {htmlClassListing.map((htmlClass, i) => (
-                            <tr key={i}>
-                                <td>
-                                    {htmlClass.name} |{htmlClass._key} | {htmlClass.type} | {htmlClass.category}
-                                </td>
-                                <td>
-                                    <button onClick={() => setHtmlClassEditing(htmlClass)}>edit</button>
-                                    <button onClick={() => deleteClass(htmlClass)}>delete</button>
-                                </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-                    <button onClick={createClass}>Create new html class</button>
+                    <div>
+                        <div style={{display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px"}}>
+                            <h3 style={{margin: 0}}>Html Class:</h3>
+                            <select 
+                                value={selectedCategory} 
+                                onChange={(e) => setSelectedCategory((e.target as HTMLSelectElement).value)}
+                                style={{
+                                    padding: "5px",
+                                    fontSize: "14px",
+                                    border: "1px solid #ccc",
+                                    borderRadius: "3px"
+                                }}
+                            >
+                                {availableCategories.map((category) => (
+                                    <option key={category} value={category}>
+                                        {category}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <table style={{width:"100%"}}>
+                            <thead>
+                                <tr>
+                                    <th>token</th>
+                                    <th>action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            {htmlClassListing.map((htmlClass, i) => (
+                                <tr key={i}>
+                                    <td>
+                                        {htmlClass.name} |{htmlClass._key} | {htmlClass.type} | {htmlClass.category}
+                                    </td>
+                                    <td>
+                                        <button onClick={() => setHtmlClassEditing(htmlClass)}>edit</button>
+                                        <button onClick={() => deleteClass(htmlClass)}>delete</button>
+                                    </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                        <button onClick={createClass}>Create new html class</button>
+                    </div>
                 </div>
             ) : (
                 <HtmlBuilder htmlClass={htmlClassEditing} closeClass={closeClass} updateClass={updateClass} />
             )}
+            <div style={{width:"100%", height: "100%"}}>
+                <WebGpuExample />
+            </div>
+
         </div>
     );
 };

@@ -11,12 +11,37 @@ export class requestHtmlBuild {
     public static init = async (app:HttpServer) => {
         const class_collection:DocumentCollection = await ensureCollection("nodius_html_class");
 
-        app.post("/api/htmlclass/list", async (req: Request, res: Response) => {
+        
+        app.post("/api/htmlclass/list/:category?", async (req: Request, res: Response) => {
+            const category = req.params?.category;
+            
+            let query;
+            if (category) {
+                // Filter by category if provided
+                query = aql`
+                    FOR doc IN nodius_html_class
+                    FILTER doc.category == ${category}
+                    RETURN doc
+                `;
+            } else {
+                // Return all documents if no category specified
+                query = aql`
+                    FOR doc IN nodius_html_class
+                    RETURN doc
+                `;
+            }
+            
+            const cursor = await db.query(query);
+            res.status(200).json(await cursor.all());
+        });
+
+        app.post("/api/htmlclass/categories", async (req: Request, res: Response) => {
             const cursor = await db.query(aql`
                 FOR doc IN nodius_html_class
-                  RETURN doc
-              `);
-
+                COLLECT category = doc.category
+                RETURN category
+            `);
+            
             res.status(200).json(await cursor.all());
         })
 

@@ -40,11 +40,9 @@ export const HtmlBuilder = ({htmlClass, updateClass, closeClass}:HtmlBuilderProp
     const [selectedHtmlObject, setSelectedHtmlObject] = useState<HtmlObject>(htmlBuild);
     const replaceObject = (newObject: HtmlObject): void => {
         // replace object with the same id
-        console.log(replaceObjectById(htmlBuild, newObject));
-        console.log(htmlBuild);
+        replaceObjectById(htmlBuild, newObject)
         if(selectedHtmlObject.id === newObject.id) {
             setSelectedHtmlObject(newObject);
-            console.log(newObject);
         }
         setHtmlBuild({...htmlBuild});
     }

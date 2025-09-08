@@ -1,5 +1,5 @@
 /// <reference types="nodius_jsx/jsx" />
-
+/// <reference types="@webgpu/types" />
 
 declare global {
     interface Window {

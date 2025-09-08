@@ -17,7 +17,7 @@
 
     "baseUrl": ".",
     "jsx": "react-jsx",
-    "jsxImportSource": "nodius_jsx"
+    "jsxImportSource": "nodius_jsx",
 
   },
   "include": [

@@ -1,5 +1,5 @@
 import {CSSProperties, PropsWithChildren, useMemo, useState} from "nodius_jsx/jsx-runtime";
-import {useElementSize} from "../../jsx-runtime/customHooks/useElementSize";
+import {useElementSize} from "../../hooks/useElementSize";
 
 const VIEWPORT_PRESETS = {
     // Phones
