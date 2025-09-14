@@ -23,12 +23,14 @@ export type MotorEventMap = {
 	edgeClick: (edge: Edge) => void;
 	nodeChange: (node: Node<any>) => void;
 	edgeChange: (edge: Edge) => void;
+	nodeEnter: (node: Node<any>) => void;
+	nodeLeave: (node: Node<any>) => void;
 };
 
 export const backgroundType = ["solid", "dotted"] as const;
 
 export interface GraphicalMotor {
-	init(container: HTMLElement, options?: GraphicalMotorOptions): Promise<void>;
+	init(container: HTMLElement, convas:HTMLCanvasElement, options?: GraphicalMotorOptions): Promise<void>;
 	dispose(): void;
 	setScene(scene: MotorScene): void;
 	getScene(): MotorScene | undefined;
@@ -42,6 +44,8 @@ export interface GraphicalMotor {
 	// HTML overlay support: returns node's screen-space rect for syncing DOM overlays
 	getNodeScreenRect?(nodeId: string): { x: number; y: number; width: number; height: number } | undefined;
 	getContainerDraw():HTMLElement;
+	enableInteractive(value:boolean): void;
+	resetViewport(): void;
 }
 
 

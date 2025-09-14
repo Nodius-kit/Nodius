@@ -40,6 +40,7 @@ export interface HtmlClass {
     type:HtmlClassType,
     category:string,
     permission:number,
+    identifier:string,
 }
 
 export interface BuilderComponent {

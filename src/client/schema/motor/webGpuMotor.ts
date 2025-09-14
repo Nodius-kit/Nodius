@@ -1,4 +1,3 @@
-import type { Edge, Node, handleSide } from "../../../utils/schema/schemaType";
 import {
 	MotorScene,
 	GraphicalMotorOptions,
@@ -7,12 +6,12 @@ import {
 	GraphicalMotor,
 	backgroundType
 } from "./graphicalMotor"
-import {flatEdgeMap} from "../../../utils/schema/nodeUtils";
+import {handleSide, Edge, Node} from "../../../utils/graph/graphType";
 
 interface HandleInfo {
 	side: handleSide;
 	offset: number;
-	point: { id: string; offset?: number; display: string };
+	point: { id: string; offset?: number; display?: string };
 }
 
 interface Point {
@@ -60,8 +59,12 @@ export class WebGpuMotor implements GraphicalMotor {
 	private dpr: number = 1;
 	private sampleCount: number = 4;
 	private nodeIndices: Map<string, number> = new Map();
+	private visibleNodes: Set<string> = new Set();
+	private prevVisibleNodes: Set<string> = new Set();
+	private relevantEdges: Edge[] = [];
+	private interactiveEnabled:boolean = true;
 
-	public async init(container: HTMLElement, options?: GraphicalMotorOptions): Promise<void> {
+	public async init(container: HTMLElement, convas:HTMLCanvasElement, options?: GraphicalMotorOptions): Promise<void> {
 		if (!navigator.gpu) {
 			throw new Error("WebGPU is not supported in this browser.");
 		}
@@ -72,10 +75,10 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 
 		this.device = await adapter.requestDevice();
-		this.canvas = document.createElement("canvas");
+		this.canvas = convas;
 		this.canvas.style.width = "100%";
 		this.canvas.style.height = "100%";
-		container.appendChild(this.canvas);
+
 		this.context = this.canvas.getContext("webgpu") as GPUCanvasContext;
 		this.format = navigator.gpu.getPreferredCanvasFormat();
 		this.context.configure({
@@ -391,7 +394,7 @@ export class WebGpuMotor implements GraphicalMotor {
 
 		// Start render loop
 		this.dirty = true;
-		this.renderLoop();
+		requestAnimationFrame(this.renderLoop);
 	}
 
 	private updateCanvasSize(container: HTMLElement): void {
@@ -405,6 +408,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (!this.canvas) return;
 
 		this.canvas.addEventListener("mousedown", (e) => {
+			if(!this.interactiveEnabled) return;
 			if (e.button === 0) {
 				this.isPanning = true;
 				this.lastMouseX = e.clientX;
@@ -413,6 +417,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		});
 
 		this.canvas.addEventListener("mousemove", (e) => {
+			if(!this.interactiveEnabled) return;
 			if (this.isPanning) {
 				const dx = e.clientX - this.lastMouseX;
 				const dy = e.clientY - this.lastMouseY;
@@ -426,10 +431,12 @@ export class WebGpuMotor implements GraphicalMotor {
 		});
 
 		this.canvas.addEventListener("mouseup", () => {
+			if(!this.interactiveEnabled) return;
 			this.isPanning = false;
 		});
 
 		this.canvas.addEventListener("wheel", (e) => {
+			if(!this.interactiveEnabled) return;
 			e.preventDefault();
 			const rect = this.canvas!.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
@@ -452,20 +459,20 @@ export class WebGpuMotor implements GraphicalMotor {
 			const sy = e.clientY - rect.top;
 			const world = this.screenToWorld({ x: sx, y: sy });
 
+			this.computeVisibility();
+
 			// Check edges first
 			if(this.scene) {
-				for (const [key, edges] of this.scene.edges) {
-					for(const edge of edges) {
-						if (this.isPointNearEdge(world, edge)) {
-							this.emit("edgeClick", edge);
-							return;
-						}
+				for (const edge of this.relevantEdges) {
+					if (this.isPointNearEdge(world, edge)) {
+						this.emit("edgeClick", edge);
+						return;
 					}
 				}
 
-
 				// Check nodes
-				for (const [key, node] of this.scene.nodes) {
+				for (const id of this.visibleNodes) {
+					const node = this.scene.nodes.get(id)!;
 					if (
 						typeof node.size !== "string" &&
 						world.x >= node.posX &&
@@ -477,25 +484,23 @@ export class WebGpuMotor implements GraphicalMotor {
 						return;
 					}
 				}
-				}
+			}
 		});
 	}
 
 	private getHandleInfo(node: Node<any>, handleId: string): HandleInfo | undefined {
-		for (const side in node.handles) {
-			const s = side as handleSide;
-			const config = node.handles[s];
-			const index = config.point.findIndex((p) => p.id === handleId);
+		for (const [side, handle] of Object.entries(node.handles)) {
+			const index = handle.point.findIndex((p) => p.id === handleId);
 			if (index !== -1) {
-				const point = config.point[index];
+				const point = handle.point[index]!;
 				let offset = point.offset;
-				if (config.position === "separate" && offset === undefined) {
-					offset = (index + 0.5) / config.point.length;
+				if (handle.position === "separate" && offset === undefined) {
+					offset = (index + 0.5) / handle.point.length;
 				} else if (offset === undefined) {
 					offset = 0.5;
 				}
 				return {
-					side: s,
+					side: side as handleSide,
 					offset,
 					point,
 				};
@@ -510,7 +515,7 @@ export class WebGpuMotor implements GraphicalMotor {
 
 		const { width, height } = node.size;
 		const { side, offset } = info;
-		const config = node.handles[side];
+		const config = node.handles[side]!;
 
 		if (config.position === "fix") {
 			let x = node.posX;
@@ -640,11 +645,160 @@ export class WebGpuMotor implements GraphicalMotor {
 		return false;
 	}
 
+	private computeVisibility(): void {
+		if (!this.scene || !this.canvas) return;
+
+		const tl = this.screenToWorld({ x: 0, y: 0 });
+		const br = this.screenToWorld({ x: this.canvas.width, y: this.canvas.height });
+		const visMinX = Math.min(tl.x, br.x);
+		const visMaxX = Math.max(tl.x, br.x);
+		const visMinY = Math.min(tl.y, br.y);
+		const visMaxY = Math.max(tl.y, br.y);
+
+		this.prevVisibleNodes = new Set(this.visibleNodes);
+		this.visibleNodes.clear();
+
+		for (const [id, node] of this.scene.nodes) {
+			if (typeof node.size === "string") continue;
+			const nMinX = node.posX;
+			const nMaxX = node.posX + node.size.width;
+			const nMinY = node.posY;
+			const nMaxY = node.posY + node.size.height;
+			if (nMaxX > visMinX && nMinX < visMaxX && nMaxY > visMinY && nMinY < visMaxY) {
+				this.visibleNodes.add(id);
+			}
+		}
+		for (const id of this.visibleNodes) {
+			if (!this.prevVisibleNodes.has(id)) {
+				this.emit("nodeEnter", this.scene.nodes.get(id)!);
+			}
+		}
+		for (const id of this.prevVisibleNodes) {
+			if (!this.visibleNodes.has(id)) {
+				this.emit("nodeLeave", this.scene.nodes.get(id)!);
+			}
+		}
+
+		this.relevantEdges = [];
+		for (const [source, edges] of this.scene.edges) {
+			for (const edge of edges) {
+				if(this.visibleNodes.has(edge.target) || this.visibleNodes.has(edge.source)) {
+					this.relevantEdges.push(edge);
+				}
+			}
+		}
+	}
+
+	private buildNodeBuffer(): void {
+		if (!this.scene) return;
+		const instanceData = new Float32Array(this.visibleNodes.size * 4);
+		let i = 0;
+		this.nodeIndices.clear();
+		for (const id of this.visibleNodes) {
+			const node = this.scene.nodes.get(id)!;
+			instanceData[i * 4] = node.posX;
+			instanceData[i * 4 + 1] = node.posY;
+			instanceData[i * 4 + 2] = (node.size as { width: number; height: number }).width;
+			instanceData[i * 4 + 3] = (node.size as { width: number; height: number }).height;
+			this.nodeIndices.set(id, i);
+			i++;
+		}
+		if (this.instanceBuffer) this.instanceBuffer.destroy();
+		this.instanceBuffer = this.device!.createBuffer({
+			size: Math.max(16, instanceData.byteLength),
+			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+		});
+		this.device!.queue.writeBuffer(this.instanceBuffer, 0, instanceData);
+	}
+
+	private buildHandleBuffer(): void {
+		const handleRadius = 2;
+		const handleData: number[] = [];
+		this.handleCount = 0;
+		for (const id of this.visibleNodes) {
+			const node = this.scene!.nodes.get(id)!;
+			if (typeof node.size === "string") continue;
+			for (const side in node.handles) {
+				const s = side as handleSide;
+				const config = node.handles[s];
+				for (const point of config.point) {
+					const pos = this.getHandlePosition(node, point.id);
+					if (pos) {
+						handleData.push(pos.x, pos.y, handleRadius);
+						this.handleCount++;
+					}
+				}
+			}
+		}
+		const handleArray = new Float32Array(handleData);
+		if (this.handleInstanceBuffer) this.handleInstanceBuffer.destroy();
+		this.handleInstanceBuffer = this.device!.createBuffer({
+			size: Math.max(12, handleArray.byteLength),
+			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+		});
+		this.device!.queue.writeBuffer(this.handleInstanceBuffer, 0, handleArray);
+	}
+
+	private buildEdgeBuffer(): void {
+		const edgeVertices: number[] = [];
+		const segments = 20;
+		for (const edge of this.relevantEdges) {
+			const sourceNode = this.scene!.nodes.get(edge.source);
+			const targetNode = this.scene!.nodes.get(edge.target);
+			if (!sourceNode || !targetNode) continue;
+			const sourcePos = this.getHandlePosition(sourceNode, edge.sourceHandle);
+			const targetPos = this.getHandlePosition(targetNode, edge.targetHandle);
+			if (!sourcePos || !targetPos) continue;
+
+			if (edge.style === "straight") {
+				edgeVertices.push(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y);
+			} else {
+				const sourceInfo = this.getHandleInfo(sourceNode, edge.sourceHandle)!;
+				const targetInfo = this.getHandleInfo(targetNode, edge.targetHandle)!;
+				const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
+				const curveStrength = dist * 0.4;
+				const sourceDir = this.getDir(sourceInfo.side);
+				const targetDir = this.getDir(targetInfo.side);
+				const control1 = {
+					x: sourcePos.x + sourceDir.dx * curveStrength,
+					y: sourcePos.y + sourceDir.dy * curveStrength,
+				};
+				const control2 = {
+					x: targetPos.x - targetDir.dx * curveStrength,
+					y: targetPos.y - targetDir.dy * curveStrength,
+				};
+				for (let i = 0; i < segments; i++) {
+					const t1 = i / segments;
+					const t2 = (i + 1) / segments;
+					const p1 = this.bezierPoint(t1, sourcePos, control1, control2, targetPos);
+					const p2 = this.bezierPoint(t2, sourcePos, control1, control2, targetPos);
+					edgeVertices.push(p1.x, p1.y, p2.x, p2.y);
+				}
+			}
+		}
+		const edgeData = new Float32Array(edgeVertices);
+		const requiredSize = Math.max(8, edgeData.byteLength);
+		if (requiredSize > this.edgeBufferSize || !this.edgeVertexBuffer) {
+			if (this.edgeVertexBuffer) this.edgeVertexBuffer.destroy();
+			this.edgeBufferSize = Math.max(this.edgeBufferSize * 2, requiredSize);
+			this.edgeVertexBuffer = this.device!.createBuffer({
+				size: this.edgeBufferSize,
+				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+			});
+		}
+		this.device!.queue.writeBuffer(this.edgeVertexBuffer!, 0, edgeData);
+		this.edgeVertexCount = edgeVertices.length / 2;
+	}
+
 	private renderLoop = (): void => {
 		if (!this.device || !this.context || !this.dirty) {
 			requestAnimationFrame(this.renderLoop);
 			return;
 		}
+		this.computeVisibility();
+		this.buildNodeBuffer();
+		this.buildHandleBuffer();
+		this.buildEdgeBuffer();
 		this.dirty = false;
 
 		// Update uniforms
@@ -701,12 +855,12 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 
 		// Draw nodes
-		if (this.nodePipeline && this.instanceBuffer && this.scene?.nodes.size) {
+		if (this.nodePipeline && this.instanceBuffer && this.visibleNodes.size) {
 			passEncoder.setPipeline(this.nodePipeline);
 			passEncoder.setBindGroup(0, this.bindGroup!);
 			passEncoder.setVertexBuffer(0, this.quadBuffer);
 			passEncoder.setVertexBuffer(1, this.instanceBuffer);
-			passEncoder.draw(6, this.scene.nodes.size);
+			passEncoder.draw(6, this.visibleNodes.size);
 		}
 
 		// Draw handles
@@ -761,110 +915,7 @@ export class WebGpuMotor implements GraphicalMotor {
 			}
 		}
 
-		this.nodeIndices.clear();
-		// Node instances
-		const instanceData = new Float32Array(scene.nodes.size * 4);
-		let i = 0;
-		for(const [key, node] of scene.nodes) {
-			this.nodeIndices.set(node.id, i);
-			instanceData[i * 4] = node.posX;
-			instanceData[i * 4 + 1] = node.posY;
-			instanceData[i * 4 + 2] = (node.size as { width: number; height: number }).width;
-			instanceData[i * 4 + 3] = (node.size as { width: number; height: number }).height;
-			i++;
-		}
-		if (this.instanceBuffer) this.instanceBuffer.destroy();
-		this.instanceBuffer = this.device!.createBuffer({
-			size: Math.max(16, instanceData.byteLength),
-			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-		});
-		this.device!.queue.writeBuffer(this.instanceBuffer, 0, instanceData);
-
-		this.updateHandles();
-		this.updateEdges();
-
 		this.dirty = true;
-	}
-
-	private updateHandles(): void {
-		if (!this.scene) return;
-		const handleRadius = 2; // World space radius for handles
-		const handleData: number[] = [];
-		let handleCount = 0;
-		for (const [key, node] of this.scene.nodes) {
-			if (typeof node.size === "string") continue;
-			for (const side in node.handles) {
-				const s = side as handleSide;
-				const config = node.handles[s];
-				for (const point of config.point) {
-					const pos = this.getHandlePosition(node, point.id);
-					if (pos) {
-						handleData.push(pos.x, pos.y, handleRadius);
-						handleCount++;
-					}
-				}
-			}
-		}
-		const handleArray = new Float32Array(handleData);
-		if (this.handleInstanceBuffer) this.handleInstanceBuffer.destroy();
-		this.handleInstanceBuffer = this.device!.createBuffer({
-			size: Math.max(12, handleArray.byteLength),
-			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-		});
-		this.device!.queue.writeBuffer(this.handleInstanceBuffer, 0, handleArray);
-		this.handleCount = handleCount;
-	}
-
-	private updateEdges(): void {
-		if (!this.scene) return;
-		const edgeVertices: number[] = [];
-		const segments = 20;
-		for (const edge of flatEdgeMap(this.scene.edges)) {
-			const sourceNode = this.scene.nodes.get(edge.source);
-			const targetNode = this.scene.nodes.get(edge.target);
-			if (!sourceNode || !targetNode) continue;
-			const sourcePos = this.getHandlePosition(sourceNode, edge.sourceHandle);
-			const targetPos = this.getHandlePosition(targetNode, edge.targetHandle);
-			if (!sourcePos || !targetPos) continue;
-
-			if (edge.style === "straight") {
-				edgeVertices.push(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y);
-			} else {
-				const sourceInfo = this.getHandleInfo(sourceNode, edge.sourceHandle)!;
-				const targetInfo = this.getHandleInfo(targetNode, edge.targetHandle)!;
-				const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
-				const curveStrength = dist * 0.4;
-				const sourceDir = this.getDir(sourceInfo.side);
-				const targetDir = this.getDir(targetInfo.side);
-				const control1 = {
-					x: sourcePos.x + sourceDir.dx * curveStrength,
-					y: sourcePos.y + sourceDir.dy * curveStrength,
-				};
-				const control2 = {
-					x: targetPos.x - targetDir.dx * curveStrength,
-					y: targetPos.y - targetDir.dy * curveStrength,
-				};
-				for (let i = 0; i < segments; i++) {
-					const t1 = i / segments;
-					const t2 = (i + 1) / segments;
-					const p1 = this.bezierPoint(t1, sourcePos, control1, control2, targetPos);
-					const p2 = this.bezierPoint(t2, sourcePos, control1, control2, targetPos);
-					edgeVertices.push(p1.x, p1.y, p2.x, p2.y);
-				}
-			}
-		}
-		const edgeData = new Float32Array(edgeVertices);
-		const requiredSize = Math.max(8, edgeData.byteLength);
-		if (requiredSize > this.edgeBufferSize) {
-			if (this.edgeVertexBuffer) this.edgeVertexBuffer.destroy();
-			this.edgeBufferSize = Math.max(this.edgeBufferSize * 2, requiredSize);
-			this.edgeVertexBuffer = this.device!.createBuffer({
-				size: this.edgeBufferSize,
-				usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-			});
-		}
-		this.device!.queue.writeBuffer(this.edgeVertexBuffer!, 0, edgeData);
-		this.edgeVertexCount = edgeVertices.length / 2;
 	}
 
 	public updateNode(id: string, updates: Partial<Pick<Node<any>, 'posX' | 'posY' | 'size'>>): void {
@@ -874,16 +925,8 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (updates.posX !== undefined) node.posX = updates.posX;
 		if (updates.posY !== undefined) node.posY = updates.posY;
 		if (updates.size !== undefined && typeof updates.size !== "string") node.size = updates.size;
-		const index = this.nodeIndices.get(id);
-		if (index === undefined) return;
-		const offset = index * 16;
-		const size = typeof node.size === "string" ? { width: 0, height: 0 } : node.size;
-		const data = new Float32Array([node.posX, node.posY, size.width, size.height]);
-		this.device!.queue.writeBuffer(this.instanceBuffer!, offset, data);
-		this.updateHandles();
-		this.updateEdges();
-		this.emit("nodeChange", node);
 		this.dirty = true;
+		this.emit("nodeChange", node);
 	}
 
 	public getScene(): MotorScene | undefined {
@@ -965,5 +1008,20 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	public getContainerDraw():HTMLElement {
 		return this.canvas as HTMLElement;
+	}
+
+	public enableInteractive(value:boolean): void {
+		this.interactiveEnabled = value;
+	}
+
+	public resetViewport():void {
+		if (!this.canvas) return;
+		const centerX = this.canvas.width / 2;
+		const centerY = this.canvas.height / 2;
+		this.setTransform({
+			scale: 1,
+			translateX: centerX,
+			translateY: centerY
+		});
 	}
 }

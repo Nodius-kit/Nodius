@@ -1,14 +1,17 @@
-/// <reference types="nodius_jsx/jsx" />
 /// <reference types="@webgpu/types" />
 
+import {HtmlClass} from "./src/utils/html/htmlType";
+import {Schema} from "./src/utils/schema/schemaType";
+
 declare global {
+    type Language = "fr" | "en";
     interface Window {
-        __jsxRuntime?: {
-            componentInstances: Map<Node, any>;
-            reRenderAllComponents: () => void;
-            updateComponent: (oldComponent: Function, newComponent: Function) => void;
-        };
-        __hmrComponentStore?: Map<string, Function>;
+        nodius: {
+            storage: {
+                htmlClass: Map<string, HtmlClass>,
+                graphs: Map<string, Schema>,
+            }
+        }
     }
 }
 

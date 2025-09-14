@@ -33,7 +33,7 @@ interface Instruction {
 type Result<T> = { success: true; value: T } | { success: false; error: string };
 
 // Instruction builder class with fluent API
-class InstructionBuilder {
+export class InstructionBuilder {
     private instruction: Instruction;
 
     constructor() {

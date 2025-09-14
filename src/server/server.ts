@@ -5,6 +5,7 @@ import {requestHtmlBuild} from "./request/requestHtmlBuild";
 import {Database} from "arangojs";
 import {ClusterManager, ClusterNode} from "./cluster/clusterManager";
 import {WebSocketManager} from "./cluster/webSocketManager";
+import {RequestWorkFlow} from "./request/requestWorkFlow";
 
 const args =  parseArgs();
 
@@ -44,7 +45,7 @@ if(args.get("mode", "production") == "development") {
         process.stderr.write(data);
     });
 }
-requestHtmlBuild.init(app);
+RequestWorkFlow.init(app);
 
 export const clusterManager = new ClusterManager(parseInt(args.get("port", "8426")) + 1000);
 export const webSocketManager = new WebSocketManager(parseInt(args.get("port", "8426")) + 2000);

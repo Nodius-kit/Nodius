@@ -1,208 +1,117 @@
 
 import "./public/css/theme.css"
-import {render, useCallback, useEffect, useRef, useState} from "nodius_jsx/jsx-runtime";
 
 
 
-import {HtmlBuilder} from "./builder/HtmlBuilder/HtmlBuilder";
-import {HtmlClass} from "./builder/HtmlBuilder/HtmlBuildType";
-import {WebGpuExample} from "./schema/motor/webGpuExample";
+import {SchemaDisplay} from "./schema/SchemaDisplay";
+import {useCreateReducer} from "./hooks/useCreateReducer";
+import {
+    ThemeContext,
+    ThemeContextDefaultValue,
+    ThemeContextType
+} from "./hooks/contexts/ThemeContext";
+import {
+    ProjectContext,
+    ProjectContextDefaultValue,
+    ProjectContextType,
+} from "./hooks/contexts/ProjectContext";
+import {createRoot} from "react-dom/client";
+import {MouseEvent, useCallback, useEffect, useRef, useState} from "react";
+import {ProjectLoader} from "./component/animate/ProjectLoader";
+import {ThemeContextParser} from "./hooks/contexts/ThemeContextParser";
+import {HtmlClass} from "../utils/html/htmlType";
+import {MultiFade} from "./component/animate/MultiFade";
+import {HtmlEditor} from "./component/dashboard/HtmlEditor";
+import {InstructionBuilder} from "../utils/sync/InstructionBuilder";
+import {WebGpuMotor} from "./schema/motor/webGpuMotor";
+import {Graph} from "../utils/graph/graphType";
+import {DashboardWorkFlow} from "./component/dashboard/DashboardWorkFlow";
 
 // App component
 export const App = () => {
 
-    const [htmlClassListing, setHtmlClassListing] = useState<HtmlClass[]>([]);
-    const [htmlClassEditing, setHtmlClassEditing] = useState<HtmlClass|undefined>(undefined);
-    const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-    const [selectedCategory, setSelectedCategory] = useState<string>("default");
+    const [editedHtml, setEditedHtml] = useState<HtmlClass|undefined>(undefined);
+    const [hideEditPanel, setHideEditPanel] = useState<boolean>(false);
+
+    const [graph, setGraph] = useState<Graph>();
+
+    const motorRef = useRef<WebGpuMotor | null>(null);
+
+    const Theme = useCreateReducer<ThemeContextType>({
+        initialState: ThemeContextDefaultValue
+    });
+
+    const Project = useCreateReducer<ProjectContextType>({
+        initialState: ProjectContextDefaultValue,
+    });
 
     useEffect(() => {
-        retrieveCategories();
-        retrieveHtmlClass();
-    }, [selectedCategory]);
-
-    const retrieveCategoriesAbort = useRef<AbortController|undefined>(undefined);
-    const retrieveCategories = async () => {
-        if(retrieveCategoriesAbort.current) {
-            retrieveCategoriesAbort.current.abort();
+        if(!window.nodius) {
+            window.nodius = {
+                storage: {
+                    htmlClass: new Map(),
+                    graphs: new Map()
+                }
+            }
         }
-        retrieveCategoriesAbort.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/htmlclass/categories`, {
-            method: "POST",
-            signal: retrieveCategoriesAbort.current.signal,
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-        if(response.status === 200) {
-            const json = await response.json();
-            setAvailableCategories(json);
-        }
-    };
-
-    const retrieveHtmlClassAbort = useRef<AbortController|undefined>(undefined);
-    const retrieveHtmlClass = async () => {
-        if(retrieveHtmlClassAbort.current) {
-            retrieveHtmlClassAbort.current.abort();
-        }
-        retrieveHtmlClassAbort.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/htmlclass/list/${selectedCategory}`, {
-            method: "POST",
-            signal: retrieveHtmlClassAbort.current.signal,
-            headers: {
-                "Content-Type": "application/json",
-            },
-        });
-        if(response.status === 200) {
-            const json = await response.json();
-            console.log(json);
-            setHtmlClassListing(json);
-        }
-    }
-
-    const closeClass = useCallback(() => {
-        setHtmlClassEditing(undefined);
     }, []);
-    const updateHtmlClassAbort = useRef<AbortController|undefined>(undefined);
-    const updateClass = useCallback(async () => {
 
-        if(!htmlClassEditing) return;
-        if(updateHtmlClassAbort.current) {
-            updateHtmlClassAbort.current.abort();
+    const openHtmlClass = useCallback((html:HtmlClass) => {
+        if(!motorRef.current) return;
+
+        // reset state
+        setHideEditPanel(false);
+        motorRef.current.enableInteractive(false);
+
+        if(html.graphKeyLinked) {
+            // retrieve graph
+
         }
-        updateHtmlClassAbort.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/htmlclass/update`, {
-            method: "POST",
-            signal: updateHtmlClassAbort.current.signal,
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                htmlClass: htmlClassEditing,
-            }),
-        });
-        if(response.status === 200) {
+        setEditedHtml(html);
+    }, []);
+
+    const openGraph = useCallback((graph:Graph) => {
+
+    }, []);
+
+    const updateHtml = useCallback((instructions:InstructionBuilder) => {
+
+    }, [editedHtml]);
+
+    /*
+    if user is currently editing html, double click on canvas mean exit the editor
+     */
+    const onDoubleClickOnCanvas = useCallback((evt:MouseEvent) => {
+        if(!motorRef.current) return;
+        if(!graph) {
+            if (confirm("Move to a HTML Workflow ?")) {
+
+            }
+            return;
         }
-    }, [htmlClassEditing]);
-
-    const deleteHtmlClassAbort = useRef<AbortController|undefined>(undefined);
-    const deleteClass = async (htmlClass:HtmlClass) => {
-        if(deleteHtmlClassAbort.current) {
-            deleteHtmlClassAbort.current.abort();
+        if(!hideEditPanel) {
+            setHideEditPanel(true);
+            motorRef.current.enableInteractive(true);
         }
-        deleteHtmlClassAbort.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/htmlclass/delete`, {
-            method: "POST",
-            signal: deleteHtmlClassAbort.current.signal,
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                key: htmlClass._key,
-            }),
-        });
-        if(response.status === 200) {
-            await retrieveHtmlClass();
-        }
-    };
-
-
-
-    const createHtmlClassAbort = useRef<AbortController|undefined>(undefined);
-    const createClass = async () => {
-        if(createHtmlClassAbort.current) {
-            createHtmlClassAbort.current.abort();
-        }
-        createHtmlClassAbort.current = new AbortController();
-
-        const className = prompt("New html class name:");
-        if(!className || className.trim().length === 0) return;
-
-        const newClass:Omit<HtmlClass, "_key"> = {
-            type: "content",
-            category: "default",
-            permission: 0,
-            object: {
-                type: "block",
-                tag: "div",
-                css: {height:"100%", width:"100%"},
-                id: 0
-            },
-            name: className
-        }
-
-        const response = await fetch(`http://localhost:8426/api/htmlclass/create`, {
-            method: "POST",
-            signal: createHtmlClassAbort.current.signal,
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                htmlClass: newClass
-            }),
-        });
-        if(response.status === 200) {
-            await retrieveHtmlClass();
-        }
-    };
+    }, [hideEditPanel, graph])
 
     return (
-        <div style={{width: "100vw", height: "100vh"}}>
+        <ThemeContext.Provider value={Theme} >
+            <ProjectContext.Provider value={Project} >
+                <div style={{width: "100vw", height: "100vh", position:"relative"}}>
+                    <SchemaDisplay onDoubleClickOnCanvas={onDoubleClickOnCanvas} ref={motorRef}/>
+                    <ThemeContextParser/>
+                    <ProjectLoader/>
 
-            {htmlClassEditing == undefined ? (
-                <div style={{padding:"15px"}}>
-                    <div>
-                        <div style={{display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px"}}>
-                            <h3 style={{margin: 0}}>Html Class:</h3>
-                            <select 
-                                value={selectedCategory} 
-                                onChange={(e) => setSelectedCategory((e.target as HTMLSelectElement).value)}
-                                style={{
-                                    padding: "5px",
-                                    fontSize: "14px",
-                                    border: "1px solid #ccc",
-                                    borderRadius: "3px"
-                                }}
-                            >
-                                {availableCategories.map((category) => (
-                                    <option key={category} value={category}>
-                                        {category}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <table style={{width:"100%"}}>
-                            <thead>
-                                <tr>
-                                    <th>token</th>
-                                    <th>action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            {htmlClassListing.map((htmlClass, i) => (
-                                <tr key={i}>
-                                    <td>
-                                        {htmlClass.name} |{htmlClass._key} | {htmlClass.type} | {htmlClass.category}
-                                    </td>
-                                    <td>
-                                        <button onClick={() => setHtmlClassEditing(htmlClass)}>edit</button>
-                                        <button onClick={() => deleteClass(htmlClass)}>delete</button>
-                                    </td>
-                                </tr>
-                            ))}
-                            </tbody>
-                        </table>
-                        <button onClick={createClass}>Create new html class</button>
-                    </div>
+                    <MultiFade active={editedHtml != undefined ? 1 : (0)} timeout={250} extraCss={{position:"absolute", inset:"0px", pointerEvents:"none"}}>
+
+                        <DashboardWorkFlow openHtmlClass={openHtmlClass} openGraph={openGraph} />
+
+                        <HtmlEditor editedHtml={editedHtml} hidePanel={hideEditPanel} updateHtml={updateHtml}/>
+                    </MultiFade>
                 </div>
-            ) : (
-                <HtmlBuilder htmlClass={htmlClassEditing} closeClass={closeClass} updateClass={updateClass} />
-            )}
-            <div style={{width:"100%", height: "100%"}}>
-                <WebGpuExample />
-            </div>
-
-        </div>
+            </ProjectContext.Provider>
+        </ThemeContext.Provider>
     );
 };
 
@@ -213,8 +122,7 @@ const root = document.getElementById('root');
 if (!root) {
     throw new Error('Root element not found');
 }
-
+createRoot(root).render(
+    <App />
+);
 // Render the app
-render(<App /> as Element, root);
-
-

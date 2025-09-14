@@ -8,16 +8,16 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "moduleResolution": "nodenext",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
     "declaration": true,
     "outDir": "dist",
-
+    "moduleDetection": "force",
+    "module": "Preserve",
     "baseUrl": ".",
-    "jsx": "react-jsx",
-    "jsxImportSource": "nodius_jsx",
+    "jsx": "react-jsx"
 
   },
   "include": [

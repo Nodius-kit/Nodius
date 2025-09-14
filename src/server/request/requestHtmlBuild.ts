@@ -56,12 +56,10 @@ export class requestHtmlBuild {
         app.post("/api/htmlclass/update", async (req: Request, res: Response) => {
             if(req.body.htmlClass) {
                 const htmlClass = req.body.htmlClass as HtmlClass;
-                await class_collection.update({
+                await class_collection.replace({
                     _key: htmlClass._key
                 },{
                     ...safeArangoObject(req.body.htmlClass ?? {})
-                }, {
-                    returnNew: true
                 });
                 res.status(200).end();
             }

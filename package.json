@@ -2,7 +2,6 @@
   "name": "nodius",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
     "dev": "tsx ./src/server/server.ts mode=development port=8426"
   },
@@ -13,24 +12,28 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/Nodius-kit/Nodius/issues"
   },
   "homepage": "https://github.com/Nodius-kit/Nodius#readme",
   "devDependencies": {
-    "@types/node": "^24.3.0",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react-swc": "^4.0.1",
     "@webgpu/types": "^0.1.64",
-    "nodius_jsx": "file:../Nodius_JSX",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "vite": "^7.1.4"
+    "vite": "^7.1.5"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.2",
     "arangojs": "^10.1.2",
     "material-icons": "^1.13.14",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "ws": "^8.18.3",
     "zeromq": "^6.5.0"
   }

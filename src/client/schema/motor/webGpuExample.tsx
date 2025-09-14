@@ -55,7 +55,7 @@ export const WebGpuExample = () => {
 			{
 				id: "b",
 				size: { width: 180, height: 80 },
-				posX: 420,
+				posX: 820,
 				posY: 260,
 				handles: {
 					T: { position: "separate", point: [{ id: "t", display: "top" }] },
@@ -75,17 +75,17 @@ export const WebGpuExample = () => {
 				targetHandle: "l",
 				style: "curved"
 			},
-			{
+			/*{
 				source: "a",
 				sourceHandle: "l",
 				target: "b",
 				targetHandle: "r",
 				style: "curved"
-			}
+			}*/
 		]);
 
 	const containerRef = useRef<HTMLDivElement|null>(null);
-	const motorRef = useRef<WebGpuMotor<Data> | null>(null);
+	const motorRef = useRef<WebGpuMotor | null>(null);
 	const overlayRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
 	useEffect(() => {
@@ -93,9 +93,9 @@ export const WebGpuExample = () => {
 		const container = containerRef.current;
 		if (!container) return;
 
-		const motor = new WebGpuMotor<Data>();
-		motor.init(container, { backgroundType:"dotted"}).then(() => {
-			//motor.setScene(scene);
+		const motor = new WebGpuMotor();
+		motor.init(container, null, { backgroundType:"dotted"}).then(() => {
+			motor.setScene(scene);
 			console.log(scene);
 
 			// Create overlays for node content
@@ -140,7 +140,7 @@ export const WebGpuExample = () => {
 
 		motorRef.current = motor;
 
-		let currentPosX = 0;
+		let currentPosX = 800;
 		setInterval(() => {
 			motor.updateNode("b", {
 				posX: currentPosX,
