@@ -66,7 +66,7 @@ export interface HtmlClass {
 
     // bdd unique identifier
     _key:string,
-    graphKeyLinked?: string,
+    graphKeyLinked: string,
 
 
     // aditional info
@@ -75,5 +75,4 @@ export interface HtmlClass {
 
     // html unique info
     workspace:string, // user-id or workspace-id
-    identifier?:string,
 }

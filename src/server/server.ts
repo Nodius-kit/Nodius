@@ -11,7 +11,7 @@ const args =  parseArgs();
 
 
 export const db = new Database({
-    url:  args.get("arangodb", "http://localhost:8529"),
+    url:  args.get("arangodb", "http://127.0.0.1:8529"),
     auth: {
         username: args.get("arangodb_user", "root"),
         password: args.get("arangodb_pass", "azerty"),

@@ -50,7 +50,6 @@ export interface Graph {
 
     // html unique info
     workspace:string, // user-id or workspace-id
-    identifier?:string,
 
     _sheets: { // used for transfert
         nodes: Array<Node<any>>,

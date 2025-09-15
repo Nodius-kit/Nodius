@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/Nodius-kit/Nodius#readme",
   "devDependencies": {
+    "@types/escape-html": "^1.0.4",
     "@types/node": "^24.3.1",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
@@ -31,6 +32,7 @@
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.2",
     "arangojs": "^10.1.2",
+    "escape-html": "^1.0.3",
     "material-icons": "^1.13.14",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
