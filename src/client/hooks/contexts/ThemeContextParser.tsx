@@ -13,13 +13,19 @@ export const ThemeContextParser = memo(({}: ThemeContextParserProps) => {
         // Set theme mode
         root.setAttribute('data-nodius-theme', Theme.state.theme);
 
-        const toDos:Partial<keyof ThemeContextType>[] = ["primary","secondary","text","info","background","success","warning","error"];
+        const toDos:Partial<keyof ThemeContextType>[] = ["primary","secondary","text","info","background","success","warning","error", "shadow"];
 
         toDos.forEach((toDo) => {
             Object.entries((Theme.state as any)[toDo][Theme.state.theme]).forEach(([key, value]) => {
                 root.style.setProperty(`--nodius-${toDo}-${key}`, value as any);
             });
         })
+        toDos.forEach((toDo) => {
+            Object.entries((Theme.state as any)[toDo][Theme.state.theme == "light" ? "dark" : "light"]).forEach(([key, value]) => {
+                root.style.setProperty(`--nodius-reverse-${toDo}-${key}`, value as any);
+            });
+        })
+
 
         // Set all color palette variables
         Object.entries(Theme.state.color).forEach(([colorName, colorShades]) => {

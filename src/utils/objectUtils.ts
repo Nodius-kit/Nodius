@@ -100,6 +100,73 @@ export const insertAtIndex = <T>(arr: T[], index: number, element: T): T[] => {
 };
 
 
+// Utility: strips unknown keys
+export const pickKeys = <T extends object>(obj: any, allowed: (keyof T)[]): T => {
+    const result: Partial<T> = {};
+    for (const key of allowed) {
+        if (key in obj) {
+            result[key] = obj[key];
+        }
+    }
+    return result as T;
+}
+
+
+export const forwardMouseEvents = (sourceEl: HTMLElement, targetEl: HTMLElement)=>  {
+    const events = ["wheel", "mouseup", "mousemove", "mousedown"] as const;
+
+    events.forEach(eventType => {
+        sourceEl.addEventListener(eventType, (e: Event) => {
+            let newEvent: Event;
+
+            if (e.type === "wheel" && e instanceof WheelEvent) {
+                newEvent = new WheelEvent("wheel", {
+                    bubbles: true,
+                    cancelable: true,
+                    view: e.view,
+                    deltaX: e.deltaX,
+                    deltaY: e.deltaY,
+                    deltaZ: e.deltaZ,
+                    deltaMode: e.deltaMode,
+                    screenX: e.screenX,
+                    screenY: e.screenY,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    ctrlKey: e.ctrlKey,
+                    altKey: e.altKey,
+                    shiftKey: e.shiftKey,
+                    metaKey: e.metaKey,
+                    button: e.button,
+                    buttons: e.buttons,
+                    relatedTarget: targetEl,
+                });
+            } else if (e instanceof MouseEvent) {
+                newEvent = new MouseEvent(e.type, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: e.view,
+                    detail: e.detail,
+                    screenX: e.screenX,
+                    screenY: e.screenY,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    ctrlKey: e.ctrlKey,
+                    altKey: e.altKey,
+                    shiftKey: e.shiftKey,
+                    metaKey: e.metaKey,
+                    button: e.button,
+                    buttons: e.buttons,
+                    relatedTarget: targetEl,
+                });
+            } else {
+                return;
+            }
+
+            targetEl.dispatchEvent(newEvent);
+        });
+    });
+}
+
 /**
  *
  * Extends the global Array interface to include a `mapOrElse` method.
@@ -148,4 +215,45 @@ if (!Array.prototype.mapOrElse) {
         // Otherwise, map each element with callbackfn
         return this.map(callbackfn);
     };
+}
+
+
+export const disableTextSelection = () => {
+    (document.body.style as any).userSelect = 'none';
+    (document.body.style as any).webkitUserSelect = 'none';
+    (document.body.style as any).mozUserSelect = 'none';
+    (document.body.style as any).msUserSelect = 'none';
+}
+
+// Re-enable text selection
+export const enableTextSelection = ()=>  {
+    (document.body.style as any).userSelect = 'text';
+    (document.body.style as any).webkitUserSelect = 'text';
+    (document.body.style as any).mozUserSelect = 'text';
+    (document.body.style as any).msUserSelect = 'text';
+}
+
+export interface Rect {
+    x:number,
+    y:number,
+    width:number,
+    height:number,
+}
+
+export const documentHaveActiveElement = () => {
+    const active = document.activeElement as HTMLElement;
+
+    const isTyping =
+        active?.tagName === "INPUT" ||
+        active?.tagName === "TEXTAREA" ||
+        active?.isContentEditable;
+
+    const selection = window.getSelection();
+    const hasSelection = selection && selection.toString().length > 0;
+
+    // If typing OR selecting text, don’t block shortcuts
+    if (isTyping || hasSelection) {
+        return true;
+    }
+    return false;
 }

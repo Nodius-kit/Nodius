@@ -1,4 +1,4 @@
-import type { Edge, Node, handleSide } from "../../../utils/schema/schemaType";
+import {Edge, Node} from "../../../utils/graph/graphType";
 
 export interface MotorScene {
 	nodes: Map<string, Node<any>>;
@@ -8,6 +8,8 @@ export interface MotorScene {
 export interface GraphicalMotorOptions {
 	devicePixelRatio?: number;
 	backgroundType?: typeof backgroundType[number];
+	maxZoom?: number;
+	minZoom?: number;
 }
 
 export interface ViewTransform {
@@ -25,6 +27,7 @@ export type MotorEventMap = {
 	edgeChange: (edge: Edge) => void;
 	nodeEnter: (node: Node<any>) => void;
 	nodeLeave: (node: Node<any>) => void;
+	reset: () => void;
 };
 
 export const backgroundType = ["solid", "dotted"] as const;

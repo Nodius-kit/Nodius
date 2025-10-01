@@ -1,9 +1,15 @@
+import {pickKeys} from "../objectUtils";
+import {HTMLDomEvent, HtmlObject} from "../html/htmlType";
 
 export type NodeType = "html" | string;
 export type handleSide = "T" | "D" | "R" | "L" | "0"
 
 export interface Edge {
+
+    _key: string,
+
     graphKey: string,
+    sheetIndex:number,
 
     source: string;
     sourceHandle: string;
@@ -17,11 +23,14 @@ export interface Edge {
 
 export interface Node<T> {
     _key: string,
+    graphKey: string,
     type: NodeType,
+    sheetIndex:number,
     size: {
         width: number,
-        height: number
-    } | "auto",
+        height: number,
+        dynamic?: boolean,
+    },
     posX: number,
     posY: number,
     handles: Partial<Record<handleSide, {
@@ -30,9 +39,40 @@ export interface Node<T> {
             id: string,
             offset?:number,
             display?: string,
+            type: "in" | "out",
+            accept: string,
         }>
     }>>,
     data?: T
+}
+
+// Clean an Edge object
+export function cleanEdge(obj: any): Edge {
+    return pickKeys<Edge>(obj, [
+        "graphKey",
+        "sheetIndex",
+        "source",
+        "sourceHandle",
+        "target",
+        "targetHandle",
+        "style",
+        "label",
+    ]);
+}
+
+// Clean a Node object
+export function cleanNode<T>(obj: any): Node<T> {
+    return pickKeys<Node<T>>(obj, [
+        "_key",
+        "graphKey",
+        "type",
+        "sheetIndex",
+        "size",
+        "posX",
+        "posY",
+        "handles",
+        "data",
+    ]);
 }
 
 export interface Graph {
@@ -51,16 +91,89 @@ export interface Graph {
     // html unique info
     workspace:string, // user-id or workspace-id
 
-    _sheets: { // used for transfert
+    sheetsList:string[],
+
+    _sheets: Record<string, { // used for transfert
         nodes: Array<Node<any>>,
         edges: Array<Edge>,
-    },
-    sheets:{
+    }>,
+    sheets:Record<string, {
         nodeMap: Map<string, Node<any>>,
         edgeMap: Map<string, Edge[]>
+    }>,
+    createdTime: number,
+    lastUpdatedTime: number,
+}
+
+
+
+export interface NodeTypeConfig {
+    _key: string,
+    displayName: string,
+    content: HtmlObject,
+    content_key: string,
+    alwaysRendered: boolean,
+    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
+    border: {
+        radius: number,
+        width: number,
+        type: string
+        normal: {
+            color: string,
+        },
+        hover: {
+            color: string,
+        }
     }
 }
 
-export interface NodeTypeHtml {
-    identifier: string
+export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
+    _key: "0",
+    content_key: "",
+    displayName: "Html Editor",
+    alwaysRendered: true,
+    domEvents: [
+        {
+            name: "dblclick",
+            call: `
+            
+                const render_id = node._key;
+                const htmlRender = getHtmlRenderer(render_id);
+                
+                gpuMotor.smoothFitToNode(node._key, {
+                    padding: 400
+                });
+                openHtmlEditor(node, htmlRender, () => {
+                    // on close
+                    container.style.cursor = "cursor";
+                    htmlRender.setBuildingMode(false);
+                });
+                container.style.cursor = "initial";
+                
+                htmlRender.setBuildingMode(true);
+                
+            `,
+            description: "Open HTML Editor for the current node"
+        },
+        {
+            name: "nodeEnter" as any,
+            call: `
+                const render_id = node._key;
+                console.log(node.data);
+                const htmlRender = await initiateNewHtmlRenderer(render_id, container);
+                htmlRender.render(node.data);
+            `
+        }
+    ],
+    border: {
+        radius:10,
+        width:1,
+        type: "solid",
+        normal: {
+            color: "var(--nodius-primary-dark)",
+        },
+        hover: {
+            color: "var(--nodius-primary-light)",
+        }
+    }
 }

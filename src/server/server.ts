@@ -1,11 +1,12 @@
 import {cors, HttpServer, logger, NextFunction, rateLimit, Response, Request} from "./http/HttpServer";
 import { spawn } from "child_process";
 import {parseArgs} from "./utils/env";
-import {requestHtmlBuild} from "./request/requestHtmlBuild";
 import {Database} from "arangojs";
 import {ClusterManager, ClusterNode} from "./cluster/clusterManager";
 import {WebSocketManager} from "./cluster/webSocketManager";
 import {RequestWorkFlow} from "./request/requestWorkFlow";
+import {RequestBuilder} from "./request/requestBuilder";
+import {RequestDataType} from "./request/requestDataType";
 
 const args =  parseArgs();
 
@@ -27,6 +28,7 @@ app.use(rateLimit({ windowMs: 60000, max: 100 }));
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
     console.error('Error:', err.message);
+    console.trace(err);
     res.status(500).json({ error: err.message });
 });
 
@@ -46,6 +48,8 @@ if(args.get("mode", "production") == "development") {
     });
 }
 RequestWorkFlow.init(app);
+RequestBuilder.init(app);
+RequestDataType.init(app);
 
 export const clusterManager = new ClusterManager(parseInt(args.get("port", "8426")) + 1000);
 export const webSocketManager = new WebSocketManager(parseInt(args.get("port", "8426")) + 2000);

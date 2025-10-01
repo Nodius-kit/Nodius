@@ -30,10 +30,11 @@
     "vite": "^7.1.5"
   },
   "dependencies": {
+    "@fontsource/roboto": "^5.2.8",
     "@vitejs/plugin-react": "^5.0.2",
     "arangojs": "^10.1.2",
     "escape-html": "^1.0.3",
-    "material-icons": "^1.13.14",
+    "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "ws": "^8.18.3",

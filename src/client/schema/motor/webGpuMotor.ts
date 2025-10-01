@@ -7,6 +7,7 @@ import {
 	backgroundType
 } from "./graphicalMotor"
 import {handleSide, Edge, Node} from "../../../utils/graph/graphType";
+import {documentHaveActiveElement} from "../../../utils/objectUtils";
 
 interface HandleInfo {
 	side: handleSide;
@@ -18,6 +19,10 @@ interface Point {
 	x: number;
 	y: number;
 }
+
+type KeyState = {
+	[key: string]: number | undefined; // stores interval IDs
+};
 
 /*
 Reminder of type:
@@ -63,6 +68,10 @@ export class WebGpuMotor implements GraphicalMotor {
 	private prevVisibleNodes: Set<string> = new Set();
 	private relevantEdges: Edge[] = [];
 	private interactiveEnabled:boolean = true;
+	private animationFrameId:number|null=null;
+	private maxZoom:number = 1;
+	private minZoom:number = 1;
+	private pressed: KeyState = {}
 
 	public async init(container: HTMLElement, convas:HTMLCanvasElement, options?: GraphicalMotorOptions): Promise<void> {
 		if (!navigator.gpu) {
@@ -73,6 +82,8 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (!adapter) {
 			throw new Error("No WebGPU adapter found.");
 		}
+
+		this.initKeyboardShortcut();
 
 		this.device = await adapter.requestDevice();
 		this.canvas = convas;
@@ -86,6 +97,9 @@ export class WebGpuMotor implements GraphicalMotor {
 			format: this.format,
 			alphaMode: "premultiplied",
 		});
+
+		this.minZoom = options?.minZoom ?? 0.5;
+		this.maxZoom = options?.maxZoom ?? 3;
 
 		this.dpr = options?.devicePixelRatio ?? window.devicePixelRatio ?? 1;
 		this.backgroundType = options?.backgroundType ?? "dotted";
@@ -407,6 +421,7 @@ export class WebGpuMotor implements GraphicalMotor {
 	private setupInputEvents(): void {
 		if (!this.canvas) return;
 
+
 		this.canvas.addEventListener("mousedown", (e) => {
 			if(!this.interactiveEnabled) return;
 			if (e.button === 0) {
@@ -430,10 +445,14 @@ export class WebGpuMotor implements GraphicalMotor {
 			}
 		});
 
-		this.canvas.addEventListener("mouseup", () => {
+
+
+		const mouseUp = () => {
 			if(!this.interactiveEnabled) return;
 			this.isPanning = false;
-		});
+		};
+		this.canvas.addEventListener("mouseup", mouseUp);
+		this.canvas.addEventListener("mouseout", mouseUp);
 
 		this.canvas.addEventListener("wheel", (e) => {
 			if(!this.interactiveEnabled) return;
@@ -445,7 +464,8 @@ export class WebGpuMotor implements GraphicalMotor {
 			const wy = (mouseY - this.transform.translateY) / this.transform.scale;
 			const delta = -e.deltaY * 0.001;
 			const factor = Math.exp(delta);
-			const newScale = this.transform.scale * factor;
+			const newScale = Math.max(Math.min(this.transform.scale * factor, this.maxZoom), this.minZoom);
+
 			this.transform.translateX = mouseX - wx * newScale;
 			this.transform.translateY = mouseY - wy * newScale;
 			this.transform.scale = newScale;
@@ -689,6 +709,14 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 	}
 
+	public resetScene(): void {
+		this.emit("reset", undefined);
+		this.scene = undefined;
+		this.visibleNodes = new Set();
+		this.prevVisibleNodes = new Set();
+		this.requestRedraw();
+	}
+
 	private buildNodeBuffer(): void {
 		if (!this.scene) return;
 		const instanceData = new Float32Array(this.visibleNodes.size * 4);
@@ -712,6 +740,7 @@ export class WebGpuMotor implements GraphicalMotor {
 	}
 
 	private buildHandleBuffer(): void {
+		if (!this.scene) return;
 		const handleRadius = 2;
 		const handleData: number[] = [];
 		this.handleCount = 0;
@@ -721,7 +750,7 @@ export class WebGpuMotor implements GraphicalMotor {
 			for (const side in node.handles) {
 				const s = side as handleSide;
 				const config = node.handles[s];
-				for (const point of config.point) {
+				for (const point of config!.point) {
 					const pos = this.getHandlePosition(node, point.id);
 					if (pos) {
 						handleData.push(pos.x, pos.y, handleRadius);
@@ -902,19 +931,12 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (this.handleInstanceBuffer) this.handleInstanceBuffer.destroy();
 		if (this.edgeVertexBuffer) this.edgeVertexBuffer.destroy();
 		if (this.fullScreenTriangleBuffer) this.fullScreenTriangleBuffer.destroy();
+		this.disposeKeyboardShortcut();
 		this.eventListeners = {};
 	}
 
 	public setScene(scene: MotorScene): void {
 		this.scene = scene;
-
-		// Validate sizes
-		for (const [key, node] of scene.nodes) {
-			if (node.size === "auto") {
-				throw new Error("Auto size is not supported; provide explicit width and height.");
-			}
-		}
-
 		this.dirty = true;
 	}
 
@@ -992,6 +1014,48 @@ export class WebGpuMotor implements GraphicalMotor {
 		this.dirty = true;
 	}
 
+	private handleKeyDown = (e: KeyboardEvent) =>{
+		if (!e.key.startsWith("Arrow")) return;
+		if(documentHaveActiveElement()) return;
+		if (this.pressed[e.key]) return;
+		this.triggerAction(e.key);
+		this.pressed[e.key] = window.setInterval(() => {
+			this.triggerAction(e.key);
+		}, 20);
+	}
+
+	private handleKeyUp = (e: KeyboardEvent) => {
+		if (!e.key.startsWith("Arrow")) return;
+		const id = this.pressed[e.key];
+		if (id) {
+			clearInterval(id);
+			this.pressed[e.key] = undefined;
+		}
+	}
+	private triggerAction(key: string) {
+		const workValue = 22;
+		if(key === "ArrowDown") {
+			this.transform.translateY -= workValue;
+		} else if(key === "ArrowUp") {
+			this.transform.translateY += workValue;
+		} else if(key === "ArrowLeft") {
+			this.transform.translateX += workValue;
+		} else if(key === "ArrowRight") {
+			this.transform.translateX -= workValue;
+		}
+		this.requestRedraw();
+		this.emit("pan", this.transform);
+	}
+
+	public initKeyboardShortcut(): void {
+		window.addEventListener("keydown", this.handleKeyDown);
+		window.addEventListener("keyup", this.handleKeyUp);
+	}
+	public disposeKeyboardShortcut(): void {
+		window.removeEventListener("keydown", this.handleKeyDown);
+		window.removeEventListener("keyup", this.handleKeyUp);
+	}
+
 	public getNodeScreenRect(nodeId: string): { x: number; y: number; width: number; height: number } | undefined {
 		if(!this.scene) return;
 		const node = this.scene!.nodes.get(nodeId);
@@ -1024,4 +1088,141 @@ export class WebGpuMotor implements GraphicalMotor {
 			translateY: centerY
 		});
 	}
+
+	public smoothTransitionTo(options: {
+		x: number;
+		y: number;
+		zoom: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void {
+		const duration = options.duration ?? 500; // Default 500ms
+		const easing = options.easing ?? ((t: number) => t * t * (3 - 2 * t)); // Default smooth step
+
+		// Cancel any existing animation
+		if (this.animationFrameId) {
+			cancelAnimationFrame(this.animationFrameId);
+			this.animationFrameId = null;
+		}
+
+		// Calculate target position in screen space
+		// We want the world point (x, y) to be at the center of the canvas after transition
+		const centerX = this.canvas!.width / 2;
+		const centerY = this.canvas!.height / 2;
+
+		// Calculate what the translate values should be to center on the target point
+		const targetTranslateX = centerX - options.x * options.zoom;
+		const targetTranslateY = centerY - options.y * options.zoom;
+
+		// Store starting values
+		const startScale = this.transform.scale;
+		const startTranslateX = this.transform.translateX;
+		const startTranslateY = this.transform.translateY;
+
+		// Store target values
+		const targetScale = options.zoom;
+
+		const startTime = performance.now();
+
+		const animate = (currentTime: number) => {
+			const elapsed = currentTime - startTime;
+			const progress = Math.min(elapsed / duration, 1);
+			const easedProgress = easing(progress);
+
+			// Interpolate values
+			this.transform.scale = startScale + (targetScale - startScale) * easedProgress;
+			this.transform.translateX = startTranslateX + (targetTranslateX - startTranslateX) * easedProgress;
+			this.transform.translateY = startTranslateY + (targetTranslateY - startTranslateY) * easedProgress;
+
+			this.dirty = true;
+
+			// Emit events
+			this.emit("zoom", this.transform);
+			this.emit("pan", this.transform);
+
+			if (progress < 1) {
+				this.animationFrameId = requestAnimationFrame(animate);
+			} else {
+				this.animationFrameId = null;
+				if (options.onComplete) {
+					options.onComplete();
+				}
+			}
+		};
+
+		this.animationFrameId = requestAnimationFrame(animate);
+	}
+
+	//  Smooth transition to fit a specific node or area
+	public smoothFitToNode(nodeId: string, options?: {
+		padding?: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void {
+		if (!this.scene) return;
+		const node = this.scene.nodes.get(nodeId);
+		if (!node || typeof node.size === "string") return;
+
+		const padding = options?.padding ?? 50;
+
+		// Calculate the zoom level to fit the node with padding
+		const availableWidth = this.canvas!.width - 2 * padding;
+		const availableHeight = this.canvas!.height - 2 * padding;
+
+		const scaleX = availableWidth / node.size.width;
+		const scaleY = availableHeight / node.size.height;
+		const targetZoom = Math.min(scaleX, scaleY);
+
+		// Calculate center of the node
+		const nodeCenterX = node.posX + node.size.width / 2;
+		const nodeCenterY = node.posY + node.size.height / 2;
+
+		this.smoothTransitionTo({
+			x: nodeCenterX,
+			y: nodeCenterY,
+			zoom: targetZoom,
+			duration: options?.duration,
+			easing: options?.easing,
+			onComplete: options?.onComplete
+		});
+	}
+
+	// Smooth transition to fit multiple nodes/area
+	public smoothFitToArea(bounds: {
+		minX: number;
+		minY: number;
+		maxX: number;
+		maxY: number;
+	}, options?: {
+		padding?: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void {
+		const padding = options?.padding ?? 50;
+
+		const width = bounds.maxX - bounds.minX;
+		const height = bounds.maxY - bounds.minY;
+		const centerX = (bounds.minX + bounds.maxX) / 2;
+		const centerY = (bounds.minY + bounds.maxY) / 2;
+
+		const availableWidth = this.canvas!.width - 2 * padding;
+		const availableHeight = this.canvas!.height - 2 * padding;
+
+		const scaleX = availableWidth / width;
+		const scaleY = availableHeight / height;
+		const targetZoom = Math.min(scaleX, scaleY, 2); // Cap at 2x zoom
+
+		this.smoothTransitionTo({
+			x: centerX,
+			y: centerY,
+			zoom: targetZoom,
+			duration: options?.duration,
+			easing: options?.easing,
+			onComplete: options?.onComplete
+		});
+	}
 }
+

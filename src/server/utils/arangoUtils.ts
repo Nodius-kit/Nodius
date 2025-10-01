@@ -58,9 +58,12 @@ export async function createUniqueToken(
     return token!;
 }
 
-export function safeArangoObject(object:any) {
-    delete object["_key"];
-    delete object["_id"];
-    delete object["_rev"];
-    return object;
+type ArangoMetaKeys = "_key" | "_id" | "_rev";
+
+export function safeArangoObject<T extends Record<string, any>>(
+    object: T
+): Omit<T, ArangoMetaKeys> {
+    // We need a mutable copy if we want to avoid mutating caller’s object
+    const { _key, _id, _rev, ...rest } = object;
+    return rest;
 }

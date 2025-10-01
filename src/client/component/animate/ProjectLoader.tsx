@@ -48,7 +48,7 @@ export const ProjectLoader = memo(() => {
 
     return (
         <Fade in={false} unmountOnExit={true}>
-            <div ref={setContainer} style={{width:'100%', height:'100%', position:'absolute', display:"flex", justifyContent:"center", alignItems:"center", inset:"0px", backgroundColor:"var(--nodius-background-default)"}} >
+            <div ref={setContainer} style={{width:'100%', height:'100%', position:'absolute', display:"flex", justifyContent:"center", alignItems:"center", inset:"0px", backgroundColor:"var(--nodius-background-default)", zIndex:"20000000"}} >
             </div>
         </Fade>
     )

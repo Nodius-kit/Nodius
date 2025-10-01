@@ -1,4 +1,7 @@
 import {CSSProperties} from "react";
+import {CSSBlock} from "./HtmlCss";
+
+/* ------------ HTML CLASS --------------- */
 
 export const HTMLWorkflowEvent = ["variableChange"] as const;
 export type HTMLWorkflowEventType = typeof HTMLWorkflowEvent[number];
@@ -19,9 +22,12 @@ export interface HtmlBase {
     identifier: string; // auto generated
     id?: string; // user generated
     tag: string;
-    css:CSSProperties,
+    css:CSSBlock[],
     domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
-    workflowEvents?: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>
+    workflowEvents?: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
+    name:string,
+    delimiter?: boolean,
+    temporary?:boolean
 }
 
 export interface HtmlArray extends HtmlBase {
@@ -41,7 +47,7 @@ export interface HtmlDiv extends HtmlBase {
 
 export interface HtmlText extends HtmlBase{
     type: "text",
-    content: Record<Language, string>
+    content: Record<string, string>
 }
 
 export interface HtmlList extends HtmlBase {
@@ -56,13 +62,11 @@ export interface HtmlInner extends HtmlBase {
 export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray;
 export interface HtmlClass {
     object:HtmlObject,
-
     version: number;
 
     // html related info
     name:string,
     description?:string,
-    owner:string,
 
     // bdd unique identifier
     _key:string,
@@ -75,4 +79,21 @@ export interface HtmlClass {
 
     // html unique info
     workspace:string, // user-id or workspace-id
+
+
+    createdTime: number,
+    lastUpdatedTime: number,
+}
+
+
+/* ------------ HTML BUILDER --------------- */
+export const HtmlBuilderCategory = ["Most Used Components", "Layout Components"] as const
+export type HtmlBuilderCategoryType = typeof HtmlBuilderCategory[number];
+export interface HtmlBuilderComponent {
+    _keys: string,
+    icon: string, // lucide icon name,
+    htmlKeyLinked: string,
+    workspace: string,
+    category: HtmlBuilderCategoryType,
+    object: HtmlObject,
 }

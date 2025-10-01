@@ -2,14 +2,17 @@ import {CSSProperties} from "react";
 import {HtmlObject, HTMLWorkflowEventType, HtmlBase} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
+import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/HtmlCss";
 
-interface ObjectStorage {
+export interface ObjectStorage {
     element: HTMLElement,
     object: HtmlObject,
     domEvents: Map<string, Array<((event: any) => void)>>,
     workflowEvents: Map<string, Array<((event: any) => void)>>,
     storage: Record<string, any>,
     extraVariable: Record<string, any>,
+    debugEvents: Map<string, Array<((event: any) => void)>>,
+    debugOverlay?: HTMLElement,
 }
 
 interface ChildInfo {
@@ -17,26 +20,52 @@ interface ChildInfo {
     extra: Record<string, any>,
 }
 
-type AsyncFunctionConstructor = new (...args: string[]) => (...args: any[]) => Promise<any>;
-const AsyncFunction: AsyncFunctionConstructor = Object.getPrototypeOf(async function () {
+export interface HtmlRenderOption {
+    buildingMode?: boolean,
+    language: string
+};
+
+
+export type AsyncFunctionConstructor = new (...args: string[]) => (...args: any[]) => Promise<any>;
+export const AsyncFunction: AsyncFunctionConstructor = Object.getPrototypeOf(async function () {
 }).constructor;
 
 export class HtmlRender {
 
+    private uniqueCounter: number = 0;
     private readonly container: HTMLElement;
+    private readonly superContainer: HTMLElement;
     private previousObject: HtmlObject | undefined;
     private readonly objectStorage: Map<string, ObjectStorage> = new Map<string, ObjectStorage>();
     private globalStorage: Record<string, any> = {};
     private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
-    private language: Language = "en";
+    private language: string = "en";
+
+
+    /* building mode */
     private buildingMode: boolean = false;
+    private selectedObjectIdentifier:string|undefined;
+    private hoverObjectIdentifier:string|undefined;
+    private readonly buildingInteractEventMap: Map<"hover"|"select", ((objectStorage?:ObjectStorage) => void)[]> = new Map();
+    /* ------------- */
 
 
-    constructor(container: HTMLElement, option?: { buildingMode?: boolean, language: Language }) {
+    constructor(container: HTMLElement, option?: HtmlRenderOption) {
         if (!container) {
             throw new Error("HtmlRender: Container is null");
         }
-        this.container = container;
+
+        this.superContainer = document.createElement("div");
+        this.superContainer.style.position = "relative";
+        this.superContainer.style.width = "100%";
+        this.superContainer.style.height = "100%";
+        container.appendChild(this.superContainer);
+
+        this.container = document.createElement("div");
+        this.container.style.width = "100%";
+        this.container.style.height = "100%";
+        this.superContainer.appendChild(this.container);
+
         this.buildingMode = option?.buildingMode ?? false;
         this.language = option?.language ?? "en";
         this.globalStorage = new Proxy({}, {
@@ -48,7 +77,66 @@ export class HtmlRender {
         });
     }
 
-    public setLanguage(lang: Language): void {
+    public setVariableInGlobalStorage(key: string, value: any) {
+        this.globalStorage[key] = value;
+    }
+
+    public async setBuildingMode(value: boolean) {
+        if (!this.container) {
+            throw new Error("HtmlRender: Container is null");
+        }
+        if (this.buildingMode && !value) {
+            for (const storage of this.objectStorage.values()) {
+                if (storage.debugOverlay) {
+                    storage.debugOverlay.remove();
+                    storage.debugOverlay = undefined;
+                }
+            }
+        }
+        this.buildingMode = value;
+        if (this.previousObject !== undefined) {
+            await this.render(this.previousObject);
+        }
+    }
+    public async setBuildingSelectedObjectIdentifier(identifier: string) {
+        this.selectedObjectIdentifier = identifier;
+        if (this.previousObject !== undefined) {
+            await this.render(this.previousObject);
+        }
+    }
+
+    public clearBuildingOverlay() {
+        if(this.hoverObjectIdentifier) {
+            const hoverStorage = this.objectStorage.get(this.hoverObjectIdentifier);
+            if (hoverStorage) {
+                if (hoverStorage.debugOverlay) {
+                    hoverStorage.debugOverlay.remove();
+                    hoverStorage.debugOverlay = undefined;
+                }
+            }
+            this.hoverObjectIdentifier = undefined;
+        }
+        let events = this.buildingInteractEventMap.get("hover") ?? [];
+        for(const event of events) {
+            event(undefined);
+        }
+        if(this.selectedObjectIdentifier) {
+            const selectedStorage = this.objectStorage.get(this.selectedObjectIdentifier);
+            if (selectedStorage) {
+                if (selectedStorage.debugOverlay) {
+                    selectedStorage.debugOverlay.remove();
+                    selectedStorage.debugOverlay = undefined;
+                }
+            }
+        }
+        events = this.buildingInteractEventMap.get("select") ?? [];
+        for(const event of events) {
+            event(undefined);
+        }
+        document.querySelectorAll("[data-render-building-mode-overlay]").forEach((el)=> el.remove());
+    }
+
+    public setLanguage(lang: string): void {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
         }
@@ -99,15 +187,17 @@ export class HtmlRender {
                 }
             }),
             extraVariable: extraVar,
+            debugEvents: new Map(),
         };
+
+
 
         if (object.id) element.id = object.id;
 
-        Object.entries(object.css).forEach(([key, value]) => {
-            if (value !== undefined) {
-                (element.style as any)[key] = value;
-            }
-        });
+
+        if(object.css) {
+            applyCSSBlocks(element, object.css);
+        }
 
         if (object.domEvents) {
             object.domEvents.forEach((event) => {
@@ -140,6 +230,7 @@ export class HtmlRender {
         }
         this.objectStorage.set(object.identifier, storage);
         parent.insertBefore(element, insertBefore);
+        this.addDebugListeners(storage);
 
         if (object.type === "text") {
             element.textContent = await this.parseContent(object.content[this.language], storage);
@@ -165,6 +256,7 @@ export class HtmlRender {
             storage.element = newElement;
             element = newElement;
         }
+        this.removeDebugListeners(storage);
 
         element.dataset.identifier = newObject.identifier;
 
@@ -173,17 +265,14 @@ export class HtmlRender {
         }
 
         // Update CSS: unset removed styles
-        Object.keys(oldObject.css).forEach(key => {
-            if (!(key in newObject.css)) {
-                (element.style as any)[key] = "";
-            }
-        });
+        if(oldObject.css) {
+            removeCSSBlocks(element, oldObject.css);
+        }
         // Apply new/changed styles
-        Object.entries(newObject.css).forEach(([key, value]) => {
-            if (value !== undefined) {
-                (element.style as any)[key] = value;
-            }
-        });
+        if(newObject.css) {
+            applyCSSBlocks(element, newObject.css);
+        }
+
 
         // Update domEvents: remove all old, add new
         for (const [name, listeners] of storage.domEvents.entries()) {
@@ -276,16 +365,17 @@ export class HtmlRender {
                 oldChildMap.delete(idf);
             } else {
                 const nextNode = lastInserted ? lastInserted.nextSibling : element.firstChild;
-                await this.renderCreate(childInfo.obj, element, childInfo.extra, nextNode);
+                await this.renderCreate(childInfo.obj, element, childInfo.extra, element.contains(nextNode) ? nextNode : null);
                 const newStorage = this.objectStorage.get(idf)!;
                 lastInserted = newStorage.element;
             }
         }
 
-        // Remove unmatched old children
+        // Remove unmatched old children AFTER processing new ones
         for (const old of oldChildMap.values()) {
             this.disposeElement(old.storage.object.identifier);
         }
+        this.addDebugListeners(storage);
     }
 
     private async getChildrenInfo(object: HtmlObject, extraVar: Record<string, any>, storage: ObjectStorage): Promise<ChildInfo[]> {
@@ -382,6 +472,7 @@ export class HtmlRender {
         if (this.previousObject) {
             this.disposeElement(this.previousObject.identifier);
         }
+        this.clearBuildingOverlay();
         this.objectStorage.clear();
         this.workflowEventMap.clear();
         this.globalStorage = {};
@@ -410,6 +501,8 @@ export class HtmlRender {
             }
         }
         storage.workflowEvents.clear();
+
+        this.removeDebugListeners(storage);
 
         // Recurse children
         for (const child of Array.from(storage.element.children) as HTMLElement[]) {
@@ -478,6 +571,196 @@ export class HtmlRender {
         });
 
         return replaced;
+    }
+
+    private addDebugListeners(storage: ObjectStorage) {
+        if (!this.buildingMode) return;
+        storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
+
+        // this interaction is only available for entry component, so the parent should be null or having delimiter=true
+        const parentIdentifier = storage.element.parentElement?.getAttribute("data-identifier");
+        if(
+            !storage.element.parentElement || (parentIdentifier &&!this.objectStorage.has(parentIdentifier)) || (parentIdentifier &&!this.objectStorage.get(parentIdentifier)!.object.delimiter)
+        ) {
+            return;
+        }
+
+        const lookForZoom = (element:HTMLElement):number => {
+            const zoom = parseFloat(getComputedStyle(element).zoom);
+            if(element.parentElement) {
+                return zoom * lookForZoom(element.parentElement);
+            }
+            return zoom;
+        }
+
+
+        const createOverlay = (backgroundColor:string) => {
+            const zoom = lookForZoom(this.superContainer);
+            const overlay = document.createElement('div');
+            overlay.setAttribute("data-render-building-mode-overlay", "true");
+            overlay.style.position = 'absolute';
+            overlay.style.pointerEvents = 'none';
+            overlay.style.border = '2px solid '+backgroundColor;
+            overlay.style.boxSizing = 'border-box';
+
+            const rect = storage.element.getBoundingClientRect();
+            const parentRect = this.superContainer.getBoundingClientRect();
+            overlay.style.left = `${(rect.left - parentRect.left) / zoom}px`;
+            overlay.style.top = `${(rect.top - parentRect.top) / zoom}px`;
+            overlay.style.width = `${(rect.width) / zoom}px`;
+            overlay.style.height = `${(rect.height) / zoom}px`;
+
+            const overlayName = document.createElement("div");
+            overlayName.style.position = 'absolute';
+            overlayName.style.backgroundColor = backgroundColor;
+            overlayName.style.color = "var(--nodius-secondary-contrastText)";
+            overlayName.style.top = "0";
+            overlayName.style.left = "0";
+            overlayName.style.fontSize = "12px";
+            overlayName.style.userSelect = "none";
+            overlayName.innerText = storage.object.name;
+            overlayName.style.padding="0px 3px";
+            overlayName.style.borderBottomRightRadius = "5px";
+            overlay.appendChild(overlayName);
+
+            return overlay;
+        }
+
+        /*if(storage.object.identifier === this.selectedObjectIdentifier || storage.object.identifier === this.hoverObjectIdentifier) {
+
+            const overlay = createOverlay(storage.object.identifier === this.hoverObjectIdentifier ? 'var(--nodius-secondary-light)' : 'var(--nodius-secondary-main)');
+            storage.debugOverlay = overlay;
+            this.superContainer.appendChild(overlay);
+        }*/
+
+        const onEnter = (evt: Event) => {
+            evt.stopPropagation();
+            if(storage.object.identifier !== this.selectedObjectIdentifier) {
+                const events = this.buildingInteractEventMap.get("hover") ?? [];
+                if(this.hoverObjectIdentifier) {
+                    const hoverStorage = this.objectStorage.get(this.hoverObjectIdentifier);
+                    if (hoverStorage) {
+                        if (hoverStorage.debugOverlay) {
+                            hoverStorage.debugOverlay.remove();
+                            hoverStorage.debugOverlay = undefined;
+                        }
+                    }
+                    this.hoverObjectIdentifier = undefined;
+                }
+                const overlay = createOverlay('var(--nodius-secondary-light)');
+                storage.debugOverlay = overlay;
+                this.superContainer.appendChild(overlay);
+                this.hoverObjectIdentifier = storage.object.identifier;
+                for(const event of events) {
+                    event(storage);
+                }
+            }
+        };
+        const onLeave = (evt: Event) => {
+            evt.stopPropagation();
+            if (storage.debugOverlay && storage.object.identifier !== this.selectedObjectIdentifier) {
+                storage.debugOverlay.remove();
+                storage.debugOverlay = undefined;
+                const events = this.buildingInteractEventMap.get("hover") ?? [];
+                for(const event of events) {
+                    event(undefined);
+                }
+            }
+            if((evt.target as HTMLElement).parentElement) {
+                (evt.target as HTMLElement).parentElement!.dispatchEvent(new Event("mouseenter"))
+            }
+        };
+        const onClick = (evt: Event) => {
+            evt.stopPropagation();
+            this.clearBuildingOverlay();
+            this.selectedObjectIdentifier = storage.object.identifier;
+            const overlay = createOverlay('var(--nodius-secondary-main)');
+            storage.debugOverlay = overlay;
+            this.superContainer.appendChild(overlay);
+            const events = this.buildingInteractEventMap.get("select") ?? [];
+            for(const event of events) {
+                event(storage);
+            }
+        };
+
+        const listeners: { [key: string]: (evt: Event) => void } = {
+            mouseenter: onEnter,
+            mouseleave: onLeave,
+            click: onClick,
+        };
+
+        for (const [type, listener] of Object.entries(listeners)) {
+            storage.element.addEventListener(type, listener);
+            const events = storage.debugEvents.get(type) ?? [];
+            events.push(listener);
+            storage.debugEvents.set(type, events);
+        }
+    }
+
+
+    private removeDebugListeners(storage: ObjectStorage) {
+        for (const [name, listeners] of storage.debugEvents.entries()) {
+            listeners.forEach(listener => storage.element.removeEventListener(name, listener));
+        }
+        storage.debugEvents.clear();
+        if (storage.debugOverlay) {
+            storage.debugOverlay.remove();
+            storage.debugOverlay = undefined;
+        }
+    }
+
+    public addBuildingInteractEventMap(type:"hover"|"select",callback: (objectStorage?:ObjectStorage) => void) {
+        const events = this.buildingInteractEventMap.get(type) ?? [];
+        events.push(callback);
+        this.buildingInteractEventMap.set(type, events);
+    }
+
+    public removeBuildingInteractEventMap(type:"hover"|"select",callback: (objectStorage?:ObjectStorage) => void) {
+        const events = this.buildingInteractEventMap.get(type) ?? [];
+        this.buildingInteractEventMap.set(type, events.filter((ev) => ev !== callback));
+    }
+
+    public pushBuildingInteractEvent(type:"hover"|"select", identifier?:string) {
+        if(identifier) {
+            const element = document.querySelector("[data-identifier='" + identifier + "']") as HTMLElement;
+            if (element) {
+                element.dispatchEvent(type === "hover" ? new Event("mouseenter") : new Event("click"));
+            }
+        } else {
+            if(type === "hover" && this.hoverObjectIdentifier) {
+                const hoverStorage = this.objectStorage.get(this.hoverObjectIdentifier);
+                if (hoverStorage) {
+                    if (hoverStorage.debugOverlay) {
+                        hoverStorage.debugOverlay.remove();
+                        hoverStorage.debugOverlay = undefined;
+                    }
+                }
+                this.hoverObjectIdentifier = undefined;
+            }
+            else if(type === "select" && this.selectedObjectIdentifier) {
+                const selectedStorage = this.objectStorage.get(this.selectedObjectIdentifier);
+                if (selectedStorage) {
+                    if (selectedStorage.debugOverlay) {
+                        selectedStorage.debugOverlay.remove();
+                        selectedStorage.debugOverlay = undefined;
+                    }
+                }
+            }
+        }
+
+    }
+
+    public getSelectedObject = ():HtmlObject|undefined => {
+        return this.selectedObjectIdentifier ? this.objectStorage.get(this.selectedObjectIdentifier)?.object : undefined;
+    }
+
+    public generateUniqueIdentifier(): string {
+        let id: string;
+        do {
+            this.uniqueCounter++;
+            id = this.uniqueCounter.toString();
+        } while (Array.from(this.objectStorage.values()).some((sto) => sto.object.identifier == id));
+        return id;
     }
 
 }

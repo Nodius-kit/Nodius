@@ -46,7 +46,8 @@ export interface ThemeContextType {
     }>,
     background: Record<ThemeContextTypeTheme, {
         paper: string,
-        default: string
+        default: string,
+        resizeBar: string,
     }>,
     color: {
         red: ThemeContextTypeColor,
@@ -77,7 +78,10 @@ export interface ThemeContextType {
     }>,
     transition: {
         default: string
-    }
+    },
+    reverseHexColor: (hex: string, opacity?: number) => string,
+    changeOpacity: (color: string, opacity: number) => string,
+    changeBrightness: (color: string, percentage: number, type: "positive" | "negative") => string
 }
 
 export const ThemeContextDefaultValue: ThemeContextType = {
@@ -90,7 +94,7 @@ export const ThemeContextDefaultValue: ThemeContextType = {
             contrastText:"#fff",
         },
         dark: {
-            main:"#90caf9",
+            main:"#1976d2",
             light:"#e3f2fd",
             dark:"#42a5f5",
             contrastText:"rgba(0, 0, 0, 0.87)",
@@ -183,11 +187,13 @@ export const ThemeContextDefaultValue: ThemeContextType = {
     background: {
         light: {
             paper: "#FFF",
-            default: "#FFF"
+            default: "#fefefe",
+            resizeBar: "#e8e8e8",
         },
         dark: {
             paper: "#282E3B",
-            default: "#1F242F"
+            default: "#1F242F",
+            resizeBar: "#30394d"
         }
     },
     color: {
@@ -436,5 +442,148 @@ export const ThemeContextDefaultValue: ThemeContextType = {
     },
     transition: {
         default: "all 0.3s ease-in-out",
+    },
+    /**
+     * Invert a hex color and optionally apply opacity.
+     *
+     * @param hex - Hex color string (e.g. "#ff9933" or "ff9933")
+     * @param opacity - Optional opacity value (0 to 1)
+     * @returns Inverted hex color string (e.g. "#0066cc" or "#0066cc80")
+     */
+    reverseHexColor: (hex: string, opacity?: number) : string =>{
+        // Remove leading "#" if present
+        let cleanHex = hex.replace(/^#/, "");
+
+        // Support 3-digit shorthand (#f93 → #ff9933)
+        if (cleanHex.length === 3) {
+            cleanHex = cleanHex.split("").map(c => c + c).join("");
+        }
+
+        // Ensure it's a valid 6-digit hex
+        if (!/^[0-9a-fA-F]{6}$/.test(cleanHex)) {
+            throw new Error("Invalid hex color format. Expected 3- or 6-digit hex.");
+        }
+
+        // Convert to RGB
+        const r = parseInt(cleanHex.slice(0, 2), 16);
+        const g = parseInt(cleanHex.slice(2, 4), 16);
+        const b = parseInt(cleanHex.slice(4, 6), 16);
+
+        // Invert RGB
+        const ir = (255 - r).toString(16).padStart(2, "0");
+        const ig = (255 - g).toString(16).padStart(2, "0");
+        const ib = (255 - b).toString(16).padStart(2, "0");
+
+        // Handle opacity
+        if (opacity !== undefined) {
+            if (opacity < 0 || opacity > 1) {
+                throw new Error("Opacity must be between 0 and 1.");
+            }
+            const alpha = Math.round(opacity * 255)
+                .toString(16)
+                .padStart(2, "0");
+            return `#${ir}${ig}${ib}${alpha}`;
+        }
+
+        return `#${ir}${ig}${ib}`;
+    },
+    changeOpacity: (color: string, opacity: number): string => {
+        // Clamp opacity between 0 and 1
+        opacity = Math.min(Math.max(opacity, 0), 1);
+
+        // Handle hex (#RGB, #RRGGBB, #RRGGBBAA)
+        if (color.startsWith("#")) {
+            let hex = color.replace("#", "");
+
+            // Expand shorthand (#RGB → #RRGGBB)
+            if (hex.length === 3) {
+                hex = hex.split("").map(ch => ch + ch).join("");
+            }
+
+            // If hex already has alpha (#RRGGBBAA), ignore it
+            if (hex.length === 8) {
+                hex = hex.substring(0, 6);
+            }
+
+            if (hex.length === 6) {
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            }
+        }
+
+        // Handle rgb/rgba
+        const rgbRegex = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i;
+        const match = color.match(rgbRegex);
+
+        if (match) {
+            const r = parseInt(match[1], 10);
+            const g = parseInt(match[2], 10);
+            const b = parseInt(match[3], 10);
+            return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        }
+
+        throw new Error(`Unsupported color format: ${color}`);
+    },
+    changeBrightness: (color: string, percentage: number, type: "positive" | "negative"): string => {
+        percentage = Math.min(Math.max(percentage, 0), 1);
+
+        let r: number, g: number, b: number, a = 1;
+
+        // HEX (#RGB, #RRGGBB, #RRGGBBAA)
+        if (color.startsWith("#")) {
+            let hex = color.slice(1);
+
+            if (hex.length === 3) {
+                hex = hex.split("").map(ch => ch + ch).join("");
+            }
+
+            if (hex.length === 8) {
+                a = parseInt(hex.slice(6, 8), 16) / 255;
+                hex = hex.slice(0, 6);
+            }
+
+            r = parseInt(hex.slice(0, 2), 16);
+            g = parseInt(hex.slice(2, 4), 16);
+            b = parseInt(hex.slice(4, 6), 16);
+        }
+        // RGB / RGBA
+        else {
+            const match = color.match(
+                /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i
+            );
+            if (!match) {
+                throw new Error(`Unsupported color format: ${color}`);
+            }
+            r = parseFloat(match[1]);
+            g = parseFloat(match[2]);
+            b = parseFloat(match[3]);
+            if (match[4] !== undefined) a = parseFloat(match[4]);
+        }
+
+        // Adjust brightness
+        if (type === "positive") {
+            r = r + (255 - r) * percentage;
+            g = g + (255 - g) * percentage;
+            b = b + (255 - b) * percentage;
+        } else {
+            r = r * (1 - percentage);
+            g = g * (1 - percentage);
+            b = b * (1 - percentage);
+        }
+
+        // Clamp values
+        r = Math.round(Math.min(Math.max(r, 0), 255));
+        g = Math.round(Math.min(Math.max(g, 0), 255));
+        b = Math.round(Math.min(Math.max(b, 0), 255));
+
+        // Output format: hex if no alpha, rgba if alpha < 1
+        if (a < 1) {
+            return `rgba(${r}, ${g}, ${b}, ${a})`;
+        } else {
+            const toHex = (val: number) => val.toString(16).padStart(2, "0");
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        }
     }
 }
