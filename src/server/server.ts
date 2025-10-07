@@ -7,6 +7,7 @@ import {WebSocketManager} from "./cluster/webSocketManager";
 import {RequestWorkFlow} from "./request/requestWorkFlow";
 import {RequestBuilder} from "./request/requestBuilder";
 import {RequestDataType} from "./request/requestDataType";
+import {RequestSync} from "./request/requestSync";
 
 const args =  parseArgs();
 
@@ -50,12 +51,25 @@ if(args.get("mode", "production") == "development") {
 RequestWorkFlow.init(app);
 RequestBuilder.init(app);
 RequestDataType.init(app);
+RequestSync.init(app);
 
-export const clusterManager = new ClusterManager(parseInt(args.get("port", "8426")) + 1000);
-export const webSocketManager = new WebSocketManager(parseInt(args.get("port", "8426")) + 2000);
+export const peerHost = args.get("host");
+export const peerPort = parseInt(args.get("port"));
+export const clusterManagerPort = peerPort + 1000;
+export const webSocketPort = peerPort + 2000;
+
+export const clusterManager = new ClusterManager(clusterManagerPort, peerHost);
+export const webSocketManager = new WebSocketManager(webSocketPort, peerHost);
 // Initialize
 clusterManager.initialize();
 
+clusterManager.on("broadcast", (payload:any, sender:string) => {
+    console.log("received broadcast from sender", sender, "with payload", payload);
+});
+
+clusterManager.on("directMessage", (payload:any, sender:string) => {
+    console.log("received message from sender", sender, "with payload", payload);
+});
 
 process.on('SIGINT', async () => {
     console.log('Caught SIGINT, shutting down...');

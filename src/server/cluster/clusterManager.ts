@@ -2,6 +2,7 @@ import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/ar
 import {Dealer, Publisher, Router, Subscriber} from "zeromq";
 import { randomUUID } from 'crypto';
 import {DocumentCollection} from "arangojs/collections";
+import {CM_IDontManageGraph, CM_IManageGraph} from "../../utils/requests/clusterMessage";
 
 export interface ClusterNode {
     _key: string;
@@ -17,7 +18,10 @@ export interface Message {
     senderId: string;
     targetId?: string;
     type: 'broadcast' | 'direct' | 'response';
-    payload: any;
+    payload: {
+        type: string;
+        [key: string]: any;
+    };
     timestamp: number;
     responseId?: string;
 }
@@ -34,6 +38,7 @@ export class ClusterManager {
     private dealer: Dealer; // Pour envoyer des messages directs
 
     private connectedPeers = new Map<string, ClusterNode>();
+    private handledGraph = new Map<string, string>();
     private pendingResponses = new Map<string, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }>();
     private refreshInterval: NodeJS.Timeout|undefined = undefined;
     private cleanupInterval: NodeJS.Timeout|undefined = undefined;
@@ -122,6 +127,15 @@ export class ClusterManager {
         switch (message.type) {
             case 'broadcast':
                 this.emit('broadcast', message.payload, message.senderId);
+
+                if(message.payload.type === "CM_IManageGraph") {
+                    const payload = message.payload as CM_IManageGraph;
+                    this.handledGraph.set(payload.graphKey, message.senderId)
+                } else if(message.payload.type === "CM_IDontManageGraph") {
+                    const payload = message.payload as CM_IDontManageGraph;
+                    this.handledGraph.delete(payload.graphKey);
+                }
+
                 break;
             case 'response':
                 this.handleResponse(message);
@@ -212,7 +226,7 @@ export class ClusterManager {
                 bindVars: {
                     '@collection': this.db_collection!.name,
                     selfId: this.nodeId,
-                    twoMinutesAgo
+                    twoMinutesAgo: twoMinutesAgo
                 }
             });
 
@@ -295,7 +309,7 @@ export class ClusterManager {
 
         try {
             await this.publisher.send(JSON.stringify(message));
-            console.log('Broadcast sent to all peers');
+            console.log('Broadcast sent to all peers', payload);
         } catch (error) {
             console.error('Failed to broadcast message:', error);
             throw error;
@@ -339,6 +353,10 @@ export class ClusterManager {
         return Array.from(this.connectedPeers.values());
     }
 
+    getPeer(peerId:string) {
+        return this.connectedPeers.get(peerId);
+    }
+
     // Get peer count
     getPeerCount(): number {
         return this.connectedPeers.size;
@@ -371,6 +389,28 @@ export class ClusterManager {
                 listeners.splice(index, 1);
             }
         }
+    }
+
+    public getGraphPeerId(graphKey:string) {
+        return this.handledGraph.get(graphKey);
+    }
+
+    public async defineGraphPeer(graphKey:string) {
+        this.handledGraph.set(graphKey, "self");
+        const messagePayload:CM_IManageGraph = {
+            type: "CM_IManageGraph",
+            graphKey: graphKey,
+        }
+        await this.broadcastJson(messagePayload);
+    }
+
+    public async removeGraphPeer(graphKey:string) {
+        this.handledGraph.delete(graphKey);
+        const messagePayload:CM_IDontManageGraph = {
+            type: "CM_IDontManageGraph",
+            graphKey: graphKey,
+        }
+        await this.broadcastJson(messagePayload);
     }
 
     // Cleanup and shutdown

@@ -1,11 +1,10 @@
-import {memo, useCallback, useEffect, useRef} from "react";
+import {memo, useCallback, useContext, useEffect, useRef} from "react";
 import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
 import {Graph} from "../../../utils/graph/graphType";
 import {HtmlRender} from "../../../process/html/HtmlRender";
+import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 
 interface DashboardWorkFlowProps {
-    openHtmlClass: (html:HtmlClass, graph?:Graph) => void,
-    openGraph: (graph:Graph) => void,
 }
 
 const object:HtmlObject = {
@@ -177,7 +176,8 @@ const object:HtmlObject = {
                                         {
                                             name:"click",
                                             call: `
-                                                globalStorage.openHtmlClass(globalStorage.htmlClass[index].html, globalStorage.htmlClass[index].graph);
+                                                const action = await globalStorage.openHtmlClass(globalStorage.htmlClass[index].html, globalStorage.htmlClass[index].graph);
+                                                console.log(action);
                                             `
                                         }
                                     ]
@@ -313,28 +313,33 @@ const object:HtmlObject = {
 }
 
 export const DashboardWorkFlow = memo(({
-    openGraph,
-    openHtmlClass
+
 }:DashboardWorkFlowProps) => {
 
 
     const renderDashboard = useRef<HtmlRender>(undefined);
+    const Project = useContext(ProjectContext);
 
+    const container = useRef<HTMLDivElement>(null);
 
-    const setContainer = useCallback((node: HTMLDivElement | null) => {
-        if (node) {
-            if(!renderDashboard.current) {
-                renderDashboard.current = new HtmlRender(node);
-            }
+    useEffect(() => {
+        if(!Project.state.openHtmlClass) return;
+        if(container.current) {
+            renderDashboard.current = new HtmlRender(container.current);
+            renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", Project.state.openHtmlClass);
             renderDashboard.current.render(object);
-            renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", openHtmlClass);
-        } else if(renderDashboard.current) {
-            renderDashboard.current.dispose();
         }
-    }, [openHtmlClass]);
+
+        return () => {
+            if(renderDashboard.current) {
+                renderDashboard.current.dispose();
+                renderDashboard.current = undefined;
+            }
+        }
+    }, [container.current]);
 
     return (
-        <div ref={setContainer} style={{width:"100%", height:"100%", pointerEvents:"all"}}>
+        <div ref={container} style={{width:"100%", height:"100%", pointerEvents:"all"}}>
 
         </div>
     )

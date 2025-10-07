@@ -1,25 +1,23 @@
-import {CSSProperties, memo, useCallback, useEffect, useMemo, useState} from "react";
+import {CSSProperties, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../../utils/html/htmlType";
-import {EditedHtmlType, UpdateHtmlOption} from "../../../main";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
 import {EditableCss, RightPanelCssEditor} from "./RightPanelCssEditor";
 import {searchElementWithIdentifier} from "../../../../utils/html/htmlUtils";
 import {CSSBlock} from "../../../../utils/html/HtmlCss";
 import {deepCopy} from "../../../../utils/objectUtils";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 
 interface RightPanelComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
-    editedHtml: EditedHtmlType,
-    updateHtml: (instructions:InstructionBuilder, options?:UpdateHtmlOption) => Promise<void>,
 }
 
 
 export const RightPanelComponentEditor = memo(({
     componentsList,
-    updateHtml,
-    editedHtml
 }: RightPanelComponentEditorProps) => {
+
+    const Project = useContext(ProjectContext);
 
     const [hoverIdentifier, setHoverIdentifier] = useState<string|undefined>(undefined);
     const [selectedIdentifier, setSelectedIdentifier] = useState<string|undefined>(undefined);
@@ -34,9 +32,9 @@ export const RightPanelComponentEditor = memo(({
 
 
     const currentCss:EditableCss|undefined = useMemo(() => {
-        if(selectedIdentifier && editedHtml) {
+        if(selectedIdentifier && Project.state.editedHtml) {
             const instruction = new InstructionBuilder();
-            const object = searchElementWithIdentifier(selectedIdentifier, editedHtml.html.object, instruction);
+            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html.object, instruction);
             if(object) {
                 return {
                     css:object.css ?? [],
@@ -45,24 +43,26 @@ export const RightPanelComponentEditor = memo(({
             }
         }
         return undefined;
-    }, [editedHtml, selectedIdentifier]);
+    }, [Project.state.editedHtml, selectedIdentifier]);
 
     const updateCss = useCallback(async (cssInstruction: InstructionBuilder) => {
         if(currentCss) {
-            await updateHtml(cssInstruction);
+            await Project.state.updateHtml!(cssInstruction.instruction);
         }
-    }, [currentCss, updateHtml]);
+    }, [currentCss, Project.state.updateHtml]);
 
     useEffect(() => {
-        if(editedHtml) {
-            editedHtml.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
-            editedHtml.htmlRender.addBuildingInteractEventMap("hover", onBuildingHover);
+        if(Project.state.editedHtml) {
+            Project.state.editedHtml.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
+            Project.state.editedHtml.htmlRender.addBuildingInteractEventMap("hover", onBuildingHover);
             return () => {
-                editedHtml.htmlRender.removeBuildingInteractEventMap("select", onBuildingSelect);
-                editedHtml.htmlRender.removeBuildingInteractEventMap("hover", onBuildingHover);
+                if(Project.state.editedHtml) {
+                    Project.state.editedHtml.htmlRender.removeBuildingInteractEventMap("select", onBuildingSelect);
+                    Project.state.editedHtml.htmlRender.removeBuildingInteractEventMap("hover", onBuildingHover);
+                }
             }
         }
-    }, [editedHtml]);
+    }, [ Project.state.editedHtml]);
 
     return (
         <div style={{width:"100%", height:"100%", overflowY:"auto", overflowX:"hidden"}}>

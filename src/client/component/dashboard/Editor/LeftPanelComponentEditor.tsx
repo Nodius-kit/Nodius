@@ -1,4 +1,4 @@
-import React, {memo, useEffect, useMemo, useRef, useState} from "react";
+import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import * as Icons from "lucide-react";
 import {ChevronDown, ChevronUp, CloudAlert, Search} from "lucide-react";
 import {Input} from "../../form/Input";
@@ -6,22 +6,18 @@ import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../.
 import {Card} from "../../form/Card";
 import {Collapse} from "../../animate/Collapse";
 import {deepCopy, disableTextSelection, enableTextSelection} from "../../../../utils/objectUtils";
-import {EditedHtmlType, UpdateHtmlOption} from "../../../main";
-import {applyInstruction, InstructionBuilder, OpType} from "../../../../utils/sync/InstructionBuilder";
-import {searchElementWithIdentifier, travelObject} from "../../../../utils/html/htmlUtils";
+import {applyInstruction, Instruction, InstructionBuilder, OpType} from "../../../../utils/sync/InstructionBuilder";
+import {searchElementWithIdentifier, travelHtmlObject} from "../../../../utils/html/htmlUtils";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
+import {ActionContext, EditedHtmlType, ProjectContext, UpdateHtmlOption} from "../../../hooks/contexts/ProjectContext";
 
 interface LeftPaneComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
-    editedHtml: EditedHtmlType,
-    updateHtml: (instructions:InstructionBuilder, options?:UpdateHtmlOption) => Promise<void>,
-    onPickup?: (component:HtmlBuilderComponent) => boolean,
+    onPickup?: (component:HtmlBuilderComponent) => Promise<boolean>,
 }
 
 export const LeftPanelComponentEditor = memo(({
     componentsList,
-    editedHtml,
-    updateHtml,
     onPickup
 }:LeftPaneComponentEditorProps) => {
 
@@ -33,15 +29,17 @@ export const LeftPanelComponentEditor = memo(({
 
     const [hideCategory, setHideCategory] = useState<string[]>([]);
 
+    const Project = useContext(ProjectContext);
+
     // may be used in element event, we have to store it in ref for avoiding change while user is dragging component and miss change
-    const editedHtmlRef = useRef<EditedHtmlType>(editedHtml);
-    const updateHtmlRef = useRef<(instructions:InstructionBuilder, options?:UpdateHtmlOption) => Promise<void>>(updateHtml);
+    const editedHtmlRef = useRef<EditedHtmlType>(Project.state.editedHtml);
+    const updateHtmlRef = useRef<(instructions:Instruction, options?:UpdateHtmlOption) => Promise<ActionContext> | undefined>(Project.state.updateHtml);
     useEffect(() => {
-        editedHtmlRef.current = editedHtml;
-    }, [editedHtml]);
+        editedHtmlRef.current = Project.state.editedHtml;
+    }, [Project.state.editedHtml]);
     useEffect(() => {
-        updateHtmlRef.current = updateHtml;
-    }, [updateHtml]);
+        updateHtmlRef.current = Project.state.updateHtml;
+    }, [Project.state.updateHtml]);
 
     useEffect(() => {
         setComponents(componentsList);
@@ -68,16 +66,14 @@ export const LeftPanelComponentEditor = memo(({
 
     const onMouseDown = (event:React.MouseEvent, component:HtmlBuilderComponent) => {
 
-        if(!(onPickup?.(component) ?? true)) {
-            return;
-        }
+        let haveMoved = false;
 
         const container = document.querySelector("[data-builder-component='"+component.object.name+"']") as HTMLElement;
         if(!container) return;
         const containerSize = container.getBoundingClientRect();
 
         const newObject = deepCopy(component.object);
-        travelObject(newObject, (obj) => {
+        travelHtmlObject(newObject, (obj) => {
             obj.temporary = true;
             return true;
         });
@@ -127,6 +123,10 @@ export const LeftPanelComponentEditor = memo(({
         let lastInstruction:InstructionBuilder|undefined;
 
         const mouseMove = async (event: MouseEvent) => {
+            if(!haveMoved) {
+                document.body.appendChild(overlayContainer);
+                haveMoved = true;
+            }
             overlayContainer.style.left = `${event.clientX - (containerSize.width / 2)}px`;
             overlayContainer.style.top = `${event.clientY + 3}px`;
 
@@ -153,7 +153,7 @@ export const LeftPanelComponentEditor = memo(({
                         lastInstruction.remove();
                     }
                     lastInstruction.instruction.v = undefined;
-                    await updateHtmlRef.current(lastInstruction, {
+                    await updateHtmlRef.current!(lastInstruction.instruction, {
                         noRedraw: noRedraw
                     });
 
@@ -251,7 +251,7 @@ export const LeftPanelComponentEditor = memo(({
             }
 
             if (shouldAdd) {
-                await updateHtmlRef.current(instruction, {
+                await updateHtmlRef.current!(instruction.instruction, {
                     targetedIdentifier: object.identifier
                 });
                 lastObjectHover = object;
@@ -273,8 +273,13 @@ export const LeftPanelComponentEditor = memo(({
                 } else {
                     lastInstruction.key("temporary").remove();
                 }
-                await updateHtmlRef.current(lastInstruction);
+                await updateHtmlRef.current!(lastInstruction.instruction);
                 //lastInstruction = undefined;
+            }
+            if(!haveMoved) {
+                if(!(onPickup?.(component) ?? true)) {
+                    return;
+                }
             }
         }
 
@@ -282,7 +287,7 @@ export const LeftPanelComponentEditor = memo(({
         window.addEventListener("mousemove", mouseMove);
         window.addEventListener("mouseup", mouseOut);
 
-        document.body.appendChild(overlayContainer);
+
     }
 
     const componentCardClass = useDynamicClass(`

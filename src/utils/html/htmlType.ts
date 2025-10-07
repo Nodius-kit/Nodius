@@ -61,6 +61,7 @@ export interface HtmlInner extends HtmlBase {
 }
 export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray;
 export interface HtmlClass {
+    htmlNodeKey: string;
     object:HtmlObject,
     version: number;
 

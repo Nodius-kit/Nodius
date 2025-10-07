@@ -1,10 +1,8 @@
 import {memo, useContext, useEffect, useRef, useState} from "react";
-import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlClass} from "../../../utils/html/htmlType";
-import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
+import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../utils/html/htmlType";
 import {LeftPaneMenu} from "./Editor/LeftPaneMenu";
 import {MultiFade} from "../animate/MultiFade";
 import {LeftPanelComponentEditor} from "./Editor/LeftPanelComponentEditor";
-import {EditedHtmlType, UpdateHtmlOption} from "../../main";
 import {ResizeBar} from "../animate/ResizeBar";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {ArrowLeftFromLine} from "lucide-react";
@@ -14,22 +12,16 @@ import {RightPanelComponentEditor} from "./Editor/RightPanelComponentEditor";
 import {LeftPanelTypeEditor} from "./Editor/LeftPanelTypeEditor";
 import {LeftPanelEnumEditor} from "./Editor/LeftPanelEnumEditor";
 import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
-import {Graph} from "../../../utils/graph/graphType";
+import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 
 interface SchemaEditorProps  {
-    editedHtml: EditedHtmlType,
-    updateHtml: (instructions:InstructionBuilder, options?:UpdateHtmlOption) => Promise<void>,
     returnToMenu: () => void,
-    graph?:Graph
 }
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | ""
 
 export const SchemaEditor = memo(({
-    updateHtml,
-    editedHtml,
     returnToMenu,
-    graph
 }:SchemaEditorProps) => {
 
     const [editingPanel, setEditingPanel] = useState<editingPanel>("");
@@ -39,6 +31,8 @@ export const SchemaEditor = memo(({
 
     const leftContainer = useRef<HTMLDivElement>(null);
     const rightContainer = useRef<HTMLDivElement>(null);
+
+    const Project = useContext(ProjectContext);
 
     const Theme = useContext(ThemeContext);
 
@@ -84,14 +78,14 @@ export const SchemaEditor = memo(({
 
     const noEditingPrevious = useRef<boolean>(true);
     useEffect(() => {
-        if(noEditingPrevious.current && editedHtml) {
+        if(noEditingPrevious.current && Project.state.editedHtml) {
             noEditingPrevious.current = false;
             setEditingPanel("component");
-        } else if(!noEditingPrevious.current && !editedHtml) {
+        } else if(!noEditingPrevious.current && !Project.state.editedHtml) {
             noEditingPrevious.current = true;
             setEditingPanel("");
         }
-    }, [editedHtml]);
+    }, [Project.state.editedHtml]);
 
     const activeFade = editingPanel === "component" ? 0 : (
         editingPanel === "hierarchy" ? 1 : (
@@ -119,14 +113,14 @@ export const SchemaEditor = memo(({
                 display:"flex",
                 flexDirection:"row"
             }}>
-                <LeftPaneMenu setEditingPanel={setEditingPanel} editingPanel={editingPanel} setMenuWidth={setSubLeftMenuWidth} editedHtml={editedHtml} returnToMenu={returnToMenu} />
+                <LeftPaneMenu setEditingPanel={setEditingPanel} editingPanel={editingPanel} setMenuWidth={setSubLeftMenuWidth} returnToMenu={returnToMenu} />
                 <div style={{flex:"1"}}>
                     <MultiFade active={activeFade} timeout={200}>
                         <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px"}}>
-                            <LeftPanelComponentEditor componentsList={componentsList} editedHtml={editedHtml} updateHtml={updateHtml}/>
+                            <LeftPanelComponentEditor componentsList={componentsList} />
                         </div>
                         <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px",}}>
-                            <LeftPaneComponentTree componentsList={componentsList} editedHtml={editedHtml} updateHtml={updateHtml}/>
+                            <LeftPaneComponentTree componentsList={componentsList} />
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
                             <LeftPanelTypeEditor />
@@ -135,7 +129,7 @@ export const SchemaEditor = memo(({
                             <LeftPanelEnumEditor />
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
-                            <LeftPanelEntryTypeSelect  graph={graph} />
+                            <LeftPanelEntryTypeSelect />
                         </div>
                     </MultiFade>
                 </div>
@@ -145,7 +139,7 @@ export const SchemaEditor = memo(({
                     offsetBar={true}
                     value={leftPanelWidth}
                     setValue={setLeftPanelWidth}
-                    show={editingPanel !== "" && editedHtml != undefined}
+                    show={editingPanel !== "" && Project.state.editedHtml != undefined}
                     beforeResize={() => leftContainer.current!.style.transition = "none"}
                     afterResize={() => leftContainer.current!.style.transition = "var(--nodius-transition-default)"}
                     maxValue={600}
@@ -160,7 +154,7 @@ export const SchemaEditor = memo(({
             <div ref={rightContainer} style={{
                 position:"absolute",
                 top:"0",
-                right:(!editedHtml ? -rightPanelWidth : 0)+"px",
+                right:(!Project.state.editedHtml ? -rightPanelWidth : 0)+"px",
                 width:rightPanelWidth+"px",
                 height:"100%",
                 backgroundColor:"var(--nodius-background-default)",
@@ -168,7 +162,7 @@ export const SchemaEditor = memo(({
                 transition: "var(--nodius-transition-default)",
                 pointerEvents:"all",
             }}>
-                <RightPanelComponentEditor componentsList={componentsList} editedHtml={editedHtml} updateHtml={updateHtml} />
+                <RightPanelComponentEditor componentsList={componentsList} />
             </div>
         </div>
     )

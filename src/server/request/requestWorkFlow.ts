@@ -12,6 +12,7 @@ import {aql} from "arangojs";
 import {db} from "../server";
 import escapeHTML from 'escape-html';
 import {HtmlClass} from "../../utils/html/htmlType";
+import {deepCopy} from "../../utils/objectUtils";
 
 export class RequestWorkFlow {
 
@@ -183,16 +184,28 @@ export class RequestWorkFlow {
                         FILTER doc._key == ${escapeHTML(body.retrieveHtml.token)} AND doc.workspace == ${escapeHTML(body.workspace)}
                         RETURN doc
                     `;
-                    const cursor = await db.query(query);
+                    let cursor = await db.query(query);
                     const html:HtmlClass = (await cursor.all())[0];
 
                     if(!html) {
                         res.status(200).json(undefined);
                         return;
                     }
+
+                    const nodeKey = html.htmlNodeKey;
+                    query = aql`
+                        FOR doc IN nodius_nodes
+                        FILTER doc._key == ${escapeHTML(nodeKey)}
+                        RETURN doc
+                    `;
+                    cursor = await db.query(query);
+                    const nodeHtml:Node<any> = (await cursor.all())[0];
+                    html.object = nodeHtml.data;
+
                     const graph = await this.buildGraph(
                         html.graphKeyLinked,
-                        body.retrieveHtml?.buildGraph ?? false
+                        body.retrieveHtml.buildGraph ?? false,
+                        body.retrieveHtml.onlyFirstSheet ?? false
                     );
                     res.status(200).json({
                         html: html,
@@ -211,14 +224,25 @@ export class RequestWorkFlow {
                         LIMIT ${parseInt(escapeHTML(body.retrieveHtml.offset+""))}, ${parseInt(escapeHTML(body.retrieveHtml.length+""))}
                         RETURN doc
                     `;
-                    const cursor = await db.query(query);
+                    let cursor = await db.query(query);
                     const htmLClasses:HtmlClass[] = await cursor.all();
                     const output = await Promise.all(
                         htmLClasses.map(async (html) => {
                             const graph = await this.buildGraph(
                                 html.graphKeyLinked,
-                                body.retrieveHtml?.buildGraph ?? false
+                                body.retrieveHtml?.buildGraph ?? false,
+                                body.retrieveHtml?.onlyFirstSheet ?? false
                             );
+
+                            const nodeKey = html.htmlNodeKey;
+                            query = aql`
+                                FOR doc IN nodius_nodes
+                                FILTER doc._key == ${escapeHTML(nodeKey)}
+                                RETURN doc
+                            `;
+                            cursor = await db.query(query);
+                            const nodeHtml:Node<any> = (await cursor.all())[0];
+                            html.object = nodeHtml.data;
 
                             return {
                                 html,
@@ -232,7 +256,8 @@ export class RequestWorkFlow {
                 if(body.retrieveGraph.token) {
                     const graph = await this.buildGraph(
                         body.retrieveGraph.token,
-                        body.retrieveGraph?.buildGraph ?? false
+                        body.retrieveGraph?.buildGraph ?? false,
+                        body.retrieveGraph?.onlyFirstSheet ?? false
                     );
                     res.status(200).json(graph);
                 } else {
@@ -254,7 +279,9 @@ export class RequestWorkFlow {
                         const output = await Promise.all(
                             graphs.map(async (unBuildedGraph) => {
                                 return await this.buildGraph(
-                                    unBuildedGraph._key, true
+                                    unBuildedGraph._key,
+                                    body.retrieveGraph?.buildGraph ?? false,
+                                    body.retrieveGraph?.onlyFirstSheet ?? false
                                 );
                             })
                         );
@@ -275,15 +302,9 @@ export class RequestWorkFlow {
 
                 const token_graph = await createUniqueToken(graph_collection);
                 const token_html = await createUniqueToken(class_collection);
-                const classHtml: HtmlClass = {
-                    ...safeArangoObject(body.htmlClass),
-                    graphKeyLinked: token_graph,
-                    _key: token_html,
-                    createdTime: Date.now(),
-                    lastUpdatedTime: Date.now(),
-                    version: 0
-                }
-                await class_collection.save(classHtml);
+
+                const htmlObject = deepCopy(body.htmlClass.object);
+                delete (body.htmlClass as any).object;
 
                 const graph: Omit<GraphWF, "sheets" | "_sheets"> = {
                     _key: token_graph,
@@ -295,14 +316,14 @@ export class RequestWorkFlow {
                     workspace: body.htmlClass.workspace,
                     createdTime: Date.now(),
                     lastUpdatedTime: Date.now(),
-                    sheetsList: ["main"]
+                    sheetsList: {"0": "main"}
                 }
                 await graph_collection.save(graph);
 
                 const node: Node<any> = {
                     _key: token_graph+"-root",
                     graphKey: token_graph,
-                    sheetIndex: 0,
+                    sheet: "0",
                     type: "html",
                     handles: {
                         0: {
@@ -323,8 +344,21 @@ export class RequestWorkFlow {
                         height: 360,
                         dynamic: true,
                     },
+                    data: htmlObject
                 };
                 await node_collection.save(node);
+
+
+                const classHtml: HtmlClass = {
+                    ...safeArangoObject(body.htmlClass),
+                    htmlNodeKey: node._key,
+                    graphKeyLinked: token_graph,
+                    _key: token_html,
+                    createdTime: Date.now(),
+                    lastUpdatedTime: Date.now(),
+                    version: 0
+                }
+                await class_collection.save(classHtml);
 
                 res.status(200).end();
             } else {
@@ -334,7 +368,7 @@ export class RequestWorkFlow {
         });
     }
 
-    public static async buildGraph(graphKey:string, build:boolean):Promise<GraphWF> {
+    public static async buildGraph(graphKey:string, build:boolean, onlyFirstSheet?:boolean):Promise<GraphWF> {
         const graphQuery = aql`
             FOR g IN nodius_graphs
             FILTER g._key == ${graphKey}
@@ -343,32 +377,31 @@ export class RequestWorkFlow {
         const graphCursor = await db.query(graphQuery);
         const graphData:GraphWF = (await graphCursor.all())[0];
         if(build) {
-            const nodesQuery = aql`
-                FOR n IN nodius_nodes
-                FILTER n.graphKey == ${graphKey}
-                SORT n.sheetIndex ASC
-                RETURN n
-            `;
-            const nodesCursor = await db.query(nodesQuery);
-            const allNodes:Node<any>[] = await nodesCursor.all();
-            const edgesQuery = aql`
-                FOR e IN nodius_edges
-                FILTER e.graphKey == ${graphKey}
-                SORT e.sheetIndex ASC
-                RETURN e
-            `;
-            const edgesCursor = await db.query(edgesQuery);
-            const allEdges:Edge[] = await edgesCursor.all();
             graphData._sheets = {};
-            for(let i = 0; i < graphData.sheetsList.length; i++){
-                graphData._sheets[graphData.sheetsList[i]] = {
-                    nodes: allNodes.filter((node) => node.sheetIndex === i).map((node) => cleanNode(node)),
-                    edges: allEdges.filter((edge) => edge.sheetIndex === i).map((edge) => cleanEdge(edge)),
-                }
+            for (const sheetId of Object.keys(graphData.sheetsList)) {
+                if(onlyFirstSheet && sheetId !== Object.keys(graphData.sheetsList)[0]) continue;
+                const nodesQuery = aql`
+                    FOR n IN nodius_nodes
+                    FILTER n.graphKey == ${graphKey} && n.sheet == ${sheetId}
+                    RETURN n
+                  `;
+                const nodesCursor = await db.query(nodesQuery);
+                const allNodes: Node<any>[] = await nodesCursor.all();
+
+                const edgesQuery = aql`
+                    FOR e IN nodius_edges
+                    FILTER e.graphKey == ${graphKey} && e.sheet == ${sheetId}
+                    RETURN e
+                  `;
+                const edgesCursor = await db.query(edgesQuery);
+                const allEdges: Edge[] = await edgesCursor.all();
+
+                graphData._sheets[sheetId] = {
+                    nodes: allNodes.map((node) => cleanNode(node)),
+                    edges: allEdges.map((edge) => cleanEdge(edge)),
+                };
             }
         }
-
-
         return graphData;
     }
 }

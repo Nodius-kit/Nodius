@@ -239,8 +239,10 @@ export function encodeInstruction(instruction: Instruction): string {
     return JSON.stringify(instruction);
 }
 
+export type BeforeApplyInstruction = (objectBeingApplied?:any) => boolean;
+
 // Decoder: Apply instruction to an object
-export function applyInstruction<T = any>(target: T, instruction: Instruction | string, beforeApply?: (objectBeingApplied?:any) => boolean): Result<T> {
+export function applyInstruction<T = any>(target: T, instruction: Instruction | string, beforeApply?: BeforeApplyInstruction): Result<T> {
     try {
         // Parse instruction if it's a string
         const inst: Instruction = typeof instruction === 'string'

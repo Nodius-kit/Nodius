@@ -1,6 +1,7 @@
 import { ReactElement } from "react";
 
 export function deepCopy<T>(obj: T): T {
+    /*
     // Check if the object is null or not an object
     if (obj === null || typeof obj !== 'object') {
         return obj;
@@ -22,7 +23,8 @@ export function deepCopy<T>(obj: T): T {
             copy[key] = deepCopy((obj as { [key: string]: any })[key]);
         }
     }
-    return copy as T;
+    return copy as T;*/
+    return structuredClone(obj);
 }
 
 /**
@@ -257,3 +259,36 @@ export const documentHaveActiveElement = () => {
     }
     return false;
 }
+
+export const travelObject = (
+    obj: any,
+    callback: (o: Record<string, any>) => boolean
+): boolean => {
+    // Only process non-null objects
+    if (obj && typeof obj === "object") {
+        if (!callback(obj)) {
+            return false;
+        }
+
+        if (Array.isArray(obj)) {
+            for (const item of obj) {
+                if (!travelObject(item, callback)) {
+                    return false;
+                }
+            }
+        } else {
+            for (const key in obj) {
+                if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                    const value = obj[key];
+                    if (typeof value === "object" && value !== null) {
+                        if (!travelObject(value, callback)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return true;
+};

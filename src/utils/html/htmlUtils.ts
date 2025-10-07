@@ -51,23 +51,23 @@ export const searchElementWithIdentifier = (identifier:string, object:HtmlObject
     return undefined;
 }
 
-export const travelObject = (object:HtmlObject, callback:(object:HtmlObject) => boolean) : boolean => {
+export const travelHtmlObject = (object:HtmlObject, callback:(object:HtmlObject) => boolean) : boolean => {
     if(!callback(object)) {
         return false;
     }
     if(object.type === "block" && object.content) {
-        return travelObject(object.content, callback);
+        return travelHtmlObject(object.content, callback);
     } else if (object.type === "list") {
         for(let i = 0; i < object.content.length; i++) {
-            if(!travelObject(object.content[i], callback)) {
+            if(!travelHtmlObject(object.content[i], callback)) {
                 return false;
             }
         }
     } else if(object.type === "array") {
-        if(object.content.content && !travelObject(object.content.content, callback)) {
+        if(object.content.content && !travelHtmlObject(object.content.content, callback)) {
             return false;
         }
-        if(object.content.noContent && !travelObject(object.content.noContent, callback)) {
+        if(object.content.noContent && !travelHtmlObject(object.content.noContent, callback)) {
             return false;
         }
     }

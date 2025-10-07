@@ -1,10 +1,11 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
-import {Cable} from "lucide-react";
+import {Cable, ChevronDown, ChevronUp} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
-import {EditedHtmlType, UpdateHtmlOption} from "../../../main";
-import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {Graph} from "../../../../utils/graph/graphType";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import {Collapse} from "../../animate/Collapse";
+import {useDynamicClass} from "../../../hooks/useDynamicClass";
 
 
 interface LeftPanelEntryTypeSelectProps {
@@ -20,7 +21,10 @@ export const LeftPanelEntryTypeSelect = memo((
     const [dataTypes, setDataTypes] = useState<DataTypeClass[]|undefined>(undefined);
     const [searchValue, setSearchValue] = useState<string>("");
 
+    const [showSelect, setShowSelect] = useState<boolean>(false);
+
     const Theme = useContext(ThemeContext);
+    const Project = useContext(ProjectContext);
 
     const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => dataTypes ? dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[dataTypes, searchValue]);
 
@@ -67,6 +71,29 @@ export const LeftPanelEntryTypeSelect = memo((
         }
     }
 
+    const selectInputDataButton = useDynamicClass(`
+        & {
+            background-color: var(--nodius-background-paper);
+            padding: 5px 15px;
+            border-radius:8px;
+            box-shadow: var(--nodius-shadow-1);
+            transition: var(--nodius-transition-default);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        &.inactive:hover {
+            background-color: ${Theme.state.changeBrightness(Theme.state.background[Theme.state.theme].paper, 0.1, "negative")};
+            cursor: pointer;
+        }
+        
+        
+        & .close {
+            cursor: pointer;
+            border-radius: 50%;
+        }
+    `);
+
 
     return (
         <>
@@ -81,7 +108,24 @@ export const LeftPanelEntryTypeSelect = memo((
 
                 <div style={{padding:"5px", height:"100%", width:"100%", position:"relative"}}>
                     <div style={{position:"absolute", inset:"0px", overflowY:"auto"}}>
-
+                        <div style={{display:"flex", flexDirection:"column"}}>
+                            <div className={`${selectInputDataButton} ${showSelect ? "active" : "inactive"}`} onClick={!showSelect ? () => setShowSelect(!showSelect) : undefined}>
+                                <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between"}}>
+                                    <p>Select Input Data </p>
+                                    <div className={"close"}>
+                                        {showSelect ? (
+                                            <ChevronUp onClick={() => setShowSelect(!showSelect)} />
+                                        ) : (
+                                            <ChevronDown />
+                                        )}
+                                    </div>
+                                </div>
+                                <Collapse in={showSelect} >
+                                    <div>
+                                    </div>
+                                </Collapse>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

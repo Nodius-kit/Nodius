@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "dev": "tsx ./src/server/server.ts mode=development port=8426"
+    "dev": "tsx ./src/server/server.ts mode=development port=8426 host=192.168.1.72"
   },
   "repository": {
     "type": "git",
@@ -37,6 +37,7 @@
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-hot-toast": "^2.6.0",
     "ws": "^8.18.3",
     "zeromq": "^6.5.0"
   }

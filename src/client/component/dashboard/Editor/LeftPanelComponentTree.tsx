@@ -1,5 +1,4 @@
 import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
-import {EditedHtmlType, UpdateHtmlOption} from "../../../main";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import React, {CSSProperties, Fragment, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {ChevronDown, ChevronRight, CirclePlus, CloudAlert, DiamondPlus, ListTree, Plus} from "lucide-react";
@@ -9,13 +8,13 @@ import {ObjectStorage} from "../../../../process/html/HtmlRender";
 import {useElementSize} from "../../../hooks/useElementSize";
 import {LinkedCard} from "../../form/LinkedCard";
 import {LeftPanelComponentEditor} from "./LeftPanelComponentEditor";
-import {searchElementWithIdentifier, travelObject} from "../../../../utils/html/htmlUtils";
+import {searchElementWithIdentifier, travelHtmlObject} from "../../../../utils/html/htmlUtils";
 import {deepCopy, disableTextSelection, enableTextSelection} from "../../../../utils/objectUtils";
+import {ActionContext, ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import toast from "react-hot-toast";
 
 interface LeftPaneComponentTreeProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
-    editedHtml: EditedHtmlType,
-    updateHtml: (instructions:InstructionBuilder, options?:UpdateHtmlOption) => Promise<void>,
 }
 
 interface FlatNode {
@@ -27,12 +26,11 @@ interface FlatNode {
 interface ComponentCardStockage {identifier:string, element:HTMLElement}
 
 export const LeftPaneComponentTree = memo(({
-   editedHtml,
-   componentsList,
-   updateHtml
+   componentsList
 } : LeftPaneComponentTreeProps) => {
 
     const Theme = useContext(ThemeContext);
+    const Project = useContext(ProjectContext);
 
     const [hoverIdentifier, setHoverIdentifier] = useState<string|undefined>(undefined);
     const [selectedIdentifier, setSelectedIdentifier] = useState<string|undefined>(undefined);
@@ -49,15 +47,17 @@ export const LeftPaneComponentTree = memo(({
     }
 
     useEffect(() => {
-        if(editedHtml) {
-            editedHtml.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
-            editedHtml.htmlRender.addBuildingInteractEventMap("hover", onBuildingHover);
+        if(Project.state.editedHtml) {
+            Project.state.editedHtml.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
+            Project.state.editedHtml.htmlRender.addBuildingInteractEventMap("hover", onBuildingHover);
             return () => {
-                editedHtml.htmlRender.removeBuildingInteractEventMap("select", onBuildingSelect);
-                editedHtml.htmlRender.removeBuildingInteractEventMap("hover", onBuildingHover);
+                if(Project.state.editedHtml) {
+                    Project.state.editedHtml.htmlRender.removeBuildingInteractEventMap("select", onBuildingSelect);
+                    Project.state.editedHtml.htmlRender.removeBuildingInteractEventMap("hover", onBuildingHover);
+                    }
             }
         }
-    }, [editedHtml]);
+    }, [Project.state.editedHtml]);
 
     const [showComponentCard, setShowComponentCard] = useState<ComponentCardStockage>();
 
@@ -65,24 +65,32 @@ export const LeftPaneComponentTree = memo(({
         setShowComponentCard(undefined);
     }, []);
 
-    const onPickup = useCallback((component:HtmlBuilderComponent) => {
-        if(!editedHtml) return false;
+    const onPickup = useCallback(async (component:HtmlBuilderComponent) => {
+        if(!Project.state.editedHtml) return false;
         if(!showComponentCard) return false;
 
         let instruction = new InstructionBuilder();
-        let object = searchElementWithIdentifier(showComponentCard.identifier, editedHtml.html.object, instruction);
+        let object = searchElementWithIdentifier(showComponentCard.identifier, Project.state.editedHtml.html.object, instruction);
+
+        let output:ActionContext|undefined = undefined;
         if(object) {
             if(object.type === "block") {
                 instruction.key("content").set(deepCopy(component.object));
-                updateHtml(instruction);
+                output = await Project.state.updateHtml!(instruction.instruction);
             } else if(object.type === "list") {
                 instruction.key("content").arrayAdd(deepCopy(component.object));
-                updateHtml(instruction);
+                output = await Project.state.updateHtml!(instruction.instruction);
+            }
+        }
+        if(output) {
+            console.log(output);
+            if(!output.status) {
+                toast.error(output.reason ?? "internal error")
             }
         }
         closeLinkedCard();
         return false;
-    }, [editedHtml, updateHtml, closeLinkedCard, showComponentCard]);
+    }, [Project.state.editedHtml, Project.state.updateHtml, closeLinkedCard, showComponentCard]);
 
     const flatNodes = useMemo(() => {
         const nodes: FlatNode[] = [];
@@ -97,11 +105,11 @@ export const LeftPaneComponentTree = memo(({
                 }
             }
         };
-        if (editedHtml) {
-            traverse(editedHtml.html.object);
+        if (Project.state.editedHtml) {
+            traverse(Project.state.editedHtml.html.object);
         }
         return nodes.filter((node) => !node.isHidden); // Only visible nodes
-    }, [editedHtml, hidedIdentifier]);
+    }, [Project.state.editedHtml, hidedIdentifier]);
 
     return (
         <>
@@ -117,8 +125,6 @@ export const LeftPaneComponentTree = memo(({
                             object={object}
                             depth={depth}
                             componentsList={componentsList}
-                            editedHtml={editedHtml}
-                            updateHtml={updateHtml}
                             hoverIdentifier={hoverIdentifier}
                             setHoverIdentifier={setHoverIdentifier}
                             selectedIdentifier={selectedIdentifier}
@@ -144,7 +150,7 @@ export const LeftPaneComponentTree = memo(({
                     closeOnBackgroundClick={true}
                 >
                     <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px", overflowY:"auto"}}>
-                        <LeftPanelComponentEditor componentsList={componentsList} editedHtml={editedHtml} updateHtml={updateHtml} onPickup={onPickup}/>
+                        <LeftPanelComponentEditor componentsList={componentsList} onPickup={onPickup}/>
                     </div>
                 </LinkedCard>
             ) : null}
@@ -157,8 +163,6 @@ interface TreeNodeProps {
     object: HtmlObject;
     depth: number;
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined;
-    editedHtml: EditedHtmlType;
-    updateHtml: (instructions: InstructionBuilder, options?: UpdateHtmlOption) => Promise<void>;
     hoverIdentifier: string | undefined;
     setHoverIdentifier: React.Dispatch<React.SetStateAction<string | undefined>>;
     selectedIdentifier: string | undefined;
@@ -171,27 +175,30 @@ interface TreeNodeProps {
 const IconDict = Object.fromEntries(Object.entries(Icons));
 
 const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
-    const { componentsList, editedHtml, updateHtml, hoverIdentifier, setHoverIdentifier, selectedIdentifier, setSelectedIdentifier, hidedIdentifier, setHidedIdentifier } = props;
+    const { componentsList,  hoverIdentifier, setHoverIdentifier, selectedIdentifier, setSelectedIdentifier, hidedIdentifier, setHidedIdentifier } = props;
+
+    const Project = useContext(ProjectContext);
+
     const Theme = useContext(ThemeContext);
 
     // Stabilize handlers with useCallback
     const onMouseEnter = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();
         setHoverIdentifier(object.identifier);
-        editedHtml?.htmlRender.pushBuildingInteractEvent('hover', object.identifier);
-    }, [editedHtml, object.identifier, setHoverIdentifier]);
+        Project.state.editedHtml?.htmlRender.pushBuildingInteractEvent('hover', object.identifier);
+    }, [Project.state.editedHtml, object.identifier, setHoverIdentifier]);
 
     const onMouseLeave = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();
         setHoverIdentifier(undefined);
-        editedHtml?.htmlRender.pushBuildingInteractEvent('hover', undefined);
-    }, [editedHtml, setHoverIdentifier]);
+        Project.state.editedHtml?.htmlRender.pushBuildingInteractEvent('hover', undefined);
+    }, [Project.state.editedHtml, setHoverIdentifier]);
 
     const onClick = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();
         setSelectedIdentifier(object.identifier);
-        editedHtml?.htmlRender.pushBuildingInteractEvent('select', object.identifier);
-    }, [editedHtml, object.identifier, setSelectedIdentifier]);
+        Project.state.editedHtml?.htmlRender.pushBuildingInteractEvent('select', object.identifier);
+    }, [Project.state.editedHtml, object.identifier, setSelectedIdentifier]);
 
     const onMouseDown = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();
@@ -278,7 +285,7 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
             enableTextSelection();
             element.remove();
 
-            if(!editedHtml) return;
+            if(!Project.state.editedHtml) return;
 
             const hoverElements = document.elementsFromPoint(evt.clientX, evt.clientY) as HTMLElement[];
             const hoverElement = hoverElements.find((el) => el.getAttribute("data-tree-object") != undefined);
@@ -287,26 +294,35 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                 if(identifier === object.identifier) {
                     return;
                 }
-                if(!travelObject(object, (obj) => {
+                if(!travelHtmlObject(object, (obj) => {
                     return identifier !== obj.identifier;
                 })) {
                     return;
                 }
 
                 const instructionTo = new InstructionBuilder(); // get path of the destinated object
-                let objectTo = searchElementWithIdentifier(identifier, editedHtml.html.object, instructionTo);
+                let objectTo = searchElementWithIdentifier(identifier, Project.state.editedHtml.html.object, instructionTo);
 
                 const instructionFrom = new InstructionBuilder(); // get path of the current object
-                let objectFrom = searchElementWithIdentifier(object.identifier, editedHtml.html.object, instructionFrom);
+                let objectFrom = searchElementWithIdentifier(object.identifier, Project.state.editedHtml.html.object, instructionFrom);
+
+                let output:ActionContext|undefined = undefined;
+
                 if(objectTo && objectFrom && objectFrom.identifier == object.identifier) {
                     if(objectTo.type === "block" && objectTo.content === undefined) {
                         instructionFrom.objectMove(instructionTo.key("content").instruction.p!);
-                        await updateHtml(instructionFrom);
+                        output = await Project.state.updateHtml!(instructionFrom.instruction);
                     } else if(objectTo.type === "list") {
                         instructionFrom.objectInsert(instructionTo.key("content").instruction.p!);
-                        await updateHtml(instructionFrom);
+                        output = await Project.state.updateHtml!(instructionFrom.instruction);
                     }
-                    editedHtml.htmlRender.clearBuildingOverlay();
+                    Project.state.editedHtml.htmlRender.clearBuildingOverlay();
+                }
+                if(output) {
+                    console.log(output);
+                    if(!output.status) {
+                        toast.error(output.reason ?? "internal error")
+                    }
                 }
             }
 
@@ -315,7 +331,7 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
         window.addEventListener("mousemove", onMouseMove);
         window.addEventListener("mouseup", onMouseUp);
         window.addEventListener("mouseleave", onMouseUp);
-    }, [editedHtml, object.identifier, updateHtml]); // Add dependencies
+    }, [Project.state.editedHtml, object.identifier, Project.state.updateHtml]); // Add dependencies
 
     const toggleHide = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();

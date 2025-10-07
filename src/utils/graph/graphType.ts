@@ -9,13 +9,13 @@ export interface Edge {
     _key: string,
 
     graphKey: string,
-    sheetIndex:number,
+    sheet:string,
 
-    source: string;
-    sourceHandle: string;
+    source?: string;
+    sourceHandle?: string;
 
-    target: string;
-    targetHandle: string;
+    target?: string;
+    targetHandle?: string;
 
     style: "curved" | "straight",
     label?:string,
@@ -25,7 +25,7 @@ export interface Node<T> {
     _key: string,
     graphKey: string,
     type: NodeType,
-    sheetIndex:number,
+    sheet:string,
     size: {
         width: number,
         height: number,
@@ -50,7 +50,7 @@ export interface Node<T> {
 export function cleanEdge(obj: any): Edge {
     return pickKeys<Edge>(obj, [
         "graphKey",
-        "sheetIndex",
+        "sheet",
         "source",
         "sourceHandle",
         "target",
@@ -66,7 +66,7 @@ export function cleanNode<T>(obj: any): Node<T> {
         "_key",
         "graphKey",
         "type",
-        "sheetIndex",
+        "sheet",
         "size",
         "posX",
         "posY",
@@ -91,7 +91,7 @@ export interface Graph {
     // html unique info
     workspace:string, // user-id or workspace-id
 
-    sheetsList:string[],
+    sheetsList: Record<string, string>,
 
     _sheets: Record<string, { // used for transfert
         nodes: Array<Node<any>>,
@@ -143,7 +143,10 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
                 gpuMotor.smoothFitToNode(node._key, {
                     padding: 400
                 });
-                openHtmlEditor(node, htmlRender, () => {
+                
+                const pathToEdit = ["data"]; // path inside the node where is stored the html
+                
+                openHtmlEditor(node, htmlRender, pathToEdit, () => {
                     // on close
                     container.style.cursor = "cursor";
                     htmlRender.setBuildingMode(false);
@@ -159,7 +162,6 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
             name: "nodeEnter" as any,
             call: `
                 const render_id = node._key;
-                console.log(node.data);
                 const htmlRender = await initiateNewHtmlRenderer(render_id, container);
                 htmlRender.render(node.data);
             `

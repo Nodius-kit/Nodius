@@ -1,4 +1,4 @@
-import {HtmlClass} from "../../html/htmlType";
+import {HtmlClass, HtmlObject} from "../../html/htmlType";
 import {Graph} from "../../graph/graphType";
 
 export interface api_category_list {
@@ -16,9 +16,9 @@ export interface api_category_delete {
 }
 
 
-type api_graph_create_exclude = "graphKeyLinked" | "createdTime" | "lastUpdatedTime" | "_key" | "version"
+type api_graph_create_exclude = "graphKeyLinked" | "createdTime" | "lastUpdatedTime" | "_key" | "version" | "htmlNodeKey"
 export interface api_graph_create {
-    htmlClass:Omit<HtmlClass, api_graph_create_exclude>
+    htmlClass:Omit<HtmlClass, api_graph_create_exclude>,
 }
 
 export interface api_graph_delete {
@@ -33,11 +33,13 @@ export interface api_graph_html {
         buildGraph?:boolean,
         offset?:number,
         length?:number,
+        onlyFirstSheet?:boolean,
     },
     retrieveGraph?: {
         token?: string,
         buildGraph?:boolean,
         offset?:number,
         length?:number,
+        onlyFirstSheet?:boolean,
     }
 }

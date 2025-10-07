@@ -1,30 +1,28 @@
-import {memo, useCallback, useContext, useEffect, useRef, MouseEvent, forwardRef, useLayoutEffect} from "react";
+import {memo, useContext, useEffect, useRef, MouseEvent, forwardRef, useLayoutEffect} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
-import {Node, NodeType, NodeTypeConfig} from "../../utils/graph/graphType";
+import {Node} from "../../utils/graph/graphType";
 import {forwardMouseEvents} from "../../utils/objectUtils";
-import {AsyncFunction, HtmlRender, HtmlRenderOption} from "../../process/html/HtmlRender";
+import {AsyncFunction} from "../../process/html/HtmlRender";
+import {ProjectContext} from "../hooks/contexts/ProjectContext";
+import {OpenHtmlEditorFct} from "../App";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
     onCanvasClick: (evt:MouseEvent) => void,
-    openHtmlEditor: (node:Node<any>,htmlRender:HtmlRender, onClose?: () => void) => void,
+    openHtmlEditor: OpenHtmlEditorFct,
     onNodeEnter?: (node: Node<any>) => void,
     onNodeLeave?: (node: Node<any>) => void,
-    nodeTypeConfig: Record<NodeType, NodeTypeConfig>,
-    initiateNewHtmlRenderer: (id: string, container: HTMLElement, options?: HtmlRenderOption) => Promise<HtmlRender>,
-    getHtmlRenderer: (id: string) => HtmlRender
 }
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
     openHtmlEditor,
     onNodeEnter,
     onNodeLeave,
-    nodeTypeConfig,
-    initiateNewHtmlRenderer,
-    getHtmlRenderer,
     onCanvasClick
 }, motorRef) => {
+
+    const Project = useContext(ProjectContext);
 
     const canvasRef = useRef<HTMLCanvasElement|null>(null);
     const containerRef = useRef<HTMLDivElement|null>(null);
@@ -91,7 +89,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         };
         const nodeEnter = (node: Node<any>) => {
-            if(!nodeTypeConfig[node.type]) {
+            if(!Project.state.nodeTypeConfig[node.type]) {
                 console.error("Node type", node.type, "can't be processed");
                 return;
             }
@@ -112,17 +110,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 overlay.style.zIndex = "1000000";
                 overlay.style.transition = "outline ease-in-out 0.3s";
 
-                const nodeConfig = nodeTypeConfig[node.type];
-
-                /*if(nodeConfig.centerOnDoubleClick) {
-                    const dbClick = () => {
-                        motorRef.current!.smoothFitToNode(node._key, {
-                            padding: 300
-                        });
-                    }
-                    overlay.addEventListener("dblclick",dbClick)
-                    nodeHTML.addEventListener("dblclick", dbClick);
-                }*/
+                const nodeConfig = Project.state.nodeTypeConfig[node.type];
 
                 overlay.style.borderRadius = nodeConfig.border.radius+"px";
                 nodeHTML.style.borderRadius = nodeConfig.border.radius+"px";
@@ -146,8 +134,33 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             nodeHTML.style.cursor = "pointer";
                         }
                         const callEvent = async (event:any) => {
-                            const fct = new AsyncFunction(...["event", "gpuMotor", "node", "openHtmlEditor", "getHtmlRenderer", "initiateNewHtmlRenderer", "container", "overlayContainer", domEvent.call]);
-                            await fct(...[event, gpuMotor.current, node, openHtmlEditor, getHtmlRenderer, initiateNewHtmlRenderer, nodeHTML, overlay]);
+                            const fct = new AsyncFunction(
+                                ...[
+                                    "event",
+                                    "gpuMotor",
+                                    "node",
+                                    "openHtmlEditor",
+                                    "getHtmlRenderer",
+                                    "initiateNewHtmlRenderer",
+                                    "getHtmlAllRenderer",
+                                    "container",
+                                    "overlayContainer",
+                                    domEvent.call
+                                ]
+                            );
+                            await fct(
+                                ...[
+                                    event,
+                                    gpuMotor.current,
+                                    node,
+                                    openHtmlEditor,
+                                    Project.state.getHtmlRenderer,
+                                    Project.state.initiateNewHtmlRenderer,
+                                    Project.state.getHtmlAllRenderer,
+                                    nodeHTML,
+                                    overlay
+                                ]
+                            );
                         }
                         if(domEvent.name === "load") {
                             callEvent(new Event("load", { bubbles: true }));
@@ -187,7 +200,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             onNodeLeave?.(node);
 
-            const nodeConfig = nodeTypeConfig[node.type];
+            const nodeConfig = Project.state.nodeTypeConfig[node.type];
             if(nodeConfig.alwaysRendered) return;
 
             const index = inSchemaNode.current.findIndex((n) => n.node === node);
@@ -219,7 +232,16 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             gpuMotor.current.off("zoom", updateOverlays);
             gpuMotor.current.off("reset", onReset);
         }
-    }, [gpuMotor.current, openHtmlEditor, onNodeEnter, onNodeLeave, nodeTypeConfig]);
+    }, [
+        gpuMotor.current,
+        openHtmlEditor,
+        onNodeEnter,
+        onNodeLeave,
+        Project.state.nodeTypeConfig,
+        Project.state.getHtmlRenderer,
+        Project.state.initiateNewHtmlRenderer,
+        Project.state.getHtmlAllRenderer
+    ]);
 
     const onDoubleClick = () => {
         onExitCanvas();

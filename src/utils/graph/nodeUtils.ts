@@ -30,24 +30,28 @@ export const edgeArrayToMap = (edges: Edge[]): Map<string, Edge[]> => {
     const output = new Map<string, Edge[]>();
 
     for (const edge of edges) {
-        const targetKey = `target-${edge.target}`;
-        const sourceKey = `source-${edge.source}`;
 
         // push into target group
-        let targetArray = output.get(targetKey);
-        if (!targetArray) {
-            targetArray = [];
-            output.set(targetKey, targetArray);
+        if(edge.target) {
+            const targetKey = `target-${edge.target}`;
+            let targetArray = output.get(targetKey);
+            if (!targetArray) {
+                targetArray = [];
+                output.set(targetKey, targetArray);
+            }
+            targetArray.push(edge);
         }
-        targetArray.push(edge);
 
         // push into source group
-        let sourceArray = output.get(sourceKey);
-        if (!sourceArray) {
-            sourceArray = [];
-            output.set(sourceKey, sourceArray);
+        if(edge.source) {
+            const sourceKey = `source-${edge.source}`;
+            let sourceArray = output.get(sourceKey);
+            if (!sourceArray) {
+                sourceArray = [];
+                output.set(sourceKey, sourceArray);
+            }
+            sourceArray.push(edge);
         }
-        sourceArray.push(edge);
     }
 
     return output;
@@ -61,3 +65,11 @@ export const findFirstNodeByType = (graph:Graph, type:NodeType):Node<any>|undefi
     }
     return undefined;
 }
+
+export const findEdgeByKey = (map: Map<string, Edge[]>, key: string): Edge | undefined => {
+    for (const edges of map.values()) {
+        const edge = edges.find(e => e._key === key);
+        if (edge) return edge; // Stop as soon as we find it
+    }
+    return undefined; // Not found
+};

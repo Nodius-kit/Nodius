@@ -3,13 +3,12 @@ import {editingPanel} from "../SchemaEditor";
 import {BetweenHorizontalStart, Binary, Cable, CopyPlus, Frame, List} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {EditedHtmlType} from "../../../main";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 
 interface LeftPaneMenuProps {
     setEditingPanel: (value:editingPanel) => void,
     editingPanel: editingPanel,
     setMenuWidth: (width: number) => void,
-    editedHtml: EditedHtmlType,
     returnToMenu: () => void,
 }
 
@@ -28,7 +27,6 @@ export const LeftPaneMenu = memo((
         setEditingPanel,
         editingPanel,
         setMenuWidth,
-        editedHtml,
         returnToMenu
     }:LeftPaneMenuProps
 ) => {
@@ -44,6 +42,8 @@ export const LeftPaneMenu = memo((
     const iconPadding = 12; // padding outside icon
     const iconGap = 12; // space between icon
     const border = "2px solid var(--nodius-background-paper)";
+
+    const Project = useContext(ProjectContext);
 
     useEffect(() => {
         if(setMenuWidth) {
@@ -82,7 +82,7 @@ export const LeftPaneMenu = memo((
                         setEditingPanel(editingPanel === "component" ? "" : "component");
                     },
                     selected: editingPanel === "component",
-                    disabled: editedHtml == undefined
+                    disabled: Project.state.editedHtml == undefined
                 },
                 {
                     icon: <BetweenHorizontalStart  width={iconSize} height={iconSize} />,
@@ -90,7 +90,7 @@ export const LeftPaneMenu = memo((
                         setEditingPanel(editingPanel === "hierarchy" ? "" : "hierarchy");
                     },
                     selected: editingPanel === "hierarchy",
-                    disabled: editedHtml == undefined
+                    disabled: Project.state.editedHtml == undefined
                 }
             ]
         },
@@ -123,7 +123,7 @@ export const LeftPaneMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize, editedHtml]);
+    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

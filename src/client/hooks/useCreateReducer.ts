@@ -1,28 +1,32 @@
-// Extracts property names from initial state of reducer to allow typesafe dispatch objects
+import { useMemo, useReducer } from "react";
 
-// Returns the Action Type for the dispatch object to be used for typing in things like context
-import {useMemo, useReducer} from "react";
-
+// Creates a union type for each field-value pair in T
 export type ActionType<T> =
     | { type: 'reset' }
-    | { type?: 'change'; field: string; value: any };
+    | { [K in keyof T]: { type?: 'change'; field: K; value: T[K] } }[keyof T];
 
 export type Dispatch<A> = (value: A) => void;
 
-// Returns a typed dispatch and state
-export const useCreateReducer = <T>({ initialState }: { initialState: T }) => {
-
-
-    const reducer = (state: T, action: ActionType<T>) => {
-        if (!action.type) return { ...state, [action.field]: action.value };
-
+export const useCreateReducer = <T extends Record<string, any>>({
+                                                                    initialState
+                                                                }: {
+    initialState: T
+}) => {
+    const reducer = (state: T, action: ActionType<T>): T => {
         if (action.type === 'reset') return initialState;
 
-        throw new Error();
+        if (!action.type || action.type === 'change') {
+            // TypeScript knows field is keyof T and value is T[field]
+            return {
+                ...state,
+                [action.field]: action.value
+            } as T;
+        }
+
+        throw new Error('Unknown action type');
     };
 
     const [state, dispatch] = useReducer(reducer, initialState);
 
-
-    return useMemo(() => ({ state, dispatch }), [state, dispatch]);
+    return useMemo(() => ({ state, dispatch }), [state]);
 };
