@@ -57,7 +57,7 @@ export const edgeArrayToMap = (edges: Edge[]): Map<string, Edge[]> => {
     return output;
 };
 
-export const findFirstNodeByType = (graph:Graph, type:NodeType):Node<any>|undefined => {
+export const findFirstNodeByType = <T = any>(graph:Graph, type:NodeType):Node<T>|undefined => {
     for (const sheet of Object.values(graph.sheets)) {
         for (const node of sheet.nodeMap.values()) {
             if (node.type === type) return node;

@@ -1,12 +1,18 @@
 import {pickKeys} from "../objectUtils";
 import {HTMLDomEvent, HtmlObject} from "../html/htmlType";
 
-export type NodeType = "html" | string;
+export type NodeType = "html" | "entryType" | string;
 export type handleSide = "T" | "D" | "R" | "L" | "0"
+
+export interface NodeTypeEntryType {
+    _key:string
+}
 
 export interface Edge {
 
     _key: string,
+
+    undeletable?: boolean,
 
     graphKey: string,
     sheet:string,

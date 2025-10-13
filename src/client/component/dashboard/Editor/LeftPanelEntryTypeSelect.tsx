@@ -1,11 +1,13 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
-import {Cable, ChevronDown, ChevronUp} from "lucide-react";
+import {Cable, ChevronDown, ChevronUp, Search} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
-import {Graph} from "../../../../utils/graph/graphType";
+import {Graph, NodeTypeEntryType} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {Collapse} from "../../animate/Collapse";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
+import {findFirstNodeByType} from "../../../../utils/graph/nodeUtils";
+import {Input} from "../../form/Input";
 
 
 interface LeftPanelEntryTypeSelectProps {
@@ -27,6 +29,19 @@ export const LeftPanelEntryTypeSelect = memo((
     const Project = useContext(ProjectContext);
 
     const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => dataTypes ? dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[dataTypes, searchValue]);
+
+    const currentEntryType:DataTypeClass|undefined = useMemo(() => {
+        if(!Project.state.graph || !dataTypes) {
+            return undefined;
+        }
+
+        const node = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
+        if(node && node.data) {
+            return dataTypes.find((type) => type._key === node.data!._key);
+        }
+        return undefined;
+
+    }, [Project.state.graph, dataTypes]);
 
     useEffect(() => {
         retrieveDataType();
@@ -94,6 +109,26 @@ export const LeftPanelEntryTypeSelect = memo((
         }
     `);
 
+    const dataTypeSelectionButtonClass = useDynamicClass(`
+        & {
+            width: 100%;
+            cursor: pointer;
+            padding: 3px 12px;
+            border-radius: 6px;
+        }
+        
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+        }
+        
+        &.active {
+            background-color: var(--nodius-primary-main)
+        }
+    `);
+
+    const setEntryType = (dataType:DataTypeClass) => {
+
+    }
 
     return (
         <>
@@ -108,7 +143,7 @@ export const LeftPanelEntryTypeSelect = memo((
 
                 <div style={{padding:"5px", height:"100%", width:"100%", position:"relative"}}>
                     <div style={{position:"absolute", inset:"0px", overflowY:"auto"}}>
-                        <div style={{display:"flex", flexDirection:"column"}}>
+                        <div style={{display:"flex", flexDirection:"column", maxHeight:"50%"}}>
                             <div className={`${selectInputDataButton} ${showSelect ? "active" : "inactive"}`} onClick={!showSelect ? () => setShowSelect(!showSelect) : undefined}>
                                 <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between"}}>
                                     <p>Select Input Data </p>
@@ -122,8 +157,43 @@ export const LeftPanelEntryTypeSelect = memo((
                                 </div>
                                 <Collapse in={showSelect} >
                                     <div>
+                                        <Input
+                                            type={"text"}
+                                            placeholder={"Search Data Types..."}
+                                            value={searchValue}
+                                            onChange={(value) => setSearchValue(value)}
+                                            startIcon={<Search height={18} width={18}/>}
+                                        />
+                                        {searchedDataTypes ? (
+                                            searchedDataTypes.map((dataType, i) => (
+                                                <div
+                                                    key={i}
+                                                    className={`${dataTypeSelectionButtonClass} ${currentEntryType?._key === dataType._key ? "active" : ""}`}
+                                                    onClick={() => setEntryType(dataType)}
+                                                    style={{marginTop:i > 0 ? "6px" : "0px"}}
+                                                >
+                                                    {dataType.name}
+                                                </div>
+                                            ))
+                                        ) : "loading"}
                                     </div>
                                 </Collapse>
+                            </div>
+
+                            <div>
+                                {currentEntryType ? (
+                                    <div>
+                                        type selected {currentEntryType.name}, {currentEntryType.description}
+                                        <button>
+                                            see the type in the edit tab
+                                        </button>
+
+                                    </div>
+                                ) : (
+                                    <div>
+                                        no type selected
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
