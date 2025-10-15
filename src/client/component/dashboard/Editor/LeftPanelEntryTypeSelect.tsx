@@ -1,6 +1,6 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
-import {Cable, ChevronDown, ChevronUp, Search} from "lucide-react";
+import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {Graph, NodeTypeEntryType} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
@@ -113,94 +113,315 @@ export const LeftPanelEntryTypeSelect = memo((
         & {
             width: 100%;
             cursor: pointer;
-            padding: 3px 12px;
-            border-radius: 6px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: var(--nodius-transition-default);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
-        
+
         &:hover {
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+            box-shadow: var(--nodius-shadow-1);
         }
-        
+
         &.active {
-            background-color: var(--nodius-primary-main)
+            background-color: var(--nodius-primary-main);
+            box-shadow: var(--nodius-shadow-2);
+        }
+
+        &.active:hover {
+            background-color: ${Theme.state.changeBrightness(Theme.state.primary[Theme.state.theme].main, 0.1, "positive")};
+        }
+    `);
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        & .info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--nodius-primary-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        & .info-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+    `);
+
+    const selectedTypeCardClass = useDynamicClass(`
+        & {
+            background: linear-gradient(135deg,
+                ${Theme.state.reverseHexColor(Theme.state.primary[Theme.state.theme].main, 0.08)} 0%,
+                ${Theme.state.reverseHexColor(Theme.state.primary[Theme.state.theme].main, 0.04)} 100%);
+            border: 2px solid var(--nodius-primary-main);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        & .type-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+        }
+
+        & .type-badge {
+            background-color: var(--nodius-primary-main);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        & .type-name {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        & .type-description {
+            font-size: 14px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+
+        & .view-button {
+            background-color: var(--nodius-primary-main);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--nodius-transition-default);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        & .view-button:hover {
+            background-color: ${Theme.state.changeBrightness(Theme.state.primary[Theme.state.theme].main, 0.15, "positive")};
+            box-shadow: var(--nodius-shadow-2);
+        }
+    `);
+
+    const emptyStateClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            border: 2px dashed ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.15)};
+            border-radius: 12px;
+            padding: 32px 20px;
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+        }
+
+        & .empty-icon {
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.3)};
+        }
+
+        & .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+
+        & .empty-description {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.5)};
+            max-width: 300px;
         }
     `);
 
     const setEntryType = (dataType:DataTypeClass) => {
+        if(!Project.state.graph) return;
+        const node = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
 
+        if(node) {
+
+        }
     }
 
     return (
         <>
+            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
 
-            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
-
-                <div style={{display:"flex", flexDirection:"row", gap:"10px",alignItems:"center", borderBottom:"2px solid var(--nodius-background-paper)", paddingBottom:"5px"}}>
-                    <Cable height={26} width={26}/>
-                    <h5 style={{fontSize:"16px", fontWeight:"400"}}>Graph Input Data</h5>
+                {/* Header Section */}
+                <div style={{
+                    display:"flex",
+                    flexDirection:"row",
+                    gap:"12px",
+                    alignItems:"center",
+                    borderBottom:"2px solid var(--nodius-primary-main)",
+                    paddingBottom:"12px"
+                }}>
+                    <div style={{
+                        background: "var(--nodius-primary-main)",
+                        borderRadius: "8px",
+                        padding: "8px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                    }}>
+                        <Cable height={24} width={24} color="white"/>
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column"}}>
+                        <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Entry Data Type</h5>
+                        <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>Configure graph input requirements</p>
+                    </div>
                 </div>
 
+                {/* Info Card - What is Entry Data Type */}
+                <div className={infoCardClass}>
+                    <div className="info-header">
+                        <Info height={18} width={18}/>
+                        <span>What is an Entry Data Type?</span>
+                    </div>
+                    <div className="info-content">
+                        An entry data type defines the required input data structure that this graph expects to receive when executed.
+                        It ensures your workflow receives the correct data format to function properly.
+                    </div>
+                </div>
 
-                <div style={{padding:"5px", height:"100%", width:"100%", position:"relative"}}>
-                    <div style={{position:"absolute", inset:"0px", overflowY:"auto"}}>
-                        <div style={{display:"flex", flexDirection:"column", maxHeight:"50%"}}>
+                {/* Main Content */}
+                <div style={{padding:"0px", height:"100%", width:"100%", position:"relative"}}>
+                    <div style={{position:"absolute", inset:"0px", overflowY:"auto", paddingRight:"4px"}}>
+                        <div style={{display:"flex", flexDirection:"column"}}>
+
+                            {/* Data Type Selector */}
                             <div className={`${selectInputDataButton} ${showSelect ? "active" : "inactive"}`} onClick={!showSelect ? () => setShowSelect(!showSelect) : undefined}>
-                                <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between"}}>
-                                    <p>Select Input Data </p>
-                                    <div className={"close"}>
+                                <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between", alignItems:"center"}}>
+                                    <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
+                                        <Search height={18} width={18}/>
+                                        <p style={{margin:"0", fontWeight:"500"}}>
+                                            {currentEntryType ? "Change Data Type" : "Select Data Type"}
+                                        </p>
+                                    </div>
+                                    <div className={"close"} style={{display:"flex", alignItems:"center"}}>
                                         {showSelect ? (
-                                            <ChevronUp onClick={() => setShowSelect(!showSelect)} />
+                                            <ChevronUp onClick={() => setShowSelect(!showSelect)} height={20} width={20}/>
                                         ) : (
-                                            <ChevronDown />
+                                            <ChevronDown height={20} width={20}/>
                                         )}
                                     </div>
                                 </div>
-                                <Collapse in={showSelect} >
-                                    <div>
+                                <Collapse in={showSelect}>
+                                    <div style={{marginTop:"12px", display:"flex", flexDirection:"column", gap:"8px"}}>
                                         <Input
                                             type={"text"}
-                                            placeholder={"Search Data Types..."}
+                                            placeholder={"Search data types..."}
                                             value={searchValue}
                                             onChange={(value) => setSearchValue(value)}
                                             startIcon={<Search height={18} width={18}/>}
                                         />
-                                        {searchedDataTypes ? (
-                                            searchedDataTypes.map((dataType, i) => (
-                                                <div
-                                                    key={i}
-                                                    className={`${dataTypeSelectionButtonClass} ${currentEntryType?._key === dataType._key ? "active" : ""}`}
-                                                    onClick={() => setEntryType(dataType)}
-                                                    style={{marginTop:i > 0 ? "6px" : "0px"}}
-                                                >
-                                                    {dataType.name}
+                                        <div style={{maxHeight:"300px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"8px", marginTop:"8px"}}>
+                                            {searchedDataTypes ? (
+                                                searchedDataTypes.length > 0 ? (
+                                                    searchedDataTypes.map((dataType, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={`${dataTypeSelectionButtonClass} ${currentEntryType?._key === dataType._key ? "active" : ""}`}
+                                                            onClick={() => setEntryType(dataType)}
+                                                        >
+                                                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                                                                <span style={{fontWeight:"500", fontSize:"14px"}}>
+                                                                    {dataType.name}
+                                                                </span>
+                                                                {currentEntryType?._key === dataType._key && (
+                                                                    <Check height={18} width={18}/>
+                                                                )}
+                                                            </div>
+                                                            {dataType.description && (
+                                                                <span style={{fontSize:"12px", opacity:"0.7"}}>
+                                                                    {dataType.description}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div style={{padding:"20px", textAlign:"center", opacity:"0.6"}}>
+                                                        No data types found matching "{searchValue}"
+                                                    </div>
+                                                )
+                                            ) : (
+                                                <div style={{padding:"20px", textAlign:"center", opacity:"0.6"}}>
+                                                    Loading data types...
                                                 </div>
-                                            ))
-                                        ) : "loading"}
+                                            )}
+                                        </div>
                                     </div>
                                 </Collapse>
                             </div>
 
-                            <div>
-                                {currentEntryType ? (
-                                    <div>
-                                        type selected {currentEntryType.name}, {currentEntryType.description}
-                                        <button>
-                                            see the type in the edit tab
-                                        </button>
-
+                            {/* Selected Type Display or Empty State */}
+                            {currentEntryType ? (
+                                <div className={selectedTypeCardClass}>
+                                    <div className="type-header">
+                                        <div style={{flex:1}}>
+                                            <div className="type-badge">
+                                                <Check height={14} width={14}/>
+                                                Active
+                                            </div>
+                                        </div>
                                     </div>
-                                ) : (
                                     <div>
-                                        no type selected
+                                        <div className="type-name">{currentEntryType.name}</div>
+                                        {currentEntryType.description && (
+                                            <div className="type-description" style={{marginTop:"8px"}}>
+                                                {currentEntryType.description}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+                                    <button className="view-button">
+                                        <FileText height={16} width={16}/>
+                                        View Type Definition
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className={emptyStateClass}>
+                                    <AlertCircle className="empty-icon" height={48} width={48}/>
+                                    <div className="empty-title">No Entry Type Selected</div>
+                                    <div className="empty-description">
+                                        This graph currently has no entry data type configured.
+                                        Select a data type above to define what input this graph expects.
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             </div>
         </>
-
     )
 });
 LeftPanelEntryTypeSelect.displayName = "LeftPanelEntryTypeSelect";

@@ -27,6 +27,7 @@ export type MotorEventMap = {
 	edgeChange: (edge: Edge) => void;
 	nodeEnter: (node: Node<any>) => void;
 	nodeLeave: (node: Node<any>) => void;
+    nodeUpdate: (node: Node<any>) => void;
 	reset: () => void;
 };
 

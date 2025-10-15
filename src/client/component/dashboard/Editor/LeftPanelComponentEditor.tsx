@@ -1,6 +1,6 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import * as Icons from "lucide-react";
-import {ChevronDown, ChevronUp, CloudAlert, Search} from "lucide-react";
+import {ChevronDown, ChevronUp, CloudAlert, Search, Box, Info} from "lucide-react";
 import {Input} from "../../form/Input";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
 import {Card} from "../../form/Card";
@@ -10,6 +10,7 @@ import {applyInstruction, Instruction, InstructionBuilder, OpType} from "../../.
 import {searchElementWithIdentifier, travelHtmlObject} from "../../../../utils/html/htmlUtils";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ActionContext, EditedHtmlType, ProjectContext, UpdateHtmlOption} from "../../../hooks/contexts/ProjectContext";
+import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 
 interface LeftPaneComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
@@ -30,6 +31,7 @@ export const LeftPanelComponentEditor = memo(({
     const [hideCategory, setHideCategory] = useState<string[]>([]);
 
     const Project = useContext(ProjectContext);
+    const Theme = useContext(ThemeContext);
 
     // may be used in element event, we have to store it in ref for avoiding change while user is dragging component and miss change
     const editedHtmlRef = useRef<EditedHtmlType>(Project.state.editedHtml);
@@ -251,7 +253,7 @@ export const LeftPanelComponentEditor = memo(({
             }
 
             if (shouldAdd) {
-                await updateHtmlRef.current!(instruction.instruction, {
+                const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction, {
                     targetedIdentifier: object.identifier
                 });
                 lastObjectHover = object;
@@ -273,7 +275,7 @@ export const LeftPanelComponentEditor = memo(({
                 } else {
                     lastInstruction.key("temporary").remove();
                 }
-                await updateHtmlRef.current!(lastInstruction.instruction);
+                const output:ActionContext|undefined = await updateHtmlRef.current!(lastInstruction.instruction);
                 //lastInstruction = undefined;
             }
             if(!haveMoved) {
@@ -293,7 +295,7 @@ export const LeftPanelComponentEditor = memo(({
     const componentCardClass = useDynamicClass(`
         & {
             border: 2px solid var(--nodius-background-paper);
-            border-radius: 8px;
+            border-radius: 12px;
             aspect-ratio: 1 / 1;
             flex: 1;
             max-width: 120px;
@@ -302,76 +304,190 @@ export const LeftPanelComponentEditor = memo(({
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 5px;
-            cursor: pointer;
+            gap: 8px;
+            padding: 8px;
+            cursor: grab;
             box-shadow: var(--nodius-shadow-1);
             transition: var(--nodius-transition-default);
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.02)};
         }
-        
+
         &:hover {
             background-color: var(--nodius-background-paper);
+            transform: translateY(-2px);
+            box-shadow: var(--nodius-shadow-2);
+        }
+
+        &:active {
+            cursor: grabbing;
+            transform: scale(0.98);
+        }
+    `);
+
+    const categoryHeaderClass = useDynamicClass(`
+        & {
+            display: flex;
+            flex-direction: row;
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 10px;
+            transition: var(--nodius-transition-default);
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+        }
+
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.06)};
+        }
+    `);
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        & .info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--nodius-primary-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        & .info-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
         }
     `);
 
     return (
-        <>
-            <Input type={"text"} placeholder={"Search for component..."} value={componentSearch} onChange={(value) => setComponentSearch(value)} endIcon={<Search height={18} width={18}/>} />
+        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
+            {/* Header Section */}
+            <div style={{
+                display:"flex",
+                flexDirection:"row",
+                gap:"12px",
+                alignItems:"center",
+                borderBottom:"2px solid var(--nodius-primary-main)",
+                paddingBottom:"12px"
+            }}>
+                <div style={{
+                    background: "var(--nodius-primary-main)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    <Box height={24} width={24} color="white"/>
+                </div>
+                <div style={{display:"flex", flexDirection:"column"}}>
+                    <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Components Library</h5>
+                    <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>Drag and drop to build your interface</p>
+                </div>
+            </div>
 
-            {filteredComponents ? (
-                <div style={{display:"flex", flexDirection:"column", gap:"16px"}}>
-                    {Object.entries(filteredComponents).map(([category, components]) => (
-                        <div style={{display:"flex", flexDirection: "column", gap:"8px"}} key={category}>
-                            <div style={{display:"flex", flexDirection: "row", cursor:"pointer"}}onClick={() => {
-                                if(hideCategory.includes(category)) {
-                                    setHideCategory(hideCategory.filter(h => h !== category));
-                                } else {
-                                    setHideCategory([...hideCategory, category]);
-                                }
-                            }}>
-                                <h3 style={{flex:"1", fontSize:"18px", fontWeight:"600"}}>{category}</h3>
-                                <div style={{display:"flex", alignItems:"center"}}>
-                                    {hideCategory.includes(category) ? (
-                                            <ChevronUp />
-                                        ) :
-                                        (
-                                            <ChevronDown />
-                                        )}
+            {/* Info Card */}
+            <div className={infoCardClass}>
+                <div className="info-header">
+                    <Info height={18} width={18}/>
+                    <span>How to Use Components</span>
+                </div>
+                <div className="info-content">
+                    Drag components from the library and drop them onto your canvas. Components can be nested and rearranged to create complex layouts.
+                </div>
+            </div>
+
+            {/* Search Bar */}
+            <Input
+                type={"text"}
+                placeholder={"Search components..."}
+                value={componentSearch}
+                onChange={(value) => setComponentSearch(value)}
+                startIcon={<Search height={18} width={18}/>}
+            />
+
+            {/* Components List */}
+            <div style={{flex: 1, overflowY: "auto", paddingRight: "4px"}}>
+                {filteredComponents ? (
+                    <div style={{display:"flex", flexDirection:"column", gap:"20px"}}>
+                        {Object.entries(filteredComponents).map(([category, components]) => (
+                            <div style={{display:"flex", flexDirection: "column", gap:"12px"}} key={category}>
+                                <div
+                                    className={categoryHeaderClass}
+                                    onClick={() => {
+                                        if(hideCategory.includes(category)) {
+                                            setHideCategory(hideCategory.filter(h => h !== category));
+                                        } else {
+                                            setHideCategory([...hideCategory, category]);
+                                        }
+                                    }}
+                                >
+                                    <h3 style={{flex:"1", fontSize:"16px", fontWeight:"600", margin:"0"}}>{category}</h3>
+                                    <div style={{display:"flex", alignItems:"center", transition:"transform 0.2s", transform: hideCategory.includes(category) ? "rotate(180deg)" : "rotate(0deg)"}}>
+                                        <ChevronDown height={20} width={20}/>
+                                    </div>
                                 </div>
+                                <Collapse in={!hideCategory.includes(category)}>
+                                    <div style={{display:"flex", flexDirection:"row", gap:"12px", flexWrap:"wrap", paddingTop:"4px"}}>
+                                        {components.map((comp, i) => {
+                                            const Icon = IconDict[comp.icon] as any;
+
+                                            return (
+                                                <div key={i}
+                                                     className={componentCardClass}
+                                                     data-builder-component={comp.object.name}
+                                                     onMouseDown={(e) => onMouseDown(e, comp)}
+                                                     title={`Drag to add ${comp.object.name}`}
+                                                >
+                                                    {Icon ? (
+                                                        <Icon width={40} height={40} strokeWidth={1.5} color={"var(--nodius-primary-main)"} />
+                                                    ) : <CloudAlert width={40} height={40} strokeWidth={1.5} color={"var(--nodius-text-secondary)"}/>}
+                                                    <h5 style={{
+                                                        fontSize:"13px",
+                                                        fontWeight:"500",
+                                                        color:"var(--nodius-text-primary)",
+                                                        textAlign:"center",
+                                                        margin:"0",
+                                                        lineHeight:"1.3"
+                                                    }}>
+                                                        {comp.object.name}
+                                                    </h5>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </Collapse>
                             </div>
-                            <Collapse in={!hideCategory.includes(category)}>
-                                <div style={{display:"flex", flexDirection:"row", gap:"12px", flexWrap:"wrap", paddingBottom:"8px"}}>
-                                    {components.map((comp, i) => {
-
-                                        const Icon = IconDict[comp.icon] as any;
-
-                                        return (
-                                            <div key={i}
-                                                 className={componentCardClass}
-                                                 data-builder-component={comp.object.name}
-                                                 onMouseDown={(e) => onMouseDown(e, comp)}
-                                            >
-                                                {Icon ? (
-                                                    <Icon width={45} height={45} strokeWidth={1} color={"var(--nodius-text-secondary)"} />
-                                                ) : <CloudAlert width={45} height={45} strokeWidth={1} color={"var(--nodius-text-secondary)"}/>}
-                                                <h5 style={{fontSize:"12px", fontWeight:"400", color:"var(--nodius-text-secondary)"}}>{comp.object.name}</h5>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </Collapse>
-                        </div>
-                    ))}
-                </div>
-            ) : (
-                <div>
-                    <Card
-                        variant={"error"}
-                        title={"An error occurred while retrieving components"}
-                        hoverable
-                    />
-                </div>
-            )}
-        </>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{
+                        padding:"32px",
+                        textAlign:"center",
+                        color:"var(--nodius-red-500)",
+                        backgroundColor: Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03),
+                        borderRadius:"12px",
+                        border:"2px dashed var(--nodius-red-500)"
+                    }}>
+                        <CloudAlert height={48} width={48} style={{margin:"0 auto 16px", opacity:0.6}}/>
+                        <h5 style={{fontSize:"16px", fontWeight:"600", margin:"0 0 8px 0"}}>Error Loading Components</h5>
+                        <p style={{fontSize:"14px", opacity:"0.8", margin:"0"}}>
+                            An error occurred while retrieving components. Please try again.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </div>
     )
 });
 LeftPanelComponentEditor.displayName = "LeftPaneComponentEditor";

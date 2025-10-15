@@ -1,6 +1,6 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
-import {Binary, FileUp, ListTree, Plus, Search, Trash2, X} from "lucide-react";
+import {Binary, FileUp, ListTree, Plus, Search, Trash2, X, Info, AlertCircle} from "lucide-react";
 import {Input} from "../../form/Input";
 import {Fade} from "../../animate/Fade";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
@@ -175,16 +175,85 @@ export const LeftPanelTypeEditor = memo((
         & {
             width: 100%;
             cursor: pointer;
-            padding: 3px 12px;
-            border-radius: 6px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: var(--nodius-transition-default);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
-        
+
         &:hover {
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+            box-shadow: var(--nodius-shadow-1);
         }
-        
+
         &.active {
-            background-color: var(--nodius-primary-main)
+            background-color: var(--nodius-primary-main);
+            box-shadow: var(--nodius-shadow-2);
+        }
+
+        &.active:hover {
+            background-color: ${Theme.state.changeBrightness(Theme.state.primary[Theme.state.theme].main, 0.1, "positive")};
+        }
+    `);
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        & .info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--nodius-primary-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        & .info-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+    `);
+
+    const emptyStateClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            border: 2px dashed ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.15)};
+            border-radius: 12px;
+            padding: 32px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+        }
+
+        & .empty-icon {
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.3)};
+        }
+
+        & .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+
+        & .empty-description {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.5)};
+            max-width: 300px;
         }
     `);
 
@@ -442,7 +511,7 @@ export const LeftPanelTypeEditor = memo((
                                                     <input
                                                         type={"checkbox"}
                                                         checked={type.isArray}
-                                                        onClick={() => {
+                                                        onChange={() => {
                                                             if(!editingClass) return;
                                                             const newEditingClass = {...editingClass};
                                                             newEditingClass.types = newEditingClass.types.map((t, i2) => {
@@ -486,48 +555,125 @@ export const LeftPanelTypeEditor = memo((
             </div>
 
 
-            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
+            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
 
-                <div style={{display:"flex", flexDirection:"row", gap:"10px",alignItems:"center", borderBottom:"2px solid var(--nodius-background-paper)", paddingBottom:"5px"}}>
-                    <Binary height={26} width={26}/>
-                    <h5 style={{fontSize:"16px", fontWeight:"400"}}>Data Type</h5>
-                    <div style={{display:"flex", flex:"1", justifyContent:"right", gap:"8px", flexDirection:"row"}}>
+                {/* Header Section */}
+                <div style={{
+                    display:"flex",
+                    flexDirection:"row",
+                    gap:"12px",
+                    alignItems:"center",
+                    borderBottom:"2px solid var(--nodius-primary-main)",
+                    paddingBottom:"12px"
+                }}>
+                    <div style={{
+                        background: "var(--nodius-primary-main)",
+                        borderRadius: "8px",
+                        padding: "8px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                    }}>
+                        <Binary height={24} width={24} color="white"/>
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column", flex:"1"}}>
+                        <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Data Types</h5>
+                        <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>Define custom data structures</p>
+                    </div>
+                    <div style={{display:"flex", gap:"8px"}}>
                         <div
-                            style={{padding:"4px", borderRadius:"8px", backgroundColor: "var(--nodius-primary-main)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer"}}
+                            style={{
+                                padding:"8px",
+                                borderRadius:"8px",
+                                backgroundColor: "var(--nodius-primary-main)",
+                                display:"flex",
+                                alignItems:"center",
+                                justifyContent:"center",
+                                cursor:"pointer",
+                                transition:"var(--nodius-transition-default)"
+                            }}
                             onClick={addTypeFromJsonPrompt}
+                            title="Import from JSON"
                         >
-                            <FileUp height={20} width={20}/>
+                            <FileUp height={20} width={20} color="white"/>
                         </div>
                         <div
-                            style={{padding:"4px", borderRadius:"8px", backgroundColor: "var(--nodius-primary-main)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer"}}
+                            style={{
+                                padding:"8px",
+                                borderRadius:"8px",
+                                backgroundColor: "var(--nodius-primary-main)",
+                                display:"flex",
+                                alignItems:"center",
+                                justifyContent:"center",
+                                cursor:"pointer",
+                                transition:"var(--nodius-transition-default)"
+                            }}
                             onClick={addTypePrompt}
+                            title="Create new data type"
                         >
-                            <Plus height={20} width={20} />
+                            <Plus height={20} width={20} color="white"/>
                         </div>
                     </div>
                 </div>
 
+                {/* Info Card */}
+                <div className={infoCardClass}>
+                    <div className="info-header">
+                        <Info height={18} width={18}/>
+                        <span>What are Data Types?</span>
+                    </div>
+                    <div className="info-content">
+                        Data types define the structure of complex data objects with multiple fields. Each field can have its own type, validation rules, and default values.
+                    </div>
+                </div>
+
+                {/* Search Bar */}
                 <Input
                     type={"text"}
-                    placeholder={"Search Data Types..."}
+                    placeholder={"Search data types..."}
                     value={searchValue}
                     onChange={(value) => setSearchValue(value)}
                     startIcon={<Search height={18} width={18}/>}
                 />
-                <div style={{padding:"5px", height:"100%", width:"100%", position:"relative"}}>
-                    <div style={{position:"absolute", inset:"0px", overflowY:"auto"}}>
+
+                {/* Data Types List */}
+                <div style={{padding:"0px", height:"100%", width:"100%", position:"relative"}}>
+                    <div style={{position:"absolute", inset:"0px", overflowY:"auto", paddingRight:"4px"}}>
                         {searchedDataTypes ? (
-                            searchedDataTypes.map((dataType, i) => (
-                                <div
-                                    key={i}
-                                    className={`${dataTypeSelectionButtonClass} ${editingClass?._key === dataType._key ? "active" : ""}`}
-                                    onClick={() => setEditingClass(dataType)}
-                                    style={{marginTop:i > 0 ? "6px" : "0px"}}
-                                >
-                                    {dataType.name}
+                            searchedDataTypes.length > 0 ? (
+                                <div style={{display:"flex", flexDirection:"column", gap:"8px"}}>
+                                    {searchedDataTypes.map((dataType, i) => (
+                                        <div
+                                            key={i}
+                                            className={`${dataTypeSelectionButtonClass} ${editingClass?._key === dataType._key ? "active" : ""}`}
+                                            onClick={() => setEditingClass(dataType)}
+                                        >
+                                            <span style={{fontWeight:"500", fontSize:"14px"}}>{dataType.name}</span>
+                                            {dataType.description && (
+                                                <span style={{fontSize:"12px", opacity:"0.7"}}>
+                                                    {dataType.description}
+                                                </span>
+                                            )}
+                                            <span style={{fontSize:"12px", opacity:"0.6"}}>
+                                                {dataType.types.length} {dataType.types.length === 1 ? 'field' : 'fields'}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))
-                        ) : "loading"}
+                            ) : (
+                                <div className={emptyStateClass}>
+                                    <AlertCircle className="empty-icon" height={48} width={48}/>
+                                    <div className="empty-title">No Data Types Found</div>
+                                    <div className="empty-description">
+                                        {searchValue ? `No data types match "${searchValue}". Try a different search term.` : "No data types created yet. Click the + button to create your first data type."}
+                                    </div>
+                                </div>
+                            )
+                        ) : (
+                            <div style={{padding:"20px", textAlign:"center", opacity:"0.6"}}>
+                                Loading data types...
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

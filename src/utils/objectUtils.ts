@@ -292,3 +292,24 @@ export const travelObject = (
 
     return true;
 };
+
+
+/**
+ * Converts a `Map` to a plain object (dictionary).
+ *
+ * @param map - The `Map` to be converted to a plain object (dictionary).
+ *              It is of type `any`, meaning it can accept any input, but it expects a `Map`.
+ * @returns A plain object (dictionary) created from the key-value pairs in the `Map`.
+ *          The resulting object will have keys and values corresponding to those in the `Map`.
+ */
+export const mapToDict = (map: any):any => Object.fromEntries(map);
+
+/**
+ * Converts a plain object (dictionary) back into a `Map`.
+ *
+ * @param dic - The dictionary (plain object) to be converted into a `Map`.
+ *              It is of type `any`, meaning it can accept any input, but it expects a plain object.
+ * @returns A `Map` created from the key-value pairs in the dictionary.
+ *          The resulting `Map` will have the same keys and values as the original plain object.
+ */
+export const dictToMap = (dic: any):any => new Map(Object.entries(dic));

@@ -1,17 +1,23 @@
 import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import React, {CSSProperties, Fragment, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
-import {ChevronDown, ChevronRight, CirclePlus, CloudAlert, DiamondPlus, ListTree, Plus} from "lucide-react";
+import {ChevronDown, ChevronRight, CirclePlus, CloudAlert, DiamondPlus, ListTree, Plus, Info} from "lucide-react";
 import * as Icons from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
 import {useElementSize} from "../../../hooks/useElementSize";
 import {LinkedCard} from "../../form/LinkedCard";
 import {LeftPanelComponentEditor} from "./LeftPanelComponentEditor";
-import {searchElementWithIdentifier, travelHtmlObject} from "../../../../utils/html/htmlUtils";
+import {
+    htmlCanHaveChild,
+    htmlHaveChild,
+    searchElementWithIdentifier,
+    travelHtmlObject
+} from "../../../../utils/html/htmlUtils";
 import {deepCopy, disableTextSelection, enableTextSelection} from "../../../../utils/objectUtils";
 import {ActionContext, ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import toast from "react-hot-toast";
+import {useDynamicClass} from "../../../hooks/useDynamicClass";
 
 interface LeftPaneComponentTreeProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
@@ -37,6 +43,19 @@ export const LeftPaneComponentTree = memo(({
     const [hidedIdentifier, setHidedIdentifier] = useState<Set<string>>(new Set());
 
     const treeContainer = useElementSize();
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+    `);
 
     const onBuildingHover = (objectStorage?:ObjectStorage) => {
         setHoverIdentifier(objectStorage?.object.identifier);
@@ -94,34 +113,78 @@ export const LeftPaneComponentTree = memo(({
 
     const flatNodes = useMemo(() => {
         const nodes: FlatNode[] = [];
-        const traverse = (obj: HtmlObject, depth: number = 0) => {
-            const isHidden = hidedIdentifier.has(obj.identifier);
+        const traverse = (obj: HtmlObject, parent:HtmlObject|undefined, depth: number = 0) => {
+            const isHidden = parent != undefined && hidedIdentifier.has(parent.identifier);
             nodes.push({ object: obj, depth, isHidden });
             if (!isHidden) {
                 if (obj.type === 'block' && obj.content) {
-                    traverse(obj.content, depth + 1);
+                    traverse(obj.content, obj, depth + 1);
                 } else if (obj.type === 'list' && obj.content) {
-                    obj.content.forEach((child) => traverse(child, depth + 1));
+                    obj.content.forEach((child) => traverse(child, obj, depth + 1));
                 }
             }
         };
         if (Project.state.editedHtml) {
-            traverse(Project.state.editedHtml.html.object);
+            traverse(Project.state.editedHtml.html.object, undefined);
         }
         return nodes.filter((node) => !node.isHidden); // Only visible nodes
     }, [Project.state.editedHtml, hidedIdentifier]);
 
     return (
-        <>
-            <div style={{display:"flex", flexDirection:"row", gap:"10px",alignItems:"center", borderBottom:"2px solid var(--nodius-background-paper)", paddingBottom:"5px"}}>
-                <ListTree height={26} width={26}/>
-                <h5 style={{fontSize:"16px", fontWeight:"400"}}>Component Tree</h5>
+        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
+            {/* Header Section */}
+            <div style={{
+                display:"flex",
+                flexDirection:"row",
+                gap:"12px",
+                alignItems:"center",
+                borderBottom:"2px solid var(--nodius-primary-main)",
+                paddingBottom:"12px"
+            }}>
+                <div style={{
+                    background: "var(--nodius-primary-main)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    <ListTree height={24} width={24} color="white"/>
+                </div>
+                <div style={{display:"flex", flexDirection:"column"}}>
+                    <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Component Tree</h5>
+                    <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>View and organize your component hierarchy</p>
+                </div>
             </div>
+
+            {/* Info Card */}
+            <div className={infoCardClass}>
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    color: "var(--nodius-primary-main)",
+                    fontWeight: 500,
+                    fontSize: "14px"
+                }}>
+                    <Info height={18} width={18}/>
+                    <span>Tree Navigation</span>
+                </div>
+                <div style={{
+                    fontSize: "13px",
+                    lineHeight: 1.6,
+                    color: Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)
+                }}>
+                    Click to select components, drag to reorder them. Use the + icon to add child components to containers.
+                </div>
+            </div>
+
+            {/* Tree Container */}
             <div ref={treeContainer.refCallBack} style={{flex:"1", width:"100%", height:"100%", position:"relative"}}>
-                <div style={{position:"absolute", inset:"0", overflowX:"hidden"}}>
+                <div style={{position:"absolute", inset:"0", overflowX:"hidden", overflowY:"auto", paddingRight:"4px"}}>
                     {flatNodes.map(({ object, depth }) => (
                         <TreeNode
-                            key={object.identifier} // Unique key
+                            key={object.identifier}
                             object={object}
                             depth={depth}
                             componentsList={componentsList}
@@ -136,6 +199,8 @@ export const LeftPaneComponentTree = memo(({
                     ))}
                 </div>
             </div>
+
+            {/* Component Card Popup */}
             {showComponentCard ? (
                 <LinkedCard
                     element={showComponentCard.element}
@@ -154,8 +219,7 @@ export const LeftPaneComponentTree = memo(({
                     </div>
                 </LinkedCard>
             ) : null}
-
-        </>
+        </div>
     )
 })
 
@@ -345,7 +409,9 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
     }, [hidedIdentifier, object.identifier, setHidedIdentifier]);
 
 
-    const canHaveChild = (object.type === "block" && object.content == undefined) || object.type === "list";
+
+    const canHaveChild = htmlCanHaveChild(object);
+    const haveChild = htmlHaveChild(object);
 
     const hoverStyle: CSSProperties = hoverIdentifier === object.identifier ? { backgroundColor: Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].light, 0.5) } : {};
     const selectedStyle: CSSProperties = selectedIdentifier === object.identifier ? { backgroundColor: Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].main, 0.3) } : {};
@@ -397,10 +463,12 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                             evt.stopPropagation();
                             props.setShowComponentCard({identifier: object.identifier, element:evt.target as HTMLElement});
                         }} />}
-                        {hidedIdentifier.has(object.identifier) ? (
-                            <ChevronRight width={16} height={16} onClick={toggleHide} />
-                        ) : (
-                            <ChevronDown width={16} height={16} onClick={toggleHide} />
+                        {haveChild && (
+                            hidedIdentifier.has(object.identifier) ? (
+                                <ChevronRight width={16} height={16} onClick={toggleHide} />
+                            ) : (
+                                <ChevronDown width={16} height={16} onClick={toggleHide} />
+                            )
                         )}
                     </div>
                 </div>

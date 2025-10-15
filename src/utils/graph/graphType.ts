@@ -1,5 +1,6 @@
 import {pickKeys} from "../objectUtils";
 import {HTMLDomEvent, HtmlObject} from "../html/htmlType";
+import {MotorEventMap} from "../../client/schema/motor/graphicalMotor";
 
 export type NodeType = "html" | "entryType" | string;
 export type handleSide = "T" | "D" | "R" | "L" | "0"
@@ -119,7 +120,7 @@ export interface NodeTypeConfig {
     content: HtmlObject,
     content_key: string,
     alwaysRendered: boolean,
-    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
+    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | keyof MotorEventMap>>,
     border: {
         radius: number,
         width: number,
@@ -165,13 +166,24 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
             description: "Open HTML Editor for the current node"
         },
         {
-            name: "nodeEnter" as any,
+            name: "nodeEnter",
             call: `
                 const render_id = node._key;
                 const htmlRender = await initiateNewHtmlRenderer(render_id, container);
                 htmlRender.render(node.data);
             `
+        },
+        {
+            name: "nodeUpdate",
+            call: `
+                const render_id = node._key;
+                const htmlRender = getHtmlRenderer(render_id);
+                if(htmlRender) {
+                    htmlRender.render(node.data);
+                }
+            `
         }
+
     ],
     border: {
         radius:10,

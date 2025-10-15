@@ -1,6 +1,6 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass, EnumClass} from "../../../../utils/dataType/dataType";
-import {Binary, FileUp, List, ListTree, Plus, Search, Trash2, X} from "lucide-react";
+import {Binary, FileUp, List, ListTree, Plus, Search, Trash2, X, Info, AlertCircle} from "lucide-react";
 import {Input} from "../../form/Input";
 import {Fade} from "../../animate/Fade";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
@@ -157,16 +157,85 @@ export const LeftPanelEnumEditor = memo((
         & {
             width: 100%;
             cursor: pointer;
-            padding: 3px 12px;
-            border-radius: 6px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            transition: var(--nodius-transition-default);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
-        
+
         &:hover {
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+            box-shadow: var(--nodius-shadow-1);
         }
-        
+
         &.active {
-            background-color: var(--nodius-primary-main)
+            background-color: var(--nodius-primary-main);
+            box-shadow: var(--nodius-shadow-2);
+        }
+
+        &.active:hover {
+            background-color: ${Theme.state.changeBrightness(Theme.state.primary[Theme.state.theme].main, 0.1, "positive")};
+        }
+    `);
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        & .info-header {
+            display: flex;
+            alignItems: center;
+            gap: 8px;
+            color: var(--nodius-primary-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        & .info-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+    `);
+
+    const emptyStateClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            border: 2px dashed ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.15)};
+            border-radius: 12px;
+            padding: 32px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+        }
+
+        & .empty-icon {
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.3)};
+        }
+
+        & .empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+
+        & .empty-description {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.5)};
+            max-width: 300px;
         }
     `);
 
@@ -306,42 +375,107 @@ export const LeftPanelEnumEditor = memo((
             </div>
 
 
-            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
+            <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
 
-                <div style={{display:"flex", flexDirection:"row", gap:"10px",alignItems:"center", borderBottom:"2px solid var(--nodius-background-paper)", paddingBottom:"5px"}}>
-                    <List height={26} width={26}/>
-                    <h5 style={{fontSize:"16px", fontWeight:"400"}}>Enums</h5>
-                    <div style={{display:"flex", flex:"1", justifyContent:"right", gap:"8px", flexDirection:"row"}}>
-                        <div
-                            style={{padding:"4px", borderRadius:"8px", backgroundColor: "var(--nodius-primary-main)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer"}}
-                            onClick={addEnumPrompt}
-                        >
-                            <Plus height={20} width={20} />
-                        </div>
+                {/* Header Section */}
+                <div style={{
+                    display:"flex",
+                    flexDirection:"row",
+                    gap:"12px",
+                    alignItems:"center",
+                    borderBottom:"2px solid var(--nodius-primary-main)",
+                    paddingBottom:"12px"
+                }}>
+                    <div style={{
+                        background: "var(--nodius-primary-main)",
+                        borderRadius: "8px",
+                        padding: "8px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                    }}>
+                        <List height={24} width={24} color="white"/>
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column", flex:"1"}}>
+                        <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Enumerations</h5>
+                        <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>Define predefined value sets</p>
+                    </div>
+                    <div
+                        style={{
+                            padding:"8px",
+                            borderRadius:"8px",
+                            backgroundColor: "var(--nodius-primary-main)",
+                            display:"flex",
+                            alignItems:"center",
+                            justifyContent:"center",
+                            cursor:"pointer",
+                            transition:"var(--nodius-transition-default)"
+                        }}
+                        onClick={addEnumPrompt}
+                        title="Create new enum"
+                    >
+                        <Plus height={20} width={20} color="white"/>
                     </div>
                 </div>
 
+                {/* Info Card */}
+                <div className={infoCardClass}>
+                    <div className="info-header">
+                        <Info height={18} width={18}/>
+                        <span>What are Enums?</span>
+                    </div>
+                    <div className="info-content">
+                        Enumerations define a fixed set of allowed values. Use enums to restrict choices and ensure data consistency across your workflow.
+                    </div>
+                </div>
+
+                {/* Search Bar */}
                 <Input
                     type={"text"}
-                    placeholder={"Search Enums..."}
+                    placeholder={"Search enums..."}
                     value={searchValue}
                     onChange={(value) => setSearchValue(value)}
                     startIcon={<Search height={18} width={18}/>}
                 />
-                <div style={{padding:"5px", height:"100%", width:"100%", position:"relative"}}>
-                    <div style={{position:"absolute", inset:"0px", overflowY:"auto"}}>
+
+                {/* Enum List */}
+                <div style={{padding:"0px", height:"100%", width:"100%", position:"relative"}}>
+                    <div style={{position:"absolute", inset:"0px", overflowY:"auto", paddingRight:"4px"}}>
                         {searchedEnum ? (
-                            searchedEnum.map((enum_, i) => (
-                                <div
-                                    key={i}
-                                    className={`${enumSelectionButtonClass} ${editingClass?._key === enum_._key ? "active" : ""}`}
-                                    onClick={() => setEditingClass(enum_)}
-                                    style={{marginTop:i > 0 ? "6px" : "0px"}}
-                                >
-                                    {enum_.name}
+                            searchedEnum.length > 0 ? (
+                                <div style={{display:"flex", flexDirection:"column", gap:"8px"}}>
+                                    {searchedEnum.map((enum_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`${enumSelectionButtonClass} ${editingClass?._key === enum_._key ? "active" : ""}`}
+                                            onClick={() => setEditingClass(enum_)}
+                                        >
+                                            <span style={{fontWeight:"500", fontSize:"14px"}}>{enum_.name}</span>
+                                            {enum_.description && (
+                                                <span style={{fontSize:"12px", opacity:"0.7"}}>
+                                                    {enum_.description}
+                                                </span>
+                                            )}
+                                            <span style={{fontSize:"12px", opacity:"0.6"}}>
+                                                {enum_.enum.length} {enum_.enum.length === 1 ? 'value' : 'values'}
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))
-                        ) : "loading"}
+                            ) : (
+                                <div className={emptyStateClass}>
+                                    <AlertCircle className="empty-icon" height={48} width={48}/>
+                                    <div className="empty-title">No Enums Found</div>
+                                    <div className="empty-description">
+                                        {searchValue ? `No enums match "${searchValue}". Try a different search term.` : "No enums created yet. Click the + button to create your first enum."}
+                                    </div>
+                                </div>
+                            )
+                        ) : (
+                            <div style={{padding:"20px", textAlign:"center", opacity:"0.6"}}>
+                                Loading enums...
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

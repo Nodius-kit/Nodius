@@ -1,5 +1,6 @@
 // Operation types enum (using short codes for minimal JSON)
 import {deepCopy} from "../objectUtils";
+import {GraphInstructions} from "./wsObject";
 
 export enum OpType {
     SET = 1,           // elementSet
@@ -240,6 +241,7 @@ export function encodeInstruction(instruction: Instruction): string {
 }
 
 export type BeforeApplyInstruction = (objectBeingApplied?:any) => boolean;
+export type BeforeApplyInstructionWithContext = (currentGraphInstrution:GraphInstructions, objectBeingApplied?:any) => boolean;
 
 // Decoder: Apply instruction to an object
 export function applyInstruction<T = any>(target: T, instruction: Instruction | string, beforeApply?: BeforeApplyInstruction): Result<T> {

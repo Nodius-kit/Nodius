@@ -73,3 +73,6 @@ export const travelHtmlObject = (object:HtmlObject, callback:(object:HtmlObject)
     }
     return true;
 }
+
+export const htmlCanHaveChild = (object:HtmlObject) => (object.type === "block" && object.content == undefined) || object.type === "list";
+export const htmlHaveChild = (object:HtmlObject) => (object.type === "block" && object.content != undefined) || (object.type === "list" && object.content != undefined && object.content.length > 0);

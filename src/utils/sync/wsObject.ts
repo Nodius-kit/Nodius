@@ -18,15 +18,16 @@ export interface WSPing {
 
 export interface WSApplyInstructionToGraph {
     type: "applyInstructionToGraph",
-    instructions: Array<
-        {
-            i:Instruction,
-            nodeId?: string,
-            edgeId?: string,
-            applyUniqIdentifier?:string, // key to apply unique identifier [number]
-            targetedIdentifier?:string, // security
-        }
-    >,
+    instructions: Array<GraphInstructions>,
+}
+
+export interface GraphInstructions {
+    i:Instruction,
+    nodeId?: string,
+    edgeId?: string,
+    applyUniqIdentifier?:string, // key to apply unique identifier
+    targetedIdentifier?:string, // security check
+    noRedraw?: boolean,
 }
 
 export interface WSRegisterUser {
