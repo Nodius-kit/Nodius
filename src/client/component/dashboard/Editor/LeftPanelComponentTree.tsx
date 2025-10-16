@@ -1,7 +1,17 @@
 import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import React, {CSSProperties, Fragment, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
-import {ChevronDown, ChevronRight, CirclePlus, CloudAlert, DiamondPlus, ListTree, Plus, Info} from "lucide-react";
+import {
+    ChevronDown,
+    ChevronRight,
+    CirclePlus,
+    CloudAlert,
+    DiamondPlus,
+    ListTree,
+    Plus,
+    Info,
+    Trash2
+} from "lucide-react";
 import * as Icons from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
@@ -181,7 +191,7 @@ export const LeftPaneComponentTree = memo(({
 
             {/* Tree Container */}
             <div ref={treeContainer.refCallBack} style={{flex:"1", width:"100%", height:"100%", position:"relative"}}>
-                <div style={{position:"absolute", inset:"0", overflowX:"hidden", overflowY:"auto", paddingRight:"4px"}}>
+                <div style={{position:"absolute", inset:"0", overflowX:"hidden", overflowY:"auto"}}>
                     {flatNodes.map(({ object, depth }) => (
                         <TreeNode
                             key={object.identifier}
@@ -458,11 +468,25 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
 
                         <h5 style={{fontWeight:"400", fontSize:"16px"}} color={"var(--nodius-text-secondary)"}>{object.name}</h5>
                     </div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', justifyContent: 'right', gap: '6px', alignItems: 'center' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'row', justifyContent: 'right', gap: '6px', alignItems: 'center', paddingRight:"4px" }}>
+
+                        {selectedIdentifier === object.identifier && object.identifier !== "root" && (
+                            <Trash2 width={16} height={16} onClick={() => {
+                                const deleteEvent = new KeyboardEvent('keydown', {
+                                    key: 'Delete',
+                                    code: 'Delete',
+                                    bubbles: true,
+                                    cancelable: true
+                                });
+                                document.dispatchEvent(deleteEvent);
+                            }} />
+                        )}
+
                         {canHaveChild && <CirclePlus height={22} width={22} strokeWidth={1} onClick={(evt) => {
                             evt.stopPropagation();
                             props.setShowComponentCard({identifier: object.identifier, element:evt.target as HTMLElement});
                         }} />}
+
                         {haveChild && (
                             hidedIdentifier.has(object.identifier) ? (
                                 <ChevronRight width={16} height={16} onClick={toggleHide} />

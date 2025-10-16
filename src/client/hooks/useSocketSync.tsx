@@ -398,6 +398,7 @@ export const useSocketSync = () => {
 
                     let redrawGraph = false;
                     for(const instruction of instructions) {
+                        console.log(instruction);
                         if(instruction.edgeId && !instruction.noRedraw) {
                             redrawGraph = true;
                         } else if(instruction.nodeId) {
