@@ -261,13 +261,13 @@ export const useSocketSync = () => {
         })
     }, [openHtmlClass]);
 
-    const handleIntructionToGraph = useCallback(async (WSMessage:WSApplyInstructionToGraph, beforeApply?: BeforeApplyInstructionWithContext):Promise<{status:boolean, error?:string}> => {
+    const handleIntructionToGraph = useCallback(async (instructions:GraphInstructions[], beforeApply?: BeforeApplyInstructionWithContext):Promise<{status:boolean, error?:string}> => {
         if(!Project.state.graph || !Project.state.selectedSheetId) return {
             status: false,
             error: "Graph not initialized"
         };
 
-        for(const instruction of WSMessage.instructions) {
+        for(const instruction of instructions) {
             if(instruction.nodeId) {
                 const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(instruction.nodeId);
                 if(!node) {
@@ -375,6 +375,80 @@ export const useSocketSync = () => {
     }, [Project.state.graph, Project.state.editedHtml, Project.state.selectedSheetId]);
 
 
+    const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+        const instructionOutput = await handleIntructionToGraph(instructions,(currentGraphInstrution, objectBeingApplied) => {
+            if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+                const object:HtmlObject = objectBeingApplied;
+                if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
+                    console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
+                    return false;
+                }
+                return true;
+            }
+            return true;
+        });
+
+        if(instructionOutput.status) {
+
+            let redrawGraph = false;
+            for(const instruction of instructions) {
+                if(instruction.edgeId && !instruction.noRedraw) {
+                    redrawGraph = true;
+                } else if(instruction.nodeId) {
+                    // if instruction (coming from another user) include current editing node, apply instruction to the edited html
+                    if(Project.state.editedHtml && instruction.nodeId === Project.state.editedHtml.node._key) {
+                        const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+                        let objectHtml: any = newNode;
+                        Project.state.editedHtml.pathOfRender.forEach((path) => {
+                            objectHtml = objectHtml[path];
+                        });
+                        Project.state.editedHtml.html.object = objectHtml;
+                        Project.state.editedHtml.node = newNode;
+                        Project.dispatch({
+                            field: "editedHtml",
+                            value: {...Project.state.editedHtml}
+                        });
+                        if(!instruction.noRedraw) {
+                            await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html.object);
+                        }
+
+                    } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
+                        const renderers = htmlRenderer.current[instruction.nodeId];
+                        const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+                        for(const renderer of Object.values(renderers)) {
+                            if(!instruction.noRedraw) {
+                                let objectHtml: any = newNode;
+                                renderer.pathOfRender.forEach((path) => {
+                                    objectHtml = objectHtml[path];
+                                });
+                                await renderer.htmlMotor.render(objectHtml);
+                            }
+                        }
+
+                    } else if(!instruction.noRedraw) {
+                        redrawGraph = true;
+                    }
+
+                    // trigger node event update
+                    const nodeHtml = document.querySelector('[data-node-key="'+instruction.nodeId+'"]');
+                    if(nodeHtml) {
+                        nodeHtml.dispatchEvent(new CustomEvent<GraphInstructions>("nodeUpdate", {
+                            bubbles: false,
+                            detail: instruction
+                        }));
+                    }
+                }
+            }
+
+            if(redrawGraph) {
+                gpuMotor.current!.requestRedraw();
+            }
+            return undefined;
+        } else {
+            return instructionOutput.error ?? "Unknown error"
+        }
+    }, [Project.state.graph, Project.state.editedHtml, handleIntructionToGraph, Project.state.selectedSheetId]);
+
     const updateGraph = useCallback(async (instructions:Array<GraphInstructions>):Promise<ActionContext> => {
         const start = Date.now();
         const message:WSMessage<WSApplyInstructionToGraph> = {
@@ -386,82 +460,17 @@ export const useSocketSync = () => {
 
         if(response && response._response) {
             if(response._response.status) {
-                const instructionOutput = await handleIntructionToGraph(response,(currentGraphInstrution, objectBeingApplied) => {
-                    if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
-                        const object:HtmlObject = objectBeingApplied;
-                        if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
-                            console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
-                            return false;
-                        }
-                        return true;
-                    }
-                    return true;
-                });
-
-                if(instructionOutput.status) {
-
-                    let redrawGraph = false;
-                    for(const instruction of instructions) {
-                        if(instruction.edgeId && !instruction.noRedraw) {
-                            redrawGraph = true;
-                        } else if(instruction.nodeId) {
-                            // if instruction (coming from another user) include current editing node, apply instruction to the edited html
-                            if(Project.state.editedHtml && instruction.nodeId === Project.state.editedHtml.node._key) {
-                                const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
-                                let objectHtml: any = newNode;
-                                Project.state.editedHtml.pathOfRender.forEach((path) => {
-                                    objectHtml = objectHtml[path];
-                                });
-                                Project.state.editedHtml.html.object = objectHtml;
-                                Project.state.editedHtml.node = newNode;
-                                Project.dispatch({
-                                    field: "editedHtml",
-                                    value: {...Project.state.editedHtml}
-                                });
-                                if(!instruction.noRedraw) {
-                                    await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html.object);
-                                }
-
-                            } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
-                                const renderers = htmlRenderer.current[instruction.nodeId];
-                                const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
-                                for(const renderer of Object.values(renderers)) {
-                                    if(!instruction.noRedraw) {
-                                        let objectHtml: any = newNode;
-                                        renderer.pathOfRender.forEach((path) => {
-                                            objectHtml = objectHtml[path];
-                                        });
-                                        await renderer.htmlMotor.render(objectHtml);
-                                    }
-                                }
-
-                            } else if(!instruction.noRedraw) {
-                                redrawGraph = true;
-                            }
-
-                            // trigger node event update
-                            const nodeHtml = document.querySelector('[data-node-key="'+instruction.nodeId+'"]');
-                            if(nodeHtml) {
-                                nodeHtml.dispatchEvent(new CustomEvent<GraphInstructions>("nodeUpdate", {
-                                    bubbles: false,
-                                    detail: instruction
-                                }));
-                            }
-                        }
-                    }
-
-                    if(redrawGraph) {
-                        gpuMotor.current!.requestRedraw();
-                    }
+                const output = await applyGraphInstructions(response.instructions);
+                if(output) {
                     return {
+                        reason: output,
                         timeTaken: Date.now() - start,
-                        status: true,
+                        status: false
                     }
                 } else {
                     return {
                         timeTaken: Date.now() - start,
-                        status: false,
-                        reason: instructionOutput.error ?? "Unknown error"
+                        status: true
                     }
                 }
             } else {
@@ -480,7 +489,7 @@ export const useSocketSync = () => {
                 status: false,
             }
         }
-    }, [Project.state.editedHtml, Project.state.graph]);
+    }, [applyGraphInstructions]);
 
     useEffect(() => {
         Project.dispatch({
@@ -607,12 +616,11 @@ export const useSocketSync = () => {
 
 
     const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
-        console.log("Recieved packet", packet);
         if(packet.type === "applyInstructionToGraph") {
             const message = packet as WSMessage<WSApplyInstructionToGraph>;
-            await updateGraph(message.instructions);
+            await applyGraphInstructions(message.instructions);
         }
-    }, [updateGraph]);
+    }, [applyGraphInstructions]);
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);
