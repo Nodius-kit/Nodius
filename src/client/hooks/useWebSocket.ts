@@ -18,7 +18,7 @@ interface WebSocketHookReturn {
     connect: (url: string) => Promise<boolean>;
     disconnect: () => void;
     sendMessage:  <T extends any>(message: WSMessage<T>) => Promise<WSResponseMessage<WSMessage<T>>|undefined>;
-    setMessageHandler: (handler: (message: any) => void) => void;
+    setMessageHandler: (handler: (message: any) => Promise<void>) => void;
 }
 
 export const useWebSocket = (
@@ -30,7 +30,7 @@ export const useWebSocket = (
     const urlRef = useRef<string>('');
     const reconnectTimeoutRef = useRef<NodeJS.Timeout>(undefined);
     const reconnectAttemptsRef = useRef(0);
-    const messageHandlerRef = useRef<(message: any) => void>(undefined);
+    const messageHandlerRef = useRef<(message: any) => Promise<void>>(undefined);
     const messageReponseRef = useRef<Record<number, (message:WSResponseMessage<WSMessage<any>>) => void>>({});
     const messageResponseIdRef= useRef<number>(0);
     const pendingConnectResolversRef = useRef<{ resolve: (success: boolean) => void }[]>([]);
@@ -155,7 +155,7 @@ export const useWebSocket = (
                 }, 5000);
             };
 
-            ws.onmessage = (event) => {
+            ws.onmessage = async (event) => {
                 const dataSize = new Blob([event.data]).size;
 
                 setStats(prev => ({
@@ -168,7 +168,6 @@ export const useWebSocket = (
                 bytesCountRef.current += dataSize;
 
                 const data = JSON.parse(event.data) as WSMessage<any>;
-
                 if(data._id) {
                     messageReponseRef.current[data._id]?.(data);
                 } else {
@@ -182,7 +181,7 @@ export const useWebSocket = (
 
                     // Call user message handler
                     if (messageHandlerRef.current) {
-                        messageHandlerRef.current(data);
+                        await messageHandlerRef.current(data);
                     }
                 }
 
@@ -307,7 +306,7 @@ export const useWebSocket = (
         }
     };
 
-    const setMessageHandler = useCallback((handler: (message: any) => void) => {
+    const setMessageHandler = useCallback((handler: (message: any) => Promise<void>) => {
         messageHandlerRef.current = handler;
     }, []);
 

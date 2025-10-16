@@ -325,12 +325,14 @@ export class HtmlRender {
             if (element.textContent !== newText) {
                 element.textContent = newText;
             }
+            this.addDebugListeners(storage);
             return;
         } else if (newObject.type === "html") {
             const newHtml = await this.parseContent(newObject.content, storage);
             if (element.innerHTML !== newHtml) {
                 element.innerHTML = newHtml;
             }
+            this.addDebugListeners(storage);
             return;
         }
 
@@ -575,7 +577,8 @@ export class HtmlRender {
 
     private addDebugListeners(storage: ObjectStorage) {
         if (!this.buildingMode) return;
-        storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
+
+        //storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
 
         // this interaction is only available for entry component, so the parent should be null or having delimiter=true
         const parentIdentifier = storage.element.parentElement?.getAttribute("data-identifier");
@@ -727,6 +730,7 @@ export class HtmlRender {
                 element.dispatchEvent(type === "hover" ? new Event("mouseenter") : new Event("click"));
             }
         } else {
+
             if(type === "hover" && this.hoverObjectIdentifier) {
                 const hoverStorage = this.objectStorage.get(this.hoverObjectIdentifier);
                 if (hoverStorage) {

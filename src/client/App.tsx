@@ -5,15 +5,14 @@ import {MultiFade} from "./component/animate/MultiFade";
 import {DashboardWorkFlow} from "./component/dashboard/DashboardWorkFlow";
 import {SchemaEditor} from "./component/dashboard/SchemaEditor";
 import {useSocketSync} from "./hooks/useSocketSync";
-import {useCallback, useContext, useEffect, useRef, useState} from "react";
-import {Node, NodeType, NodeTypeConfig, NodeTypeHtmlConfig} from "../utils/graph/graphType";
-import {HtmlRender} from "../process/html/HtmlRender";
-import {EditedHtmlType, ProjectContext} from "./hooks/contexts/ProjectContext";
+import {useCallback, useContext, useEffect, useRef} from "react";
+import {Node} from "../utils/graph/graphType";
+import {EditedHtmlType, htmlRenderContext, ProjectContext} from "./hooks/contexts/ProjectContext";
 import {documentHaveActiveElement} from "../utils/objectUtils";
 import {getInverseInstruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 
-export type OpenHtmlEditorFct = (node:Node<any>,htmlRender:HtmlRender, pathToEdit:string[], onClose?: () => void) => void;
+export type OpenHtmlEditorFct = (node:Node<any>,htmlRender:htmlRenderContext, onClose?: () => void) => void;
 
 export const App = () => {
 
@@ -27,15 +26,15 @@ export const App = () => {
 
 
     const onCloseEditor = useRef<() => void>(undefined);
-    const openHtmlEditor = useCallback((node:Node<any>,htmlRender:HtmlRender, pathToEdit:string[], onClose?: () => void) => {
+    const openHtmlEditor:OpenHtmlEditorFct = useCallback((node:Node<any>,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
         if(!gpuMotor.current) return;
         onCloseEditor.current = onClose;
         if(node.type === "html" && Project.state.html) {
             const newEditedHtml:EditedHtmlType = {
                 node: node,
                 html: Project.state.html,
-                htmlRender: htmlRender,
-                pathToEdit: pathToEdit,
+                htmlRender: htmlRenderer.htmlMotor,
+                pathOfRender: htmlRenderer.pathOfRender,
             }
             Project.dispatch({
                 field: "editedHtml",
@@ -44,7 +43,7 @@ export const App = () => {
         }
     }, [Project.state.html]);
     const onNodeLeave = useCallback((node:Node<any>) => {
-        if(node._key === Project.state.editedHtml?.node._key) {
+        if (node._key === Project.state.editedHtml?.node._key) {
             Project.dispatch({
                 field: "editedHtml",
                 value: undefined
@@ -52,15 +51,25 @@ export const App = () => {
             onCloseEditor.current?.();
         }
 
+        const nodeConfig = Project.state.nodeTypeConfig[node.type];
+        if (!nodeConfig.alwaysRendered) {
+            const renderers = Project.state.getHtmlRenderer!(node);
+            Object.values(renderers ?? {}).forEach(renderer => {
+                renderer.htmlMotor.dispose();
+            })
+        }
+
         const nodeLeaveEvent = new CustomEvent("nodeLeave", {});
         const nodeElement = document.querySelector("[data-node-key='"+node._key+"']");
         if(nodeElement) {
             nodeElement.dispatchEvent(nodeLeaveEvent);
         }
-    }, [Project.state.editedHtml]);
+    }, [Project.state.editedHtml, Project.state.getHtmlRenderer]);
 
     const onNodeEnter = useCallback((node:Node<any>) => {
-        const nodeEnterEvent = new CustomEvent("nodeEnter", {});
+        const nodeEnterEvent = new CustomEvent("nodeEnter", {
+            bubbles: false
+        });
         const nodeElement = document.querySelector("[data-node-key='"+node._key+"']");
         if(nodeElement) {
             nodeElement.dispatchEvent(nodeEnterEvent);
@@ -158,9 +167,9 @@ export const App = () => {
         setTimeout(() => {
 
             if(Project.state.editedHtml) {
-                Object.values(Project.state.getHtmlAllRenderer!()).forEach((item) => {
-                    item.dispose();
-                });
+                Object.values(Project.state.getHtmlAllRenderer?.() ?? {}).forEach(node =>
+                    Object.values(node).forEach(item => item.htmlMotor?.dispose())
+                );
                 Project.dispatch({
                     field: "editedHtml",
                     value: undefined

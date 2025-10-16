@@ -113,6 +113,8 @@ export interface Graph {
 }
 
 
+export type MotorDomEventMap = "nodeEnter" | "nodeUpdate"
+
 
 export interface NodeTypeConfig {
     _key: string,
@@ -120,7 +122,7 @@ export interface NodeTypeConfig {
     content: HtmlObject,
     content_key: string,
     alwaysRendered: boolean,
-    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | keyof MotorEventMap>>,
+    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
         radius: number,
         width: number,
@@ -144,23 +146,22 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
             name: "dblclick",
             call: `
             
-                const render_id = node._key;
-                const htmlRender = getHtmlRenderer(render_id);
+                const render_id = "main";
+                const htmlRenderer = getHtmlRenderer(node)[render_id];
                 
                 gpuMotor.smoothFitToNode(node._key, {
                     padding: 400
                 });
                 
-                const pathToEdit = ["data"]; // path inside the node where is stored the html
                 
-                openHtmlEditor(node, htmlRender, pathToEdit, () => {
+                openHtmlEditor(node, htmlRenderer, () => {
                     // on close
                     container.style.cursor = "cursor";
-                    htmlRender.setBuildingMode(false);
+                    htmlRenderer.htmlMotor.setBuildingMode(false);
                 });
                 container.style.cursor = "initial";
                 
-                htmlRender.setBuildingMode(true);
+                htmlRenderer.htmlMotor.setBuildingMode(true);
                 
             `,
             description: "Open HTML Editor for the current node"
@@ -168,19 +169,14 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
         {
             name: "nodeEnter",
             call: `
-                const render_id = node._key;
-                const htmlRender = await initiateNewHtmlRenderer(render_id, container);
-                htmlRender.render(node.data);
-            `
-        },
-        {
-            name: "nodeUpdate",
-            call: `
-                const render_id = node._key;
-                const htmlRender = getHtmlRenderer(render_id);
-                if(htmlRender) {
-                    htmlRender.render(node.data);
-                }
+                
+                // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
+                if(getHtmlRenderer(node)) return;
+            
+                const render_id = "main"; // unique render id in the node
+                const pathOfRender = ["data"]; // path inside the node where is stored the html
+                const renderContainer = container; // where render the html in the DOM 
+                const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender);
             `
         }
 

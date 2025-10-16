@@ -63,7 +63,6 @@ export const LeftPaneComponentTree = memo(({
             display: flex;
             flex-direction: column;
             gap: 12px;
-            margin-bottom: 16px;
         }
     `);
 
@@ -112,7 +111,6 @@ export const LeftPaneComponentTree = memo(({
             }
         }
         if(output) {
-            console.log(output);
             if(!output.status) {
                 toast.error(output.reason ?? "internal error")
             }
@@ -141,7 +139,7 @@ export const LeftPaneComponentTree = memo(({
     }, [Project.state.editedHtml, hidedIdentifier]);
 
     return (
-        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
+        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
             {/* Header Section */}
             <div style={{
                 display:"flex",
@@ -188,6 +186,8 @@ export const LeftPaneComponentTree = memo(({
                     Click to select components, drag to reorder them. Use the + icon to add child components to containers.
                 </div>
             </div>
+
+            <hr/>
 
             {/* Tree Container */}
             <div ref={treeContainer.refCallBack} style={{flex:"1", width:"100%", height:"100%", position:"relative"}}>

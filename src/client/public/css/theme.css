@@ -35,3 +35,8 @@ img {
     max-width: 100%;
     height: auto;
 }
+
+hr {
+    border-color: var(--nodius-background-paper);
+    border-width: 1px;
+}

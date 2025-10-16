@@ -350,7 +350,6 @@ export const LeftPanelComponentEditor = memo(({
             display: flex;
             flex-direction: column;
             gap: 12px;
-            margin-bottom: 16px;
         }
 
         & .info-header {
@@ -370,7 +369,7 @@ export const LeftPanelComponentEditor = memo(({
     `);
 
     return (
-        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"16px", height:"100%", width:"100%"}}>
+        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
             {/* Header Section */}
             <div style={{
                 display:"flex",
@@ -406,6 +405,8 @@ export const LeftPanelComponentEditor = memo(({
                     Drag components from the library and drop them onto your canvas. Components can be nested and rearranged to create complex layouts.
                 </div>
             </div>
+
+            <hr/>
 
             {/* Search Bar */}
             <Input

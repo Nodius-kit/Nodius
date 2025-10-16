@@ -125,6 +125,13 @@ export class WebSocketManager {
             for(const sheetId in this.managedGraph[graphId]) {
                 // each sheet
                 const sheet = this.managedGraph[graphId][sheetId];
+
+                // Remove all disconnected users
+                sheet.user = sheet.user.filter(user =>
+                    user.ws.readyState === WebSocket.OPEN ||
+                    user.ws.readyState === WebSocket.CONNECTING
+                );
+
                 if(sheet.user.length !== 0) {
                     AllEmpty = false;
                 }
@@ -206,7 +213,7 @@ export class WebSocketManager {
                 }
                 return;
             } else if(jsonData.type === "registerUser") {
-                const message:WSRegisterUser = jsonData;
+                const message:WSMessage<WSRegisterUser> = jsonData;
                 this.deleteUser(message.userId);
 
                 const peer = clusterManager.getGraphPeerId(message.graphKey);
@@ -232,7 +239,7 @@ export class WebSocketManager {
                     ws.close();
                     return;
                 }
-                const message:WSApplyInstructionToGraph = jsonData;
+                const message:WSMessage<WSApplyInstructionToGraph> = jsonData;
                 if(message.instructions.length > 20) {
                     ws.close();
                 }
@@ -421,7 +428,10 @@ export class WebSocketManager {
 
                 for(const otherUser of sheet.user) {
                     if(otherUser.id !== user.id || messageId == undefined) {
-                        this.sendMessage(otherUser.ws, message as WSMessage<WSApplyInstructionToGraph>);
+                        this.sendMessage(otherUser.ws, {
+                            ...message,
+                            _id: undefined
+                        } as WSMessage<WSApplyInstructionToGraph>);
                     }
                 }
             }

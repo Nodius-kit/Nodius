@@ -1,8 +1,8 @@
 import {useCallback, useContext, useEffect, useRef, useState} from "react";
-import {ActionContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
+import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
 import {api_sync_graph, api_sync_graph_info} from "../../utils/requests/type/api_sync.type";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
-import {Graph} from "../../utils/graph/graphType";
+import {Graph, Node} from "../../utils/graph/graphType";
 import {WebGpuMotor} from "../schema/motor/webGpuMotor";
 import {api_graph_html} from "../../utils/requests/type/api_workflow.type";
 import {edgeArrayToMap, findEdgeByKey, findFirstNodeByType, nodeArrayToMap} from "../../utils/graph/nodeUtils";
@@ -28,7 +28,7 @@ export const useSocketSync = () => {
 
     const [activeWindow, setActiveWindow] = useState<number>(0);
 
-    const htmlRenderer = useRef<Record<string, HtmlRender>>({});
+    const htmlRenderer = useRef<Record<string, Record<string, htmlRenderContext>>>({});
 
     const gpuMotor = useRef<WebGpuMotor | null>(null);
 
@@ -40,18 +40,26 @@ export const useSocketSync = () => {
         3      // maxReconnectAttempts
     );
 
-    /*useEffect(() => {
-        console.log(stats);
-    }, [stats]);*/
-
-
     /* ------------------------------------ HTML RENDER STORAGE --------------------------------------------------- */
-    const initiateNewHtmlRenderer = async (id:string, container:HTMLElement, options?:HtmlRenderOption) => {
-        htmlRenderer.current[id] = new HtmlRender(container, options);
-        return htmlRenderer.current[id];
+    const initiateNewHtmlRenderer = async (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[], options?:HtmlRenderOption) => {
+        if(!htmlRenderer.current[node._key]) {
+            htmlRenderer.current[node._key] = {};
+        }
+        htmlRenderer.current[node._key][id] = {
+            htmlMotor: new HtmlRender(container, options),
+            pathOfRender: pathOfRender,
+            nodeId: node._key
+        }
+        let object = node as any;
+        for(const path of pathOfRender) {
+            object = object[path as any];
+        }
+        await htmlRenderer.current[node._key][id].htmlMotor.render(object);
+
+        return htmlRenderer.current[node._key][id];
     };
 
-    const getHtmlRenderer = (id:string) => htmlRenderer.current[id];
+    const getHtmlRenderer = (node:string|Node<any>) => htmlRenderer.current[typeof node === "string" ? node : node._key];
     const getHtmlAllRenderer = () => htmlRenderer.current;
     useEffect(() => {
         Project.dispatch({
@@ -246,10 +254,6 @@ export const useSocketSync = () => {
         }
     }, [connect, disconnect]);
 
-    setMessageHandler((message) => {
-        console.log('Received:', message);
-    });
-
     useEffect(() => {
         Project.dispatch({
             field: "openHtmlClass",
@@ -398,15 +402,14 @@ export const useSocketSync = () => {
 
                     let redrawGraph = false;
                     for(const instruction of instructions) {
-                        console.log(instruction);
                         if(instruction.edgeId && !instruction.noRedraw) {
                             redrawGraph = true;
                         } else if(instruction.nodeId) {
                             // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                             if(Project.state.editedHtml && instruction.nodeId === Project.state.editedHtml.node._key) {
-                                const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(Project.state.editedHtml.node._key)!;
+                                const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
                                 let objectHtml: any = newNode;
-                                Project.state.editedHtml.pathToEdit.forEach((path) => {
+                                Project.state.editedHtml.pathOfRender.forEach((path) => {
                                     objectHtml = objectHtml[path];
                                 });
                                 Project.state.editedHtml.html.object = objectHtml;
@@ -418,6 +421,20 @@ export const useSocketSync = () => {
                                 if(!instruction.noRedraw) {
                                     await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html.object);
                                 }
+
+                            } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
+                                const renderers = htmlRenderer.current[instruction.nodeId];
+                                const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+                                for(const renderer of Object.values(renderers)) {
+                                    if(!instruction.noRedraw) {
+                                        let objectHtml: any = newNode;
+                                        renderer.pathOfRender.forEach((path) => {
+                                            objectHtml = objectHtml[path];
+                                        });
+                                        await renderer.htmlMotor.render(objectHtml);
+                                    }
+                                }
+
                             } else if(!instruction.noRedraw) {
                                 redrawGraph = true;
                             }
@@ -425,9 +442,10 @@ export const useSocketSync = () => {
                             // trigger node event update
                             const nodeHtml = document.querySelector('[data-node-key="'+instruction.nodeId+'"]');
                             if(nodeHtml) {
-                                nodeHtml.dispatchEvent(new Event("nodeUpdate", {
+                                nodeHtml.dispatchEvent(new CustomEvent<GraphInstructions>("nodeUpdate", {
                                     bubbles: false,
-                                }))
+                                    detail: instruction
+                                }));
                             }
                         }
                     }
@@ -481,7 +499,7 @@ export const useSocketSync = () => {
         const instruction = deepCopy(instructionHtml);
 
         if(instruction.p) {
-            instruction.p = [...Project.state.editedHtml.pathToEdit, ...instruction.p];
+            instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
         }
 
         return await updateGraph([
@@ -527,7 +545,7 @@ export const useSocketSync = () => {
                     const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(Project.state.editedHtml.node._key)!;
 
                     let objectHtml:any = newNode;
-                    Project.state.editedHtml.pathToEdit.forEach((path) => {
+                    Project.state.editedHtml.pathOfRender.forEach((path) => {
                         objectHtml = objectHtml[path];
                     });
                     Project.state.editedHtml.html.object = objectHtml;
@@ -586,6 +604,19 @@ export const useSocketSync = () => {
             value: updateHtml
         });
     }, [updateHtml]);
+
+
+    const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
+        console.log("Recieved packet", packet);
+        if(packet.type === "applyInstructionToGraph") {
+            const message = packet as WSMessage<WSApplyInstructionToGraph>;
+            await updateGraph(message.instructions);
+        }
+    }, [updateGraph]);
+
+    useEffect(() => {
+        setMessageHandler(handleIncomingMessage);
+    }, [setMessageHandler, handleIncomingMessage]);
 
     /* ----------------------------------------------------------------------------------------------------------- */
 

@@ -13,7 +13,7 @@ export interface ProjectContextProps {
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 
-export type EditedHtmlType = {node:Node<any>, html:HtmlClass, htmlRender:HtmlRender, pathToEdit:string[]}|undefined
+export type EditedHtmlType = {node:Node<any>, html:HtmlClass, htmlRender:HtmlRender, pathOfRender:string[]}|undefined
 export interface ActionContext {
     timeTaken: number;
     status: boolean;
@@ -22,6 +22,12 @@ export interface ActionContext {
 export interface UpdateHtmlOption {
     targetedIdentifier?:string,
     noRedraw?:boolean,
+}
+
+export interface htmlRenderContext {
+    htmlMotor:HtmlRender,
+    pathOfRender:string[],
+    nodeId:string,
 }
 
 export interface ProjectContextType {
@@ -37,9 +43,9 @@ export interface ProjectContextType {
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
 
-    initiateNewHtmlRenderer?: (id:string, container:HTMLElement, options?:HtmlRenderOption) => void,
-    getHtmlRenderer?: (id:string) => HtmlRender,
-    getHtmlAllRenderer?: () =>  Record<string, HtmlRender>,
+    initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[], options?:HtmlRenderOption) => Promise<htmlRenderContext>,
+    getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,
+    getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     isSynchronized: boolean,
 

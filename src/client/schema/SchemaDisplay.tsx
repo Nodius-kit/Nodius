@@ -95,7 +95,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
             if(!nodeDisplayContainer.current) return;
             if(!gpuMotor.current) return;
-            if(inSchemaNode.current.findIndex((n) => n.node === node) === -1) {
+            if(inSchemaNode.current.findIndex((n) => n.node._key === node._key) === -1) {
                 const nodeHTML = document.createElement('div');
                 nodeHTML.setAttribute("data-node-key", node._key);
                 nodeHTML.style.position = 'absolute';
@@ -128,48 +128,85 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 overlay.addEventListener("mouseleave",mouseLeave)
                 nodeHTML.addEventListener("mouseleave", mouseLeave);
 
-                if(nodeConfig.domEvents) {
-                    nodeConfig.domEvents!.forEach((domEvent:any) => {
-                        if(domEvent.name === "click" || domEvent.name === "dblclick") {
-                            nodeHTML.style.cursor = "pointer";
-                        }
-                        const callEvent = async (event:any) => {
-                            const fct = new AsyncFunction(
-                                ...[
-                                    "event",
-                                    "gpuMotor",
-                                    "node",
-                                    "openHtmlEditor",
-                                    "getHtmlRenderer",
-                                    "initiateNewHtmlRenderer",
-                                    "getHtmlAllRenderer",
-                                    "container",
-                                    "overlayContainer",
-                                    domEvent.call
-                                ]
-                            );
-                            await fct(
-                                ...[
-                                    event,
-                                    gpuMotor.current,
-                                    node,
-                                    openHtmlEditor,
-                                    Project.state.getHtmlRenderer,
-                                    Project.state.initiateNewHtmlRenderer,
-                                    Project.state.getHtmlAllRenderer,
-                                    nodeHTML,
-                                    overlay
-                                ]
-                            );
-                        }
-                        if(domEvent.name === "load") {
-                            callEvent(new Event("load", { bubbles: true }));
-                        } else {
-                            overlay.addEventListener(domEvent.name, callEvent);
-                            nodeHTML.addEventListener(domEvent.name, callEvent);
-                        }
+                // Store event listeners for cleanup and reattachment
+                const eventListenerMap = new Map<string, (event: any) => void>();
+
+                const attachDomEvents = (config: typeof nodeConfig) => {
+                    // Reset cursor
+                    nodeHTML.style.cursor = "default";
+
+                    if(config.domEvents) {
+                        config.domEvents!.forEach((domEvent:any) => {
+                            if(domEvent.name === "click" || domEvent.name === "dblclick") {
+                                nodeHTML.style.cursor = "pointer";
+                            }
+                            const callEvent = async (event:any) => {
+                                const fct = new AsyncFunction(
+                                    ...[
+                                        "event",
+                                        "gpuMotor",
+                                        "node",
+                                        "openHtmlEditor",
+                                        "getHtmlRenderer",
+                                        "initiateNewHtmlRenderer",
+                                        "getHtmlAllRenderer",
+                                        "container",
+                                        "overlayContainer",
+                                        domEvent.call
+                                    ]
+                                );
+                                await fct(
+                                    ...[
+                                        event,
+                                        gpuMotor.current,
+                                        Project.state.graph!.sheets[Project.state.selectedSheetId!]!.nodeMap.get(node._key),
+                                        openHtmlEditor,
+                                        Project.state.getHtmlRenderer,
+                                        Project.state.initiateNewHtmlRenderer,
+                                        Project.state.getHtmlAllRenderer,
+                                        nodeHTML,
+                                        overlay
+                                    ]
+                                );
+                            }
+
+                            eventListenerMap.set(domEvent.name, callEvent);
+
+                            if(domEvent.name === "load") {
+                                callEvent(new Event("load", { bubbles: true }));
+                            } else {
+                                overlay.addEventListener(domEvent.name, callEvent);
+                                nodeHTML.addEventListener(domEvent.name, callEvent);
+                            }
+                        });
+                    }
+                };
+
+                const removeDomEvents = () => {
+                    eventListenerMap.forEach((listener, eventName) => {
+                        overlay.removeEventListener(eventName, listener);
+                        nodeHTML.removeEventListener(eventName, listener);
                     });
-                }
+                    eventListenerMap.clear();
+                };
+
+                // Handle nodeUpdate to refresh event listeners when node changes
+                const handleNodeUpdate = () => {
+                    const updatedNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key);
+                    if (!updatedNode) return;
+
+                    const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
+                    if (!updatedConfig) return;
+
+                    // Remove old listeners and attach new ones with updated config
+                    removeDomEvents();
+                    attachDomEvents(updatedConfig);
+                };
+
+                nodeHTML.addEventListener("nodeUpdate", handleNodeUpdate);
+
+                // Initial attachment
+                attachDomEvents(nodeConfig);
 
                 const transform = gpuMotor.current.getTransform();
                 const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
@@ -240,7 +277,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.nodeTypeConfig,
         Project.state.getHtmlRenderer,
         Project.state.initiateNewHtmlRenderer,
-        Project.state.getHtmlAllRenderer
+        Project.state.getHtmlAllRenderer,
+        Project.state.graph,
     ]);
 
     const onDoubleClick = () => {
