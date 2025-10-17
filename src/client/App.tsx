@@ -12,7 +12,7 @@ import {documentHaveActiveElement} from "../utils/objectUtils";
 import {getInverseInstruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 
-export type OpenHtmlEditorFct = (node:Node<any>,htmlRender:htmlRenderContext, onClose?: () => void) => void;
+export type OpenHtmlEditorFct = (nodeId:string,htmlRender:htmlRenderContext, onClose?: () => void) => void;
 
 export const App = () => {
 
@@ -26,10 +26,13 @@ export const App = () => {
 
 
     const onCloseEditor = useRef<() => void>(undefined);
-    const openHtmlEditor:OpenHtmlEditorFct = useCallback((node:Node<any>,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
-        if(!gpuMotor.current) return;
+    const openHtmlEditor:OpenHtmlEditorFct = useCallback((nodeId:string,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
+        if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId) return;
         onCloseEditor.current = onClose;
-        if(node.type === "html" && Project.state.html) {
+        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+
+        if(node && node.type === "html" && Project.state.html) {
+            console.log(Project.state.html);
             const newEditedHtml:EditedHtmlType = {
                 node: node,
                 html: Project.state.html,
@@ -41,7 +44,8 @@ export const App = () => {
                 value: newEditedHtml
             });
         }
-    }, [Project.state.html]);
+    }, [Project.state.html, Project.state.graph, Project.state.selectedSheetId]);
+
     const onNodeLeave = useCallback((node:Node<any>) => {
         if (node._key === Project.state.editedHtml?.node._key) {
             Project.dispatch({

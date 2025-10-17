@@ -185,6 +185,14 @@ export const useSocketSync = () => {
             setServerInfo(serverInfo);
         }
 
+        const nodeHtml = findFirstNodeByType(htmlGraph, "html")!;
+        if(!nodeHtml) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't find HTML type node, corrupted ?",
+                status: false,
+            }
+        }
 
         const connected = await connect(`ws://${serverInfo.host}:${serverInfo.port}`);
         if(!connected) {
@@ -226,6 +234,10 @@ export const useSocketSync = () => {
             field: "editedHtml",
             value: undefined
         });
+
+        // input html may be outdated compared of the html from server side
+        html.object = nodeHtml.data;
+
         Project.dispatch({
             field: "html",
             value: html

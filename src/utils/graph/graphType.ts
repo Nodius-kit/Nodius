@@ -154,7 +154,7 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
                 });
                 
                 
-                openHtmlEditor(node, htmlRenderer, () => {
+                openHtmlEditor(node._key, htmlRenderer, () => {
                     // on close
                     container.style.cursor = "cursor";
                     htmlRenderer.htmlMotor.setBuildingMode(false);

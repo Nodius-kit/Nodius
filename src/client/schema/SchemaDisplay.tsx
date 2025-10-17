@@ -69,7 +69,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const inSchemaNode = useRef<{node:Node<any>, element:HTMLElement, overElement:HTMLElement}[]>([]);
     const nodeDisplayContainer = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
-        if(!gpuMotor.current) return;
+        if(!gpuMotor.current || !Project.state.graph) return;
 
         const updateOverlays = () => {
             if(!nodeDisplayContainer.current) return;
