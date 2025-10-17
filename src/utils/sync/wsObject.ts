@@ -1,4 +1,5 @@
 import {Instruction} from "./InstructionBuilder";
+import {Node, Edge} from "../graph/graphType";
 
 export type WSMessage<T> = T & {
     type: string;
@@ -41,4 +42,11 @@ export interface WSRegisterUser {
 export interface WSGenerateUniqueId {
     type: "getUniqueId",
     ids: string[]
+}
+
+export interface WSBatchCreateElements {
+    type: "batchCreateElements",
+    sheetId: string,
+    nodes: Array<Node<any>>,
+    edges: Array<Edge>
 }

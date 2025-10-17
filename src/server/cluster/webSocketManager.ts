@@ -1,6 +1,7 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import {
     WSApplyInstructionToGraph,
+    WSBatchCreateElements,
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUser,
@@ -458,6 +459,167 @@ export class WebSocketManager {
                         _id: messageId,
                         _response: {status: true}
                     } as WSMessage<WSResponseMessage<WSGenerateUniqueId>>);
+                }
+            } else if(jsonData.type === "batchCreateElements") {
+                if(!user || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSBatchCreateElements> = jsonData;
+
+                // Validate that the sheet exists
+                const targetSheet = this.managedGraph[graphKey][message.sheetId];
+                if(!targetSheet) {
+                    if (messageId) return this.sendMessage(ws, {
+                        _id: messageId,
+                        _response: {status: false, message: "Sheet with id "+message.sheetId+" not found"}
+                    } as WSMessage<WSResponseMessage<unknown>>);
+                    return;
+                }
+
+                // Create a temporary map of nodes being added for edge validation
+                const nodesToAdd = new Map<string, Node<any>>();
+
+                // Validate all nodes first
+                for(const node of message.nodes) {
+                    // Check graphKey matches
+                    if(node.graphKey !== graphKey) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Node ${node._key} has invalid graphKey: expected ${graphKey}, got ${node.graphKey}`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check sheet matches
+                    if(node.sheet !== message.sheetId) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Node ${node._key} has invalid sheet: expected ${message.sheetId}, got ${node.sheet}`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check _key is unique
+                    if(targetSheet.nodeMap.has(node._key)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Node with _key ${node._key} already exists`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check _key is unique within the batch
+                    if(nodesToAdd.has(node._key)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Duplicate node _key ${node._key} in batch`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    nodesToAdd.set(node._key, node);
+                }
+
+                // Validate all edges
+                const edgesToAdd: Edge[] = [];
+                for(const edge of message.edges) {
+                    // Check graphKey matches
+                    if(edge.graphKey !== graphKey) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge ${edge._key} has invalid graphKey: expected ${graphKey}, got ${edge.graphKey}`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check sheet matches
+                    if(edge.sheet !== message.sheetId) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge ${edge._key} has invalid sheet: expected ${message.sheetId}, got ${edge.sheet}`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check _key is unique in existing edges
+                    const existingEdge = findEdgeByKey(targetSheet.edgeMap, edge._key);
+                    if(existingEdge) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge with _key ${edge._key} already exists`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check _key is unique within the batch
+                    if(edgesToAdd.some(e => e._key === edge._key)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Duplicate edge _key ${edge._key} in batch`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check source node exists (either in existing nodes or in nodes being added)
+                    if(!targetSheet.nodeMap.has(edge.source) && !nodesToAdd.has(edge.source)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge ${edge._key} has invalid source: node ${edge.source} not found`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    // Check target node exists (either in existing nodes or in nodes being added)
+                    if(!targetSheet.nodeMap.has(edge.target) && !nodesToAdd.has(edge.target)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge ${edge._key} has invalid target: node ${edge.target} not found`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    edgesToAdd.push(edge);
+                }
+
+                // All validations passed, now add the nodes and edges
+                // Add nodes
+                for(const node of message.nodes) {
+                    targetSheet.nodeMap.set(node._key, node);
+                }
+
+                // Add edges to the edgeMap
+                for(const edge of edgesToAdd) {
+                    // Add to target map
+                    const targetKey = `target-${edge.target}`;
+                    let targetEdges = targetSheet.edgeMap.get(targetKey) || [];
+                    targetEdges.push(edge);
+                    targetSheet.edgeMap.set(targetKey, targetEdges);
+
+                    // Add to source map
+                    const sourceKey = `source-${edge.source}`;
+                    let sourceEdges = targetSheet.edgeMap.get(sourceKey) || [];
+                    sourceEdges.push(edge);
+                    targetSheet.edgeMap.set(sourceKey, sourceEdges);
+                }
+
+                // Send success response
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: {status: true}
+                    } as WSMessage<WSResponseMessage<WSBatchCreateElements>>);
+                }
+
+                // Broadcast to other users
+                for(const otherUser of targetSheet.user) {
+                    if(otherUser.id !== user.id || messageId == undefined) {
+                        this.sendMessage(otherUser.ws, {
+                            ...message,
+                            _id: undefined
+                        } as WSMessage<WSBatchCreateElements>);
+                    }
                 }
             }
 
