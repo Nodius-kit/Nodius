@@ -2,11 +2,11 @@ import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "rea
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
 import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
-import {Graph, NodeTypeEntryType} from "../../../../utils/graph/graphType";
+import {Graph, Node, NodeTypeEntryType} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {Collapse} from "../../animate/Collapse";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {findFirstNodeByType} from "../../../../utils/graph/nodeUtils";
+import {findFirstNodeByType, findFirstNodeWithId} from "../../../../utils/graph/nodeUtils";
 import {Input} from "../../form/Input";
 
 
@@ -265,10 +265,42 @@ export const LeftPanelEntryTypeSelect = memo((
 
     const setEntryType = (dataType:DataTypeClass) => {
         if(!Project.state.graph) return;
-        const node = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
+        let nodeType = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
+        const nodeEntry = findFirstNodeWithId(Project.state.graph, "root")!;
 
-        if(node) {
+        if(nodeType) {
 
+        } else {
+            const height = 500;
+            const width = 300;
+            nodeType = {
+                _key: graph?._key+"-root",
+                graphKey: Project.state.graph._key,
+                sheet: nodeEntry.sheet,
+                type: "entryType",
+                handles: {
+                    0: {
+                        position: "fix",
+                        point: [
+                            {
+                                id: "0",
+                                type: "out",
+                                accept: "entryType"
+                            }
+                        ]
+                    }
+                },
+                posX: nodeEntry.posX - (width+100) ,
+                posY: (nodeEntry.size.height/2)-(height/2),
+                size: {
+                    width: 300,
+                    height: 500,
+                    dynamic: true,
+                },
+                data: {
+                    _key: dataType._key
+                }
+            } as Node<NodeTypeEntryType>;
         }
     }
 

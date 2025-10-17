@@ -128,7 +128,7 @@ export const useSocketSync = () => {
                     retrieveGraph: {
                         buildGraph: true,
                         token: html.graphKeyLinked,
-                        onlyFirstSheet: true
+                        onlyFirstSheet: false
                     }
                 } as api_graph_html),
             });

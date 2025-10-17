@@ -341,6 +341,11 @@ export class RequestWorkFlow {
                                     id: "0",
                                     type: "out",
                                     accept: "event[]"
+                                },
+                                {
+                                    id: "1",
+                                    type: "in",
+                                    accept: "entryType"
                                 }
                             ]
                         }

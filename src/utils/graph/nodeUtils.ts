@@ -46,6 +46,15 @@ export const findFirstNodeByType = <T = any>(graph:Graph, type:NodeType):Node<T>
     return undefined;
 }
 
+export const findFirstNodeWithId = <T = any>(graph:Graph, id:string):Node<T>|undefined => {
+    for (const sheet of Object.values(graph.sheets)) {
+        if(sheet.nodeMap.has(id)) {
+            return sheet.nodeMap.get(id);
+        }
+    }
+    return undefined;
+}
+
 export const findEdgeByKey = (map: Map<string, Edge[]>, key: string): Edge | undefined => {
     for (const edges of map.values()) {
         const edge = edges.find(e => e._key === key);

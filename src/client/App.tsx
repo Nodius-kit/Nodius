@@ -32,7 +32,6 @@ export const App = () => {
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
 
         if(node && node.type === "html" && Project.state.html) {
-            console.log(Project.state.html);
             const newEditedHtml:EditedHtmlType = {
                 node: node,
                 html: Project.state.html,

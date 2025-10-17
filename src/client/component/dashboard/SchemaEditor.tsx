@@ -1,4 +1,4 @@
-import {memo, useContext, useEffect, useRef, useState} from "react";
+import {forwardRef, memo, useContext, useEffect, useRef, useState} from "react";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../utils/html/htmlType";
 import {LeftPaneMenu} from "./Editor/LeftPaneMenu";
 import {MultiFade} from "../animate/MultiFade";
@@ -13,6 +13,7 @@ import {LeftPanelTypeEditor} from "./Editor/LeftPanelTypeEditor";
 import {LeftPanelEnumEditor} from "./Editor/LeftPanelEnumEditor";
 import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
+import {WebGpuMotor} from "../../schema/motor/webGpuMotor";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,
@@ -20,9 +21,9 @@ interface SchemaEditorProps  {
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | ""
 
-export const SchemaEditor = memo(({
+export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
     returnToMenu,
-}:SchemaEditorProps) => {
+}, motorRef) => {
 
     const [editingPanel, setEditingPanel] = useState<editingPanel>("");
     const [subLeftMenuWidth, setSubLeftMenuWidth] = useState<number>(0);
@@ -166,6 +167,6 @@ export const SchemaEditor = memo(({
             </div>
         </div>
     )
-});
+}));
 
 SchemaEditor.displayName = "SchemaEditor";
