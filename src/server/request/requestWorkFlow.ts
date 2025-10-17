@@ -9,7 +9,7 @@ import {
 } from "../../utils/requests/type/api_workflow.type";
 import {cleanEdge, cleanNode, Edge, Graph as GraphWF, Node} from "../../utils/graph/graphType";
 import {aql} from "arangojs";
-import {db} from "../server";
+import {db, webSocketManager} from "../server";
 import escapeHTML from 'escape-html';
 import {HtmlClass} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
@@ -204,8 +204,10 @@ export class RequestWorkFlow {
 
                     const graph = await this.buildGraph(
                         html.graphKeyLinked,
-                        body.retrieveHtml.buildGraph ?? false,
-                        body.retrieveHtml.onlyFirstSheet ?? false
+                        {
+                            build: body.retrieveHtml.buildGraph ?? false,
+                            onlyFirstSheet: body.retrieveGraph?.onlyFirstSheet ?? false
+                        }
                     );
                     res.status(200).json({
                         html: html,
@@ -230,8 +232,10 @@ export class RequestWorkFlow {
                         htmLClasses.map(async (html) => {
                             const graph = await this.buildGraph(
                                 html.graphKeyLinked,
-                                body.retrieveHtml?.buildGraph ?? false,
-                                body.retrieveHtml?.onlyFirstSheet ?? false
+                                {
+                                    build: body.retrieveHtml?.buildGraph ?? false,
+                                    onlyFirstSheet: body.retrieveGraph?.onlyFirstSheet ?? false
+                                }
                             );
 
                             const nodeKey = html.htmlNodeKey;
@@ -256,8 +260,10 @@ export class RequestWorkFlow {
                 if(body.retrieveGraph.token) {
                     const graph = await this.buildGraph(
                         body.retrieveGraph.token,
-                        body.retrieveGraph?.buildGraph ?? false,
-                        body.retrieveGraph?.onlyFirstSheet ?? false
+                        {
+                            build:  body.retrieveGraph?.buildGraph ?? false,
+                            onlyFirstSheet: body.retrieveGraph?.onlyFirstSheet ?? false
+                        }
                     );
                     res.status(200).json(graph);
                 } else {
@@ -280,8 +286,10 @@ export class RequestWorkFlow {
                             graphs.map(async (unBuildedGraph) => {
                                 return await this.buildGraph(
                                     unBuildedGraph._key,
-                                    body.retrieveGraph?.buildGraph ?? false,
-                                    body.retrieveGraph?.onlyFirstSheet ?? false
+                                    {
+                                        build: body.retrieveGraph?.buildGraph ?? false,
+                                        onlyFirstSheet: body.retrieveGraph?.onlyFirstSheet ?? false
+                                    }
                                 );
                             })
                         );
@@ -368,7 +376,7 @@ export class RequestWorkFlow {
         });
     }
 
-    public static async buildGraph(graphKey:string, build:boolean, onlyFirstSheet?:boolean):Promise<GraphWF> {
+    public static async buildGraph(graphKey:string,options?:{build:boolean, onlyFirstSheet?:boolean, avoidCheckingWebSocket?:boolean}):Promise<GraphWF> {
         const graphQuery = aql`
             FOR g IN nodius_graphs
             FILTER g._key == ${graphKey}
@@ -376,30 +384,68 @@ export class RequestWorkFlow {
         `;
         const graphCursor = await db.query(graphQuery);
         const graphData:GraphWF = (await graphCursor.all())[0];
-        if(build) {
-            graphData._sheets = {};
-            for (const sheetId of Object.keys(graphData.sheetsList)) {
-                if(onlyFirstSheet && sheetId !== Object.keys(graphData.sheetsList)[0]) continue;
-                const nodesQuery = aql`
-                    FOR n IN nodius_nodes
-                    FILTER n.graphKey == ${graphKey} && n.sheet == ${sheetId}
-                    RETURN n
-                  `;
-                const nodesCursor = await db.query(nodesQuery);
-                const allNodes: Node<any>[] = await nodesCursor.all();
+        if(options?.build) {
+            // Check if graph is already managed in webSocketManager
+            const managedSheets = webSocketManager.getManagedGraphSheets(graphKey);
 
-                const edgesQuery = aql`
-                    FOR e IN nodius_edges
-                    FILTER e.graphKey == ${graphKey} && e.sheet == ${sheetId}
-                    RETURN e
-                  `;
-                const edgesCursor = await db.query(edgesQuery);
-                const allEdges: Edge[] = await edgesCursor.all();
+            if (managedSheets && !options?.avoidCheckingWebSocket) {
+                // Graph is open in webSocketManager, use it instead of querying ArangoDB
+                console.log(`Using managed graph from webSocketManager for key: ${graphKey}`);
+                graphData._sheets = {};
 
-                graphData._sheets[sheetId] = {
-                    nodes: allNodes.map((node) => cleanNode(node)),
-                    edges: allEdges.map((edge) => cleanEdge(edge)),
-                };
+                for (const sheetId of Object.keys(graphData.sheetsList)) {
+                    if(options?.onlyFirstSheet && sheetId !== Object.keys(graphData.sheetsList)[0]) continue;
+
+                    const managedSheet = managedSheets[sheetId];
+                    if (managedSheet) {
+                        // Convert Map to array
+                        const allNodes: Node<any>[] = Array.from(managedSheet.nodeMap.values());
+                        const allEdges: Edge[] = [];
+
+                        // Flatten edge map to array
+                        for (const edgeList of managedSheet.edgeMap.values()) {
+                            if (Array.isArray(edgeList)) {
+                                allEdges.push(...edgeList);
+                            }
+                        }
+
+                        // Remove duplicates from edges (since edge map stores them by source/target)
+                        const uniqueEdges = Array.from(
+                            new Map(allEdges.map(edge => [edge._key, edge])).values()
+                        );
+
+                        graphData._sheets[sheetId] = {
+                            nodes: allNodes.map((node) => cleanNode(node)),
+                            edges: uniqueEdges.map((edge) => cleanEdge(edge)),
+                        };
+                    }
+                }
+            } else {
+                // Graph not in webSocketManager, query from ArangoDB as before
+                graphData._sheets = {};
+                for (const sheetId of Object.keys(graphData.sheetsList)) {
+                    if(options?.onlyFirstSheet && sheetId !== Object.keys(graphData.sheetsList)[0]) continue;
+                    const nodesQuery = aql`
+                        FOR n IN nodius_nodes
+                        FILTER n.graphKey == ${graphKey} && n.sheet == ${sheetId}
+                        RETURN n
+                      `;
+                    const nodesCursor = await db.query(nodesQuery);
+                    const allNodes: Node<any>[] = await nodesCursor.all();
+
+                    const edgesQuery = aql`
+                        FOR e IN nodius_edges
+                        FILTER e.graphKey == ${graphKey} && e.sheet == ${sheetId}
+                        RETURN e
+                      `;
+                    const edgesCursor = await db.query(edgesQuery);
+                    const allEdges: Edge[] = await edgesCursor.all();
+
+                    graphData._sheets[sheetId] = {
+                        nodes: allNodes.map((node) => cleanNode(node)),
+                        edges: allEdges.map((edge) => cleanEdge(edge)),
+                    };
+                }
             }
         }
         return graphData;

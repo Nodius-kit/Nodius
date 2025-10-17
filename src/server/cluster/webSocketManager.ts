@@ -146,7 +146,10 @@ export class WebSocketManager {
 
     private initGraph = async (graphKey:string) => {
         this.managedGraph[graphKey] = {};
-        const graph = await RequestWorkFlow.buildGraph(graphKey, true);
+        const graph = await RequestWorkFlow.buildGraph(graphKey, {
+            build: true,
+            avoidCheckingWebSocket: true
+        });
         Object.keys(graph._sheets).forEach((sheetId) => {
             this.managedGraph[graphKey][sheetId] = {
                 instructionHistory: [],
@@ -482,6 +485,51 @@ export class WebSocketManager {
             console.log('WebSocket server closed');
             clearInterval(this.intervalCleaning);
         });
+    }
+
+    /**
+     * Get a managed graph if it exists in the WebSocket manager
+     * @param graphKey - The graph key to look for
+     * @returns The graph data with sheets if found, undefined otherwise
+     */
+    public getManagedGraph(graphKey: string): { nodeMap: Map<string, Node<any>>, edgeMap: Map<string, Edge[]> } | undefined {
+        const graph = this.managedGraph[graphKey];
+        if (!graph) {
+            return undefined;
+        }
+
+        // Merge all sheets (for now, we'll return the first sheet or all sheets merged)
+        // If you need specific sheet handling, this can be modified
+        const sheets = Object.values(graph);
+        if (sheets.length === 0) {
+            return undefined;
+        }
+
+        return {
+            nodeMap: sheets[0].nodeMap,
+            edgeMap: sheets[0].edgeMap
+        };
+    }
+
+    /**
+     * Get all sheets of a managed graph if it exists
+     * @param graphKey - The graph key to look for
+     * @returns Record of sheet id to sheet data, or undefined if graph not found
+     */
+    public getManagedGraphSheets(graphKey: string): Record<string, { nodeMap: Map<string, Node<any>>, edgeMap: Map<string, Edge[]> }> | undefined {
+        const graph = this.managedGraph[graphKey];
+        if (!graph) {
+            return undefined;
+        }
+
+        const result: Record<string, { nodeMap: Map<string, Node<any>>, edgeMap: Map<string, Edge[]> }> = {};
+        for (const sheetId in graph) {
+            result[sheetId] = {
+                nodeMap: graph[sheetId].nodeMap,
+                edgeMap: graph[sheetId].edgeMap
+            };
+        }
+        return result;
     }
 }
 
