@@ -329,7 +329,7 @@ export class RequestWorkFlow {
                 await graph_collection.save(graph);
 
                 const node: Node<any> = {
-                    _key: token_graph+"-root",
+                    _key: "root",
                     graphKey: token_graph,
                     sheet: "0",
                     type: "html",

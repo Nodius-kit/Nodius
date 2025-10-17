@@ -18,13 +18,13 @@ export interface Edge {
     graphKey: string,
     sheet:string,
 
-    source?: string;
-    sourceHandle?: string;
+    source: string;
+    sourceHandle: string;
 
-    target?: string;
-    targetHandle?: string;
+    target: string;
+    targetHandle: string;
 
-    style: "curved" | "straight",
+    style?: "curved" | "straight",
     label?:string,
 }
 

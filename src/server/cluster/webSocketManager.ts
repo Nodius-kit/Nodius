@@ -1,5 +1,11 @@
 import WebSocket, { WebSocketServer } from 'ws';
-import {WSApplyInstructionToGraph, WSMessage, WSRegisterUser, WSResponseMessage} from "../../utils/sync/wsObject";
+import {
+    WSApplyInstructionToGraph,
+    WSGenerateUniqueId,
+    WSMessage,
+    WSRegisterUser,
+    WSResponseMessage
+} from "../../utils/sync/wsObject";
 import {ClusterManager} from "./clusterManager";
 import {clusterManager} from "../server";
 import {Edge, Node} from "../../utils/graph/graphType";
@@ -305,7 +311,6 @@ export class WebSocketManager {
                     const instruction = message.instructions[i];
                     if(instruction.nodeId) {
                         const oldNode = objectList[i] as Node<any>;
-                        console.log(oldNode);
                         const newNode = applyInstruction(oldNode, instruction.i, (objectBeingApplied) => {
                             if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                                 const object:any = objectBeingApplied;
@@ -437,6 +442,23 @@ export class WebSocketManager {
                         } as WSMessage<WSApplyInstructionToGraph>);
                     }
                 }
+            } else if(jsonData.type === "generateUniqueId") {
+                if(!user || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSGenerateUniqueId> = jsonData;
+                for(let i = 0; i < message.ids.length; i++) {
+                    message.ids[i] = this.getUniqueId(graphKey);
+                }
+
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: {status: true}
+                    } as WSMessage<WSResponseMessage<WSGenerateUniqueId>>);
+                }
             }
 
         } catch (error) {
@@ -530,6 +552,35 @@ export class WebSocketManager {
             };
         }
         return result;
+    }
+
+    /**
+     * Get a unique identifier for nodes or edges in a specific graph.
+     * This method guarantees that the returned ID will never be reused within the same graph.
+     * IDs are generated in base-36 format and are tracked per graph.
+     *
+     * @param graphKey - The graph key to generate a unique ID for
+     * @returns A unique identifier string that has never been used in this graph
+     * @throws Error if the graph is not managed by this WebSocketManager
+     */
+    public getUniqueId(graphKey: string): string {
+        // Check if the graph is managed
+        if (!this.managedGraph[graphKey]) {
+            throw new Error(`Graph with key "${graphKey}" is not managed by this WebSocketManager. Please ensure the graph is initialized first.`);
+        }
+
+        // Initialize the counter if it doesn't exist (defensive programming)
+        if (this.uniqueIdGenerator[graphKey] === undefined) {
+            this.uniqueIdGenerator[graphKey] = 0;
+        }
+
+        // Generate the unique ID and increment the counter
+        const uniqueId = (this.uniqueIdGenerator[graphKey]++).toString(36);
+        if(uniqueId == "root") {
+            return this.getUniqueId(graphKey);
+        }
+
+        return uniqueId;
     }
 }
 

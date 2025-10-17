@@ -47,6 +47,7 @@ export interface ProjectContextType {
     getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
+    generateUniqueId?:(amount:number) => Promise<string[]|undefined>,
     isSynchronized: boolean,
 
 }

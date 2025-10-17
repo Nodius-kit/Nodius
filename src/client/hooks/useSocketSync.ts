@@ -15,7 +15,7 @@ import {
 } from "../../utils/sync/InstructionBuilder";
 import {
     GraphInstructions,
-    WSApplyInstructionToGraph,
+    WSApplyInstructionToGraph, WSGenerateUniqueId,
     WSMessage,
     WSRegisterUser,
     WSResponseMessage
@@ -532,91 +532,6 @@ export const useSocketSync = () => {
                 noRedraw: options?.noRedraw
             }
         ]);
-        /*
-        const message:WSMessage<WSApplyInstructionToGraph> = {
-            type: "applyInstructionToGraph",
-            instructions: [
-                {
-                    i: instruction,
-                    nodeId: Project.state.editedHtml.node._key,
-                    applyUniqIdentifier: "identifier",
-                    targetedIdentifier: options?.targetedIdentifier
-                }
-            ]
-        }
-
-        const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToGraph>;
-
-        if(response && response._response) {
-            if(response._response.status) {
-                const instructionOutput = await handleIntructionToGraph(response,(currentGraphInstrution, objectBeingApplied) => {
-                    if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
-                        const object:HtmlObject = objectBeingApplied;
-                        if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
-                            console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
-                            return false;
-                        }
-                        return true;
-                    }
-                    return true;
-                });
-
-                if(instructionOutput.status) {
-
-                    const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(Project.state.editedHtml.node._key)!;
-
-                    let objectHtml:any = newNode;
-                    Project.state.editedHtml.pathOfRender.forEach((path) => {
-                        objectHtml = objectHtml[path];
-                    });
-                    Project.state.editedHtml.html.object = objectHtml;
-                    Project.state.editedHtml.node = newNode;
-                    Project.dispatch({
-                        field: "editedHtml",
-                        value: {...Project.state.editedHtml}
-                    });
-                    if(!options?.noRedraw) {
-                        await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html.object);
-                    }
-                    return {
-                        timeTaken: Date.now() - start,
-                        status: true,
-                    }
-                } else {
-                    return {
-                        timeTaken: Date.now() - start,
-                        status: false,
-                        reason: instructionOutput.error ?? "Unknown error"
-                    }
-                }
-            } else {
-                console.error("Unknow server error while sending WS message:", message," | server output:",response);
-                return {
-                    timeTaken: Date.now() - start,
-                    reason: "Unknow server error while sending WS message:"+JSON.stringify(message)+" | server output:"+JSON.stringify(response),
-                    status: false,
-                }
-            }
-        } else {
-            console.error("Unknow client error while sending WS message:", message);
-            return {
-                timeTaken: Date.now() - start,
-                reason: "Unknow client error while sending WS message:"+ JSON.stringify(message),
-                status: false,
-            }
-        }*/
-        /*
-        if(newHtml.success) {
-            editedHtml.html.object = newHtml.value;
-            setEditedHtml({...editedHtml});
-            editedHtml.node.data = editedHtml.html.object;
-            if(!options?.noRedraw) {
-                await editedHtml.htmlRender.render(editedHtml.html.object);
-            }
-        } else {
-            console.error(newHtml);
-        }*/
-
     }, [Project.state.editedHtml, sendMessage, Project.state.selectedSheetId, Project.state.graph, updateGraph]);
 
     useEffect(() => {
@@ -637,6 +552,30 @@ export const useSocketSync = () => {
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);
     }, [setMessageHandler, handleIncomingMessage]);
+
+
+    const generateUniqueId = useCallback(async (amount:number) : Promise<string[]|undefined> => {
+
+        const message:WSMessage<WSGenerateUniqueId> = {
+            type: "getUniqueId",
+            ids: Array.from({ length: amount }),
+        }
+
+        const response = await sendMessage(message) as WSResponseMessage<WSGenerateUniqueId>;
+
+        if(response && response._response.status) {
+            return response.ids;
+        }
+
+        return undefined;
+    }, []);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "generateUniqueId",
+            value: generateUniqueId
+        })
+    }, [generateUniqueId]);
 
     /* ----------------------------------------------------------------------------------------------------------- */
 

@@ -37,3 +37,8 @@ export interface WSRegisterUser {
     sheetId: string,
     graphKey: string,
 }
+
+export interface WSGenerateUniqueId {
+    type: "getUniqueId",
+    ids: string[]
+}

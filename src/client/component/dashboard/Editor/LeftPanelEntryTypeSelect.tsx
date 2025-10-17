@@ -2,12 +2,14 @@ import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "rea
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
 import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
-import {Graph, Node, NodeTypeEntryType} from "../../../../utils/graph/graphType";
+import {Edge, Graph, Node, NodeTypeEntryType} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {Collapse} from "../../animate/Collapse";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {findFirstNodeByType, findFirstNodeWithId} from "../../../../utils/graph/nodeUtils";
+import {findFirstNodeByType, findFirstNodeWithId, findNodeConnected} from "../../../../utils/graph/nodeUtils";
 import {Input} from "../../form/Input";
+import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
+import {GraphInstructions} from "../../../../utils/sync/wsObject";
 
 
 interface LeftPanelEntryTypeSelectProps {
@@ -263,20 +265,45 @@ export const LeftPanelEntryTypeSelect = memo((
         }
     `);
 
-    const setEntryType = (dataType:DataTypeClass) => {
+    const setEntryType = async (dataType:DataTypeClass) => {
         if(!Project.state.graph) return;
-        let nodeType = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
-        const nodeEntry = findFirstNodeWithId(Project.state.graph, "root")!;
+        //let nodeType = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
+        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
+        const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
+        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
 
+        if(nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return;
+
+        console.log("finded node", connectedNodeToEntry);
         if(nodeType) {
+            if(nodeType.data!._key === dataType._key) {
+                return;
+            }
+            const instruction = new InstructionBuilder();
+            instruction.key("data").key("_key").set(dataType._key);
+
+            const instructions:Array<GraphInstructions> = [{
+                nodeId: nodeType._key,
+                i: instruction.instruction,
+                noRedraw: true
+            }];
+            const output = await Project.state.updateGraph!(instructions);
+            console.log(output);
 
         } else {
+            const uniqueId = await Project.state.generateUniqueId!(2);
+
+            if(!uniqueId) return;
+
+            const nodeKey = uniqueId[0];
+            const edgeKey = uniqueId[1];
+
             const height = 500;
             const width = 300;
             nodeType = {
-                _key: graph?._key+"-root",
+                _key: nodeKey,
                 graphKey: Project.state.graph._key,
-                sheet: nodeEntry.sheet,
+                sheet: nodeRoot.sheet,
                 type: "entryType",
                 handles: {
                     0: {
@@ -290,8 +317,8 @@ export const LeftPanelEntryTypeSelect = memo((
                         ]
                     }
                 },
-                posX: nodeEntry.posX - (width+100) ,
-                posY: (nodeEntry.size.height/2)-(height/2),
+                posX: nodeRoot.posX - (width+100) ,
+                posY: (nodeRoot.size.height/2)-(height/2),
                 size: {
                     width: 300,
                     height: 500,
@@ -301,6 +328,18 @@ export const LeftPanelEntryTypeSelect = memo((
                     _key: dataType._key
                 }
             } as Node<NodeTypeEntryType>;
+
+            const edge:Edge = {
+                _key: edgeKey,
+                source: nodeKey,
+                target: nodeRoot._key,
+                sheet: nodeType.sheet,
+                graphKey: Project.state.graph._key,
+                sourceHandle: "0",
+                undeletable: true,
+                targetHandle: nodeRoot.handles["0"].point[0].id, // we target the center point of the root node
+                style: "curved"
+            }
         }
     }
 
@@ -383,7 +422,7 @@ export const LeftPanelEntryTypeSelect = memo((
                                                         <div
                                                             key={i}
                                                             className={`${dataTypeSelectionButtonClass} ${currentEntryType?._key === dataType._key ? "active" : ""}`}
-                                                            onClick={() => setEntryType(dataType)}
+                                                            onClick={async () => await setEntryType(dataType)}
                                                         >
                                                             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
                                                                 <span style={{fontWeight:"500", fontSize:"14px"}}>
