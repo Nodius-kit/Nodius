@@ -6,7 +6,8 @@ export type NodeType = "html" | "entryType" | string;
 export type handleSide = "T" | "D" | "R" | "L" | "0"
 
 export interface NodeTypeEntryType {
-    _key:string
+    _key:string,
+    fixedValue?:Record<string, any>
 }
 
 export interface Edge {

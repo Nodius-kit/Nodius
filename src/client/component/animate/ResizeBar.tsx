@@ -15,6 +15,7 @@ interface ResizeBarProps {
     show?: boolean;
     beforeResize?: () => void;
     afterResize?: () => void;
+    aditionnalStyle?: CSSProperties;
 }
 
 export const ResizeBar = memo(({
@@ -28,6 +29,7 @@ export const ResizeBar = memo(({
     beforeResize,
     minValue = -Infinity,
     maxValue = Infinity,
+                                   aditionnalStyle
 }:ResizeBarProps) => {
 
     const Theme = useContext(ThemeContext);
@@ -35,6 +37,7 @@ export const ResizeBar = memo(({
     const barWidth = 8;
 
     const style:CSSProperties = {
+        ...aditionnalStyle,
         position:"absolute",
     }
     if(type === "vertical") {
@@ -60,6 +63,8 @@ export const ResizeBar = memo(({
     style.alignItems = "center";
     style.backgroundColor = "var(--nodius-background-resizeBar)";
     style.cursor = type === "vertical" ? "col-resize" : "row-resize"
+
+
 
 
     const mouseDown = (evt:React.MouseEvent) => {

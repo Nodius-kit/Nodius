@@ -146,6 +146,8 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                     afterResize={() => leftContainer.current!.style.transition = "var(--nodius-transition-default)"}
                     maxValue={600}
                     minValue={345}
+                    aditionnalStyle={{zIndex:1}}
+
                 />
                 <Fade in={editingPanel !== ""} timeout={300} unmountOnExit={true}>
                     <div style={{position:"absolute", top: "10px", right:"-55px", padding:"6px", backgroundColor:"var(--nodius-background-paper)", cursor:"pointer", borderRadius:"8px"}} onClick={() => {setEditingPanel("")}}>
