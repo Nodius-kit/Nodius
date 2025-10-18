@@ -731,11 +731,63 @@ export const useSocketSync = () => {
             };
         }
 
+        if(!Project.state.graph) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Graph not initialized",
+                status: false,
+            };
+        }
+
+        const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
+
+        // Create a set of edge keys for faster lookup
+        const edgeKeysSet = new Set(edgeKeys);
+        const finalEdgeKeys: string[] = [];
+
+        // Find all edges connected to the nodes being deleted
+        for(const nodeKey of nodeKeys) {
+            // Find edges where this node is the source
+            const sourceKey = `source-${nodeKey}`;
+            const sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+            for(const edge of sourceEdges) {
+                if(!edgeKeysSet.has(edge._key)) {
+                    edgeKeysSet.add(edge._key);
+                }
+            }
+
+            // Find edges where this node is the target
+            const targetKey = `target-${nodeKey}`;
+            const targetEdges = sheet.edgeMap.get(targetKey) || [];
+            for(const edge of targetEdges) {
+                if(!edgeKeysSet.has(edge._key)) {
+                    edgeKeysSet.add(edge._key);
+                }
+            }
+        }
+
+        // Filter out undeletable edges
+        for(const edgeKey of edgeKeysSet) {
+            const edge = findEdgeByKey(sheet.edgeMap, edgeKey);
+            if(edge && !edge.undeletable) {
+                finalEdgeKeys.push(edgeKey);
+            }
+        }
+
+        // Ensure we have something to delete
+        if(nodeKeys.length === 0 && finalEdgeKeys.length === 0) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "No elements to delete",
+                status: false,
+            };
+        }
+
         const message: WSMessage<WSBatchDeleteElements> = {
             type: "batchDeleteElements",
             sheetId: Project.state.selectedSheetId,
             nodeKeys: nodeKeys,
-            edgeKeys: edgeKeys
+            edgeKeys: finalEdgeKeys
         };
 
         const response = await sendMessage(message) as WSResponseMessage<WSBatchDeleteElements>;
@@ -771,7 +823,7 @@ export const useSocketSync = () => {
                 status: false,
             };
         }
-    }, [Project.state.selectedSheetId, sendMessage, applyBatchDelete]);
+    }, [Project.state.selectedSheetId, Project.state.graph, sendMessage, applyBatchDelete]);
 
     useEffect(() => {
         Project.dispatch({

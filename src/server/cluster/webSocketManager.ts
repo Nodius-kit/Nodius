@@ -674,7 +674,8 @@ export class WebSocketManager {
                     }
                 }
 
-                // Validate all edges exist before deletion
+                // Validate all edges exist and filter out undeletable edges
+                const finalEdgeKeys: string[] = [];
                 for(const edgeKey of message.edgeKeys) {
                     const existingEdge = findEdgeByKey(targetSheet.edgeMap, edgeKey);
                     if(!existingEdge) {
@@ -684,13 +685,26 @@ export class WebSocketManager {
                         } as WSMessage<WSResponseMessage<unknown>>);
                         return;
                     }
+                    // Only include deletable edges
+                    if(!existingEdge.undeletable) {
+                        finalEdgeKeys.push(edgeKey);
+                    }
+                }
+
+                // Ensure we have something to delete
+                if(message.nodeKeys.length === 0 && finalEdgeKeys.length === 0) {
+                    if (messageId) return this.sendMessage(ws, {
+                        _id: messageId,
+                        _response: {status: false, message: "No elements to delete (all edges are undeletable or no elements provided)"}
+                    } as WSMessage<WSResponseMessage<unknown>>);
+                    return;
                 }
 
                 // All validations passed, mark as having unsaved changes
                 targetSheet.hasUnsavedChanges = true;
 
                 // Delete edges first (to avoid orphaned edges)
-                for(const edgeKey of message.edgeKeys) {
+                for(const edgeKey of finalEdgeKeys) {
                     const edge = findEdgeByKey(targetSheet.edgeMap, edgeKey);
                     if(edge) {
                         // Remove from target map
@@ -724,20 +738,22 @@ export class WebSocketManager {
                     targetSheet.nodeMap.delete(nodeKey);
                 }
 
-                // Send success response
+                // Send success response with filtered edge keys
                 if (messageId) {
                     this.sendMessage(ws, {
                         ...message,
+                        edgeKeys: finalEdgeKeys, // Send back the actually deleted edges
                         _id: messageId,
                         _response: {status: true}
                     } as WSMessage<WSResponseMessage<WSBatchDeleteElements>>);
                 }
 
-                // Broadcast to other users
+                // Broadcast to other users with filtered edge keys
                 for(const otherUser of targetSheet.user) {
                     if(otherUser.id !== user.id || messageId == undefined) {
                         this.sendMessage(otherUser.ws, {
                             ...message,
+                            edgeKeys: finalEdgeKeys, // Send back the actually deleted edges
                             _id: undefined
                         } as WSMessage<WSBatchDeleteElements>);
                     }
