@@ -73,6 +73,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         htmlRenderer?: htmlRenderContext,
     }[]>([]);
     const nodeDisplayContainer = useRef<HTMLDivElement>(null);
+
+    // Track previous dependency values to detect changes
+    const previousDependencies = useRef<{
+        currentEntryDataType?: any,
+        enumTypes?: any[],
+        dataTypes?: any[],
+    }>({});
+
     useLayoutEffect(() => {
         if(!gpuMotor.current || !Project.state.graph) return;
 
@@ -91,6 +99,37 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 inSchemaNode.current[i].overElement.style.top = inSchemaNode.current[i].element.style.top = `${rect.y / transform.scale}px`;
                 inSchemaNode.current[i].overElement.style.width = inSchemaNode.current[i].element.style.width = `${rect.width / transform.scale}px`;
                 inSchemaNode.current[i].overElement.style.height = inSchemaNode.current[i].element.style.height = `${rect.height / transform.scale}px`;
+            }
+        };
+
+        // Function to update HTML renderer dependencies and re-render
+        const updateHtmlRendererDependencies = async () => {
+            for(let i = 0; i < inSchemaNode.current.length; i++) {
+                const {htmlRenderer, node} = inSchemaNode.current[i];
+                if(htmlRenderer) {
+                    // Update global storage variables
+                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
+                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
+                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
+
+                    // Trigger re-render by getting the current content
+                    const nodeConfig = Project.state.nodeTypeConfig[node.type];
+                    if(nodeConfig?.content) {
+                        await htmlRenderer.htmlMotor.render(nodeConfig.content);
+                    }
+                }
+            }
+        };
+
+        // Function to dispatch nodeUpdate event for a specific node
+        const dispatchNodeUpdateEvent = (nodeKey: string) => {
+            const nodeElement = document.querySelector(`[data-node-key="${nodeKey}"]`);
+            if(nodeElement) {
+                const updateEvent = new CustomEvent("nodeUpdate", {
+                    bubbles: false,
+                    detail: { nodeKey }
+                });
+                nodeElement.dispatchEvent(updateEvent);
             }
         };
         const nodeEnter = async (node: Node<any>) => {
@@ -195,8 +234,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     eventListenerMap.clear();
                 };
 
-                // Handle nodeUpdate to refresh event listeners when node changes
-                const handleNodeUpdate = () => {
+                // Handle nodeUpdate to refresh event listeners and HTML renderer when node changes
+                const handleNodeUpdate = async () => {
                     const updatedNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key);
                     if (!updatedNode) return;
 
@@ -206,6 +245,20 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     // Remove old listeners and attach new ones with updated config
                     removeDomEvents();
                     attachDomEvents(updatedConfig);
+
+                    // Update HTML renderer if it exists
+                    const schemaNode = inSchemaNode.current.find(n => n.node._key === node._key);
+                    if(schemaNode?.htmlRenderer) {
+                        // Update global storage variables with latest values
+                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
+                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
+                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
+
+                        // Re-render with updated config content
+                        if(updatedConfig.content) {
+                            await schemaNode.htmlRenderer.htmlMotor.render(updatedConfig.content);
+                        }
+                    }
                 };
 
                 nodeHTML.addEventListener("nodeUpdate", handleNodeUpdate);
@@ -282,6 +335,30 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         gpuMotor.current.on("pan", updateOverlays);
         gpuMotor.current.on("zoom", updateOverlays);
         gpuMotor.current.on("reset", onReset);
+
+        // Check if dependencies have changed and trigger updates
+        const depsChanged =
+            previousDependencies.current.currentEntryDataType !== Project.state.currentEntryDataType ||
+            previousDependencies.current.enumTypes !== Project.state.enumTypes ||
+            previousDependencies.current.dataTypes !== Project.state.dataTypes;
+
+        if(depsChanged) {
+            // Update previous dependencies
+            previousDependencies.current = {
+                currentEntryDataType: Project.state.currentEntryDataType,
+                enumTypes: Project.state.enumTypes,
+                dataTypes: Project.state.dataTypes,
+            };
+
+            // Trigger update for all rendered nodes
+            updateHtmlRendererDependencies();
+
+            // Dispatch nodeUpdate event for all nodes to refresh their event handlers
+            inSchemaNode.current.forEach(schemaNode => {
+                dispatchNodeUpdateEvent(schemaNode.node._key);
+            });
+        }
+
         return () => {
             if(!gpuMotor.current) return;
             gpuMotor.current.off("nodeEnter", nodeEnter);
@@ -300,11 +377,36 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.initiateNewHtmlRenderer,
         Project.state.getHtmlAllRenderer,
         Project.state.graph,
+        Project.state.currentEntryDataType,
+        Project.state.enumTypes,
+        Project.state.dataTypes,
     ]);
 
     const onDoubleClick = () => {
         onExitCanvas();
     }
+
+    // Expose a global function to trigger node update for a specific node
+    // This can be used from anywhere in the app to force a node re-render
+    useEffect(() => {
+        const triggerNodeUpdate = (nodeKey: string) => {
+            const nodeElement = document.querySelector(`[data-node-key="${nodeKey}"]`);
+            if(nodeElement) {
+                const updateEvent = new CustomEvent("nodeUpdate", {
+                    bubbles: false,
+                    detail: { nodeKey }
+                });
+                nodeElement.dispatchEvent(updateEvent);
+            }
+        };
+
+        // Attach to window for global access
+        (window as any).triggerNodeUpdate = triggerNodeUpdate;
+
+        return () => {
+            delete (window as any).triggerNodeUpdate;
+        };
+    }, []);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
