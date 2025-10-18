@@ -194,6 +194,14 @@ export class HtmlRender {
 
         if (object.id) element.id = object.id;
 
+        if (object.attribute) {
+            Object.entries(object.attribute).forEach(([key, value]) => {
+                if (key !== 'id' && key !== 'data-identifier' && key !== 'style' && !key.startsWith('on')) {
+                    element.setAttribute(key, value);
+                }
+            });
+        }
+
 
         if(object.css) {
             applyCSSBlocks(element, object.css);
@@ -262,6 +270,29 @@ export class HtmlRender {
 
         if (newObject.id !== oldObject.id) {
             element.id = newObject.id || "";
+        }
+
+        // Remove old attributes not in new
+        if (oldObject.attribute) {
+            Object.keys(oldObject.attribute).forEach(key => {
+                if (key !== 'id' && key !== 'data-identifier' && key !== 'style' && !key.startsWith('on')) {
+                    if (!newObject.attribute || !(key in newObject.attribute)) {
+                        element.removeAttribute(key);
+                    }
+                }
+            });
+        }
+
+        // Update changed or new attributes
+        if (newObject.attribute) {
+            Object.entries(newObject.attribute).forEach(([key, value]) => {
+                if (key !== 'id' && key !== 'data-identifier' && key !== 'style' && !key.startsWith('on')) {
+                    const oldValue = oldObject.attribute?.[key];
+                    if (oldValue !== value) {
+                        element.setAttribute(key, value);
+                    }
+                }
+            });
         }
 
         // Update CSS: unset removed styles

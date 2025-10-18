@@ -40,7 +40,7 @@ export interface WSRegisterUser {
 }
 
 export interface WSGenerateUniqueId {
-    type: "getUniqueId",
+    type: "generateUniqueId",
     ids: string[]
 }
 
@@ -48,5 +48,5 @@ export interface WSBatchCreateElements {
     type: "batchCreateElements",
     sheetId: string,
     nodes: Array<Node<any>>,
-    edges: Array<Edge>
+    edges: Array<Edge>,
 }

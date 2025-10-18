@@ -1,11 +1,17 @@
-import {useCallback, useContext, useEffect, useRef, useState} from "react";
+import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
 import {api_sync_graph, api_sync_graph_info} from "../../utils/requests/type/api_sync.type";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
-import {Graph, Node} from "../../utils/graph/graphType";
+import {Edge, Graph, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {WebGpuMotor} from "../schema/motor/webGpuMotor";
 import {api_graph_html} from "../../utils/requests/type/api_workflow.type";
-import {edgeArrayToMap, findEdgeByKey, findFirstNodeByType, nodeArrayToMap} from "../../utils/graph/nodeUtils";
+import {
+    edgeArrayToMap,
+    findEdgeByKey,
+    findFirstNodeByType,
+    findFirstNodeWithId, findNodeConnected,
+    nodeArrayToMap
+} from "../../utils/graph/nodeUtils";
 import {HtmlRender, HtmlRenderOption} from "../../process/html/HtmlRender";
 import {useWebSocket} from "./useWebSocket";
 import {
@@ -15,12 +21,15 @@ import {
 } from "../../utils/sync/InstructionBuilder";
 import {
     GraphInstructions,
-    WSApplyInstructionToGraph, WSGenerateUniqueId,
+    WSApplyInstructionToGraph,
+    WSBatchCreateElements,
+    WSGenerateUniqueId,
     WSMessage,
     WSRegisterUser,
     WSResponseMessage
 } from "../../utils/sync/wsObject";
 import {deepCopy} from "../../utils/objectUtils";
+import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 
 export const useSocketSync = () => {
 
@@ -541,13 +550,114 @@ export const useSocketSync = () => {
         });
     }, [updateHtml]);
 
+    const applyBatchCreate = useCallback(async (nodes: Node<any>[], edges: Edge[]): Promise<{status: boolean, error?: string}> => {
+        if(!Project.state.graph || !Project.state.selectedSheetId) return {
+            status: false,
+            error: "Graph not initialized"
+        };
+
+        const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
+
+        // Add nodes to the graph
+        for(const node of nodes) {
+            sheet.nodeMap.set(node._key, node);
+        }
+
+        // Add edges to the graph
+        for(const edge of edges) {
+            // Add to target map
+            const targetKey = `target-${edge.target}`;
+            let targetEdges = sheet.edgeMap.get(targetKey) || [];
+            targetEdges.push(edge);
+            sheet.edgeMap.set(targetKey, targetEdges);
+
+            // Add to source map
+            const sourceKey = `source-${edge.source}`;
+            let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+            sourceEdges.push(edge);
+            sheet.edgeMap.set(sourceKey, sourceEdges);
+        }
+
+        // Redraw the graph if GPU motor is available
+        if(gpuMotor.current) {
+            gpuMotor.current.requestRedraw();
+        }
+
+        return {
+            status: true,
+        };
+    }, [Project.state.graph, Project.state.selectedSheetId]);
+
+    const batchCreateElements = useCallback(async (nodes: Node<any>[], edges: Edge[]): Promise<ActionContext> => {
+        const start = Date.now();
+
+        if(!Project.state.selectedSheetId) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "No sheet selected",
+                status: false,
+            };
+        }
+
+        const message: WSMessage<WSBatchCreateElements> = {
+            type: "batchCreateElements",
+            sheetId: Project.state.selectedSheetId,
+            nodes: nodes,
+            edges: edges
+        };
+
+        const response = await sendMessage(message) as WSResponseMessage<WSBatchCreateElements>;
+
+        if(response && response._response) {
+            if(response._response.status) {
+                const output = await applyBatchCreate(response.nodes, response.edges);
+                if(!output.status) {
+                    return {
+                        reason: output.error || "Unknown error applying batch create",
+                        timeTaken: Date.now() - start,
+                        status: false
+                    };
+                } else {
+                    return {
+                        timeTaken: Date.now() - start,
+                        status: true
+                    };
+                }
+            } else {
+                console.error("Server error while sending batch create message:", message, " | server output:", response);
+                return {
+                    timeTaken: Date.now() - start,
+                    reason: response._response.message || "Unknown server error while sending batch create message",
+                    status: false,
+                };
+            }
+        } else {
+            console.error("Client error while sending batch create message:", message);
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Unknown client error while sending batch create message",
+                status: false,
+            };
+        }
+    }, [Project.state.selectedSheetId, sendMessage, applyBatchCreate]);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "batchCreateElements",
+            value: batchCreateElements
+        });
+    }, [batchCreateElements]);
+
 
     const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
         if(packet.type === "applyInstructionToGraph") {
             const message = packet as WSMessage<WSApplyInstructionToGraph>;
             await applyGraphInstructions(message.instructions);
+        } else if(packet.type === "batchCreateElements") {
+            const message = packet as WSMessage<WSBatchCreateElements>;
+            await applyBatchCreate(message.nodes, message.edges);
         }
-    }, [applyGraphInstructions]);
+    }, [applyGraphInstructions, applyBatchCreate]);
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);
@@ -557,12 +667,10 @@ export const useSocketSync = () => {
     const generateUniqueId = useCallback(async (amount:number) : Promise<string[]|undefined> => {
 
         const message:WSMessage<WSGenerateUniqueId> = {
-            type: "getUniqueId",
+            type: "generateUniqueId",
             ids: Array.from({ length: amount }),
         }
-
         const response = await sendMessage(message) as WSResponseMessage<WSGenerateUniqueId>;
-
         if(response && response._response.status) {
             return response.ids;
         }
@@ -576,6 +684,113 @@ export const useSocketSync = () => {
             value: generateUniqueId
         })
     }, [generateUniqueId]);
+
+    const retrieveDataTypeAbordController = useRef<AbortController>(undefined);
+    const retrieveDataType = async () => {
+        if(retrieveDataTypeAbordController.current) {
+            retrieveDataTypeAbordController.current.abort();
+        }
+        retrieveDataTypeAbordController.current = new AbortController();
+        const response = await fetch(`http://localhost:8426/api/type/list`, {
+            method: "POST",
+            signal: retrieveDataTypeAbordController.current.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                workspace: "root"
+            })
+        });
+        if(response.status === 200) {
+            const json:DataTypeClass[] = await response.json();
+            Project.dispatch({
+                field: "dataTypes",
+                value: json
+            });
+        }else {
+            Project.dispatch({
+                field: "dataTypes",
+                value: undefined
+            });
+        }
+    }
+
+    const retrieveEnumAbordController = useRef<AbortController>(undefined);
+    const retrieveEnum = async () => {
+        if(retrieveEnumAbordController.current) {
+            retrieveEnumAbordController.current.abort();
+        }
+        retrieveEnumAbordController.current = new AbortController();
+        const response = await fetch(`http://localhost:8426/api/enum/list`, {
+            method: "POST",
+            signal: retrieveEnumAbordController.current.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                workspace: "root"
+            })
+        });
+        if(response.status === 200) {
+            const json:EnumClass[] = await response.json();
+            Project.dispatch({
+                field: "enumTypes",
+                value: json
+            });
+        }else {
+            Project.dispatch({
+                field: "enumTypes",
+                value: undefined
+            });
+        }
+    }
+
+
+    useEffect(() => {
+
+        const emptyCurrentDataType = () => {
+            Project.dispatch({
+                field: "currentEntryDataType",
+                value: undefined
+            });
+        }
+
+        if(!Project.state.graph || !Project.state.dataTypes) {
+            return emptyCurrentDataType();
+        }
+
+        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
+        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return emptyCurrentDataType();
+
+        const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
+        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+
+        if(nodeType) {
+            Project.dispatch({
+                field: "currentEntryDataType",
+                value: Project.state.dataTypes.find((type) => type._key === nodeType.data!._key)
+            });
+        } else {
+            return emptyCurrentDataType();
+        }
+
+
+    }, [Project.state.graph, Project.state.dataTypes]);
+
+    useEffect(() => {
+        console.log(Project.state.currentEntryDataType);
+    }, [Project.state.currentEntryDataType])
+
+
+    useEffect(() => {
+        retrieveDataType();
+        retrieveEnum();
+        Project.dispatch({
+            field: "refreshAvailableDataTypes",
+            value: retrieveDataType
+        });
+        Project.dispatch({
+            field: "refreshAvailableEnums",
+            value: retrieveEnum
+        })
+    }, []);
+
 
     /* ----------------------------------------------------------------------------------------------------------- */
 

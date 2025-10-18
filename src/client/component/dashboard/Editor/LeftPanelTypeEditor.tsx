@@ -11,6 +11,7 @@ import {api_type_delete} from "../../../../utils/requests/type/api_type.type";
 import {ResponsiveTable} from "../../form/ResponsiveTable";
 import {SelectTransparent} from "../../form/SelectTransparent";
 import {Select} from "../../form/Select";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 
 interface LeftPanelTypeEditorProps {
 
@@ -22,19 +23,19 @@ export const LeftPanelTypeEditor = memo((
     }:LeftPanelTypeEditorProps
 ) => {
 
-    const [dataTypes, setDataTypes] = useState<DataTypeClass[]|undefined>(undefined);
+    const Project = useContext(ProjectContext);
+
     const [searchValue, setSearchValue] = useState<string>("");
 
     const [editingClass, setEditingClass] = useState<DataTypeClass>();
 
     const Theme = useContext(ThemeContext);
 
-    const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => dataTypes ? dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[dataTypes, searchValue]);
+    const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => Project.state.dataTypes ? Project.state.dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[Project.state.dataTypes, searchValue]);
 
     useEffect(() => {
-        retrieveDataType();
         prepareDataType();
-    }, []);
+    }, [Project.state.dataTypes, Project.state.enumTypes]);
 
     const [preparedType, setPreparedType] = useState<Record<string, any>>({});
     const preparedTypeAbortController = useRef<Record<string, AbortController>>({});
@@ -46,35 +47,10 @@ export const LeftPanelTypeEditor = memo((
                     preparedTypeAbortController.current[data.id].abort();
                 }
                 preparedTypeAbortController.current[data.id] = new AbortController();
-                newPreparedType[data.id] = await data.prepare(preparedTypeAbortController.current[data.id]);
+                newPreparedType[data.id] = await data.prepare(preparedTypeAbortController.current[data.id], Project.state.dataTypes, Project.state.enumTypes);
             }
         }
         setPreparedType(newPreparedType);
-    }
-
-    const retrieveDataTypeAbordController = useRef<AbortController>(undefined);
-    const retrieveDataType = async () => {
-        if(retrieveDataTypeAbordController.current) {
-            retrieveDataTypeAbordController.current.abort();
-        }
-        retrieveDataTypeAbordController.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/type/list`, {
-            method: "POST",
-            signal: retrieveDataTypeAbordController.current.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                workspace: "root"
-            })
-        });
-        if(response.status === 200) {
-            const json:DataTypeClass[] = await response.json();
-            setDataTypes(json);
-            if(!editingClass && json.length > 0) {
-                setEditingClass(json[0]);
-            }
-        }else {
-            setDataTypes([]);
-        }
     }
 
     const addTypePromptAbortController = useRef<AbortController>(undefined);
@@ -103,7 +79,10 @@ export const LeftPanelTypeEditor = memo((
         });
         if(response.status === 200) {
             const json:DataTypeClass = await response.json();
-            setDataTypes([...(dataTypes ?? []), json]);
+            Project.dispatch({
+                field: "dataTypes",
+                value: [...(Project.state.dataTypes ?? []), json]
+            })
             if(!editingClass) {
                 setEditingClass(json);
             }
@@ -117,16 +96,19 @@ export const LeftPanelTypeEditor = memo((
 
     const nextClassUpdateExecution = useRef<Record<string, {timeout: NodeJS.Timeout, abort:AbortController}>>({});
     const requestEditingClassUpdate = (newEditingClass:DataTypeClass) => {
-        if(!dataTypes) return;
+        if(!Project.state.dataTypes) return;
         setEditingClass(newEditingClass);
-        setDataTypes(dataTypes.map((type) => {
-            if(type._key === newEditingClass._key) {
-                return newEditingClass
-            }
-            return type;
-        }));
+        Project.dispatch({
+            field: "dataTypes",
+            value: (Project.state.dataTypes.map((type) => {
+                if (type._key === newEditingClass._key) {
+                    return newEditingClass
+                }
+                return type;
+            }))
+        });
 
-        if( newEditingClass.name.length > 2 && !(dataTypes??[]).some((d) => d._key !== newEditingClass._key && d.name.toLowerCase() == newEditingClass.name)) {
+        if( newEditingClass.name.length > 2 && !(Project.state.dataTypes??[]).some((d) => d._key !== newEditingClass._key && d.name.toLowerCase() == newEditingClass.name)) {
             if(nextClassUpdateExecution.current[newEditingClass._key]) {
                 clearTimeout(nextClassUpdateExecution.current[newEditingClass._key].timeout);
                 nextClassUpdateExecution.current[newEditingClass._key].abort.abort();
@@ -147,7 +129,7 @@ export const LeftPanelTypeEditor = memo((
 
     const deleteClassAbortController = useRef<AbortController>(undefined);
     const deleteClass = async () => {
-        if(!editingClass || !dataTypes) return;
+        if(!editingClass || !Project.state.dataTypes) return;
         if(deleteClassAbortController.current) {
             deleteClassAbortController.current.abort();
         }
@@ -165,8 +147,11 @@ export const LeftPanelTypeEditor = memo((
             body: JSON.stringify(body)
         });
         if(response.status === 200) {
-            const newDataType = dataTypes.filter((d) => d._key !== editingClass._key);
-            setDataTypes(newDataType);
+            const newDataType = Project.state.dataTypes.filter((d) => d._key !== editingClass._key);
+            Project.dispatch({
+                field: "dataTypes",
+                value: newDataType
+            });
             setEditingClass(newDataType.length > 0 ? newDataType[0] : undefined);
         }
     }
@@ -318,7 +303,7 @@ export const LeftPanelTypeEditor = memo((
                                     newEditingClass.name = value.replace(/[^a-zA-Z0-9-_]/g, "");
                                     requestEditingClassUpdate(newEditingClass);
                                 }} style={{fontSize:"24px", fontWeight:"500", flex:"1"}} minLength={2}
-                                valid={!(dataTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name)}/>
+                                valid={!(Project.state.dataTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name)}/>
 
                                 <div>
                                     <Trash2 color={"var(--nodius-red-500)"} style={{cursor:"pointer"}} onClick={deleteClass}/>
@@ -327,7 +312,7 @@ export const LeftPanelTypeEditor = memo((
 
                             {(editingClass?.name.length ?? 2) < 2 ? (
                                 <p style={{color:"var(--nodius-red-500)",fontSize:"16px", fontWeight:"300"}}>Name must be at least 2 characters long.</p>
-                            ) : (dataTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name) ? (
+                            ) : (Project.state.dataTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name) ? (
                                 <p>Name '{editingClass?.name} already in use.'</p>
                             ) : null}
                             <InputTransparent value={editingClass?.description ?? ""} setValue={(value) => {

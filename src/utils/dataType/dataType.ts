@@ -4,7 +4,7 @@ export interface DataTypeChecking {
     is: (object: string) => boolean,
     canHaveDefaultValues: boolean,
 
-    prepare?: (abortController:AbortController) => Promise<any>,
+    prepare?: (abortController:AbortController, dataTypes?:DataTypeClass[], enumTypes?:EnumClass[]) => Promise<any>,
     listDefaultValue?: (object:any) => { value: string; label: string, disabled?: boolean }[]
 }
 
@@ -107,8 +107,8 @@ export const allDataTypes: DataTypeChecking[] = [
         name: "Data Type",
         is: (object:string) => true,
         canHaveDefaultValues: true,
-        prepare: async (abortController) => {
-            const response = await fetch(`http://localhost:8426/api/type/list`, {
+        prepare: async (abortController, dataTypes) => {
+            /*const response = await fetch(`http://localhost:8426/api/type/list`, {
                 method: "POST",
                 signal: abortController.signal,
                 headers: { "Content-Type": "application/json" },
@@ -120,7 +120,8 @@ export const allDataTypes: DataTypeChecking[] = [
                 const json:DataTypeClass[] = await response.json();
                 return json;
             }
-            return [];
+            return [];*/
+            return dataTypes ?? [];
         },
         listDefaultValue: (object:DataTypeClass[]|undefined) => object ? object.map((o) => ({value: o._key, label:o.name})) : []
     },
@@ -129,8 +130,8 @@ export const allDataTypes: DataTypeChecking[] = [
         name: "Enum",
         is: (object:string) => true,
         canHaveDefaultValues: true,
-        prepare: async (abortController) => {
-            const response = await fetch(`http://localhost:8426/api/enum/list`, {
+        prepare: async (abortController, dataTypes,enumTypes) => {
+            /*const response = await fetch(`http://localhost:8426/api/enum/list`, {
                 method: "POST",
                 signal: abortController.signal,
                 headers: { "Content-Type": "application/json" },
@@ -142,7 +143,8 @@ export const allDataTypes: DataTypeChecking[] = [
                 const json:EnumClass[] = await response.json();
                 return json;
             }
-            return [];
+            return [];*/
+            return enumTypes;
         },
         listDefaultValue: (object:EnumClass[]|undefined) => object ? object.map((o) => ({value: o._key, label:o.name})) : []
     }

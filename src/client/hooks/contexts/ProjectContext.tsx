@@ -1,10 +1,19 @@
 import {ActionType, Dispatch} from "../useCreateReducer";
 import {createContext, useCallback} from "react";
-import {Graph, Node, NodeType, NodeTypeConfig, NodeTypeHtmlConfig} from "../../../utils/graph/graphType";
+import {
+    Edge,
+    Graph,
+    Node,
+    NodeType,
+    NodeTypeConfig,
+    NodeTypeEntryTypeConfig,
+    NodeTypeHtmlConfig
+} from "../../../utils/graph/graphType";
 import {HtmlClass} from "../../../utils/html/htmlType";
 import {HtmlRender, HtmlRenderOption} from "../../../process/html/HtmlRender";
 import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
+import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 
 export interface ProjectContextProps {
     state: ProjectContextType;
@@ -48,7 +57,15 @@ export interface ProjectContextType {
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     generateUniqueId?:(amount:number) => Promise<string[]|undefined>,
+    batchCreateElements?:(nodes: Node<any>[], edges: Edge[]) => Promise<ActionContext>,
     isSynchronized: boolean,
+
+    dataTypes?: DataTypeClass[],
+    currentEntryDataType?:DataTypeClass,
+    refreshAvailableDataTypes?:() => Promise<void>,
+
+    enumTypes?:EnumClass[],
+    refreshAvailableEnums?:() => Promise<void>,
 
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
@@ -58,6 +75,7 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     },
     isSynchronized: false,
     nodeTypeConfig: {
-        "html": NodeTypeHtmlConfig as NodeTypeConfig
+        "html": NodeTypeHtmlConfig,
+        "entryType": NodeTypeEntryTypeConfig
     }
 }

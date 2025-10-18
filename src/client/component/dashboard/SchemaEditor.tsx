@@ -37,6 +37,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
 
     const Theme = useContext(ThemeContext);
 
+
     useEffect(() => {
         retrieveComponentList();
     }, []);

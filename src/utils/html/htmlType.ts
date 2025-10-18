@@ -27,7 +27,8 @@ export interface HtmlBase {
     workflowEvents?: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
     name:string,
     delimiter?: boolean,
-    temporary?:boolean
+    temporary?:boolean,
+    attribute?: Record<string, string>,
 }
 
 export interface HtmlArray extends HtmlBase {
@@ -64,7 +65,6 @@ export interface HtmlClass {
     htmlNodeKey: string;
     object:HtmlObject,
     version: number;
-
     // html related info
     name:string,
     description?:string,

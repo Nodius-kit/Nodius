@@ -55,7 +55,7 @@ export const App = () => {
         }
 
         const nodeConfig = Project.state.nodeTypeConfig[node.type];
-        if (!nodeConfig.alwaysRendered) {
+        if (!nodeConfig || !nodeConfig.alwaysRendered) {
             const renderers = Project.state.getHtmlRenderer!(node);
             Object.values(renderers ?? {}).forEach(renderer => {
                 renderer.htmlMotor.dispose();

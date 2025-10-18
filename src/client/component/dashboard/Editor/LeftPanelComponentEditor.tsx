@@ -91,8 +91,12 @@ export const LeftPanelComponentEditor = memo(({
         overlayContainer.style.flexDirection = "column";
         overlayContainer.style.justifyContent = "center";
         overlayContainer.style.alignItems = "center";
-        overlayContainer.style.border = container.style.border;
-        overlayContainer.style.borderRadius = container.style.borderRadius;
+
+        const toCopyStyle = getComputedStyle(container);
+        overlayContainer.style.border = toCopyStyle.border;
+        overlayContainer.style.borderRadius = toCopyStyle.borderRadius;
+        overlayContainer.style.boxShadow = toCopyStyle.boxShadow;
+
         overlayContainer.style.backgroundColor = "var(--nodius-background-default)";
         overlayContainer.innerHTML = container.innerHTML;
 

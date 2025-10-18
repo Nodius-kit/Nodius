@@ -120,7 +120,7 @@ export interface NodeTypeConfig {
     _key: string,
     displayName: string,
     content: HtmlObject,
-    content_key: string,
+    content_html_graph_key: string,
     alwaysRendered: boolean,
     domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
@@ -136,9 +136,28 @@ export interface NodeTypeConfig {
     }
 }
 
-export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
+export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "0",
-    content_key: "",
+    content_html_graph_key: "",
+    content: {
+        type: "block",
+        name: "Container",
+        delimiter: true,
+        tag: "div",
+        attribute: {
+            mainRender: "",
+        },
+        css: [
+            {
+                selector: "&",
+                rules: [
+                    ["height", "100%"],
+                    ["width", "100%"]
+                ]
+            }
+        ],
+        identifier: "root"
+    },
     displayName: "Html Editor",
     alwaysRendered: true,
     domEvents: [
@@ -175,10 +194,81 @@ export const NodeTypeHtmlConfig:Omit<NodeTypeConfig, "content"> = {
             
                 const render_id = "main"; // unique render id in the node
                 const pathOfRender = ["data"]; // path inside the node where is stored the html
-                const renderContainer = container; // where render the html in the DOM 
+                const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute
                 const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender);
             `
         }
+
+    ],
+    border: {
+        radius:0,
+        width:1,
+        type: "solid",
+        normal: {
+            color: "var(--nodius-primary-dark)",
+        },
+        hover: {
+            color: "var(--nodius-primary-light)",
+        }
+    }
+}
+
+
+export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
+    _key: "1",
+    displayName: "Entry Data Type",
+    alwaysRendered: true,
+    content_html_graph_key: "",
+    content: {
+        type: "block",
+        name: "Container",
+        delimiter: true,
+        tag: "div",
+        css: [
+            {
+                selector: "&",
+                rules: [
+                    ["height", "100%"],
+                    ["width", "100%"]
+                ]
+            }
+        ],
+        identifier: "root",
+        content: {
+            type: "text",
+            tag: "p",
+            name: "Text",
+            delimiter: true,
+            identifier:"0",
+            css: [],
+            domEvents: [
+                {
+                    name: "load",
+                    call: `
+                    console.log(globalStorage);
+                    `
+                }
+            ],
+            content: {
+                "fr": "dataType selected: {{JSON.stringify(globalStorage.globalCurrentEntryDataType)}}",
+                "en": "HTML: {{JSON.stringify(globalStorage.globalCurrentEntryDataType)}}",
+            },
+        }
+    },
+    domEvents: [
+        {
+            name: "dblclick",
+            call: `
+            
+            `,
+            description: ""
+        },
+        {
+            name: "nodeEnter",
+            call: `
+               
+            `
+        },
 
     ],
     border: {

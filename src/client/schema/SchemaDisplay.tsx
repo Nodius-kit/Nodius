@@ -3,7 +3,7 @@ import {WebGpuMotor} from "./motor/webGpuMotor";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
 import {forwardMouseEvents} from "../../utils/objectUtils";
-import {AsyncFunction} from "../../process/html/HtmlRender";
+import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
 import {ProjectContext} from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../App";
 
@@ -66,7 +66,12 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
 
 
-    const inSchemaNode = useRef<{node:Node<any>, element:HTMLElement, overElement:HTMLElement}[]>([]);
+    const inSchemaNode = useRef<{
+        node:Node<any>,
+        element:HTMLElement,
+        overElement:HTMLElement,
+        htmlRenderer: HtmlRender,
+    }[]>([]);
     const nodeDisplayContainer = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
         if(!gpuMotor.current || !Project.state.graph) return;
@@ -207,6 +212,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                 // Initial attachment
                 attachDomEvents(nodeConfig);
+                const htmlRenderer = new HtmlRender(nodeHTML);
+                if(nodeConfig.content) {
+                    htmlRenderer.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
+                    htmlRenderer.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
+                    htmlRenderer.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
+                    htmlRenderer.render(nodeConfig.content);
+                }
 
                 const transform = gpuMotor.current.getTransform();
                 const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
@@ -226,6 +238,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     node: node,
                     element: nodeHTML,
                     overElement: overlay,
+                    htmlRenderer: htmlRenderer
                 });
             }
             onNodeEnter?.(node);
@@ -238,12 +251,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             onNodeLeave?.(node);
 
             const nodeConfig = Project.state.nodeTypeConfig[node.type];
-            if(nodeConfig.alwaysRendered) return;
+            if(!nodeConfig || nodeConfig.alwaysRendered) return;
 
             const index = inSchemaNode.current.findIndex((n) => n.node === node);
             if (index !== -1){
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].element);
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].overElement);
+                inSchemaNode.current[index].htmlRenderer.dispose();
                 inSchemaNode.current.splice(index, 1);
             }
 

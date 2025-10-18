@@ -22,7 +22,6 @@ export const LeftPanelEntryTypeSelect = memo((
     }:LeftPanelEntryTypeSelectProps
 ) => {
 
-    const [dataTypes, setDataTypes] = useState<DataTypeClass[]|undefined>(undefined);
     const [searchValue, setSearchValue] = useState<string>("");
 
     const [showSelect, setShowSelect] = useState<boolean>(false);
@@ -30,25 +29,12 @@ export const LeftPanelEntryTypeSelect = memo((
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
 
-    const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => dataTypes ? dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[dataTypes, searchValue]);
+    const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => Project.state.dataTypes ? Project.state.dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[Project.state.dataTypes, searchValue]);
 
-    const currentEntryType:DataTypeClass|undefined = useMemo(() => {
-        if(!Project.state.graph || !dataTypes) {
-            return undefined;
-        }
-
-        const node = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
-        if(node && node.data) {
-            return dataTypes.find((type) => type._key === node.data!._key);
-        }
-        return undefined;
-
-    }, [Project.state.graph, dataTypes]);
 
     useEffect(() => {
-        retrieveDataType();
         prepareDataType();
-    }, []);
+    }, [Project.state.dataTypes, Project.state.enumTypes]);
 
     const [preparedType, setPreparedType] = useState<Record<string, any>>({});
     const preparedTypeAbortController = useRef<Record<string, AbortController>>({});
@@ -60,32 +46,10 @@ export const LeftPanelEntryTypeSelect = memo((
                     preparedTypeAbortController.current[data.id].abort();
                 }
                 preparedTypeAbortController.current[data.id] = new AbortController();
-                newPreparedType[data.id] = await data.prepare(preparedTypeAbortController.current[data.id]);
+                newPreparedType[data.id] = await data.prepare(preparedTypeAbortController.current[data.id], Project.state.dataTypes, Project.state.enumTypes);
             }
         }
         setPreparedType(newPreparedType);
-    }
-
-    const retrieveDataTypeAbordController = useRef<AbortController>(undefined);
-    const retrieveDataType = async () => {
-        if(retrieveDataTypeAbordController.current) {
-            retrieveDataTypeAbordController.current.abort();
-        }
-        retrieveDataTypeAbordController.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/type/list`, {
-            method: "POST",
-            signal: retrieveDataTypeAbordController.current.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                workspace: "root"
-            })
-        });
-        if(response.status === 200) {
-            const json:DataTypeClass[] = await response.json();
-            setDataTypes(json);
-        }else {
-            setDataTypes([]);
-        }
     }
 
     const selectInputDataButton = useDynamicClass(`
@@ -269,12 +233,14 @@ export const LeftPanelEntryTypeSelect = memo((
         if(!Project.state.graph) return;
         //let nodeType = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
         const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
+
+        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return;
+
         const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
         let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
 
-        if(nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return;
 
-        console.log("finded node", connectedNodeToEntry);
+
         if(nodeType) {
             if(nodeType.data!._key === dataType._key) {
                 return;
@@ -288,11 +254,9 @@ export const LeftPanelEntryTypeSelect = memo((
                 noRedraw: true
             }];
             const output = await Project.state.updateGraph!(instructions);
-            console.log(output);
 
         } else {
             const uniqueId = await Project.state.generateUniqueId!(2);
-
             if(!uniqueId) return;
 
             const nodeKey = uniqueId[0];
@@ -340,6 +304,9 @@ export const LeftPanelEntryTypeSelect = memo((
                 targetHandle: nodeRoot.handles["0"].point[0].id, // we target the center point of the root node
                 style: "curved"
             }
+
+            const output = await Project.state.batchCreateElements!([nodeType], [edge]);
+
         }
     }
 
@@ -395,7 +362,7 @@ export const LeftPanelEntryTypeSelect = memo((
                                     <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
                                         <Search height={18} width={18}/>
                                         <p style={{margin:"0", fontWeight:"500"}}>
-                                            {currentEntryType ? "Change Data Type" : "Select Data Type"}
+                                            {Project.state.currentEntryDataType ? "Change Data Type" : "Select Data Type"}
                                         </p>
                                     </div>
                                     <div className={"close"} style={{display:"flex", alignItems:"center"}}>
@@ -421,14 +388,14 @@ export const LeftPanelEntryTypeSelect = memo((
                                                     searchedDataTypes.map((dataType, i) => (
                                                         <div
                                                             key={i}
-                                                            className={`${dataTypeSelectionButtonClass} ${currentEntryType?._key === dataType._key ? "active" : ""}`}
+                                                            className={`${dataTypeSelectionButtonClass} ${Project.state.currentEntryDataType?._key === dataType._key ? "active" : ""}`}
                                                             onClick={async () => await setEntryType(dataType)}
                                                         >
                                                             <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
                                                                 <span style={{fontWeight:"500", fontSize:"14px"}}>
                                                                     {dataType.name}
                                                                 </span>
-                                                                {currentEntryType?._key === dataType._key && (
+                                                                {Project.state.currentEntryDataType?._key === dataType._key && (
                                                                     <Check height={18} width={18}/>
                                                                 )}
                                                             </div>
@@ -455,7 +422,7 @@ export const LeftPanelEntryTypeSelect = memo((
                             </div>
 
                             {/* Selected Type Display or Empty State */}
-                            {currentEntryType ? (
+                            {Project.state.currentEntryDataType ? (
                                 <div className={selectedTypeCardClass}>
                                     <div className="type-header">
                                         <div style={{flex:1}}>
@@ -466,10 +433,10 @@ export const LeftPanelEntryTypeSelect = memo((
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="type-name">{currentEntryType.name}</div>
-                                        {currentEntryType.description && (
+                                        <div className="type-name">{Project.state.currentEntryDataType.name}</div>
+                                        {Project.state.currentEntryDataType.description && (
                                             <div className="type-description" style={{marginTop:"8px"}}>
-                                                {currentEntryType.description}
+                                                {Project.state.currentEntryDataType.description}
                                             </div>
                                         )}
                                     </div>

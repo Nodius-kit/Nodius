@@ -10,6 +10,7 @@ import {deepCopy} from "../../../../utils/objectUtils";
 import {api_type_delete} from "../../../../utils/requests/type/api_type.type";
 import {ResponsiveTable} from "../../form/ResponsiveTable";
 import {SelectTransparent} from "../../form/SelectTransparent";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 
 interface LeftPanelEnumEditorProps {
 
@@ -21,43 +22,16 @@ export const LeftPanelEnumEditor = memo((
     }:LeftPanelEnumEditorProps
 ) => {
 
-    const [enums, setEnums] = useState<EnumClass[]|undefined>(undefined);
+    const Project = useContext(ProjectContext);
+
     const [searchValue, setSearchValue] = useState<string>("");
 
     const [editingClass, setEditingClass] = useState<EnumClass>();
 
     const Theme = useContext(ThemeContext);
 
-    const searchedEnum: EnumClass[]|undefined = useMemo(() => enums ? enums.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[enums, searchValue]);
+    const searchedEnum: EnumClass[]|undefined = useMemo(() => Project.state.enumTypes ? Project.state.enumTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[Project.state.enumTypes, searchValue]);
 
-    useEffect(() => {
-        retrieveEnum();
-    }, []);
-
-    const retrieveEnumAbordController = useRef<AbortController>(undefined);
-    const retrieveEnum = async () => {
-        if(retrieveEnumAbordController.current) {
-            retrieveEnumAbordController.current.abort();
-        }
-        retrieveEnumAbordController.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/enum/list`, {
-            method: "POST",
-            signal: retrieveEnumAbordController.current.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                workspace: "root"
-            })
-        });
-        if(response.status === 200) {
-            const json:EnumClass[] = await response.json();
-            setEnums(json);
-            if(!editingClass && json.length > 0) {
-                setEditingClass(json[0]);
-            }
-        }else {
-            setEnums([]);
-        }
-    }
 
     const addEnumPromptAbortController = useRef<AbortController>(undefined);
     const addEnumPrompt = async () => {
@@ -85,7 +59,10 @@ export const LeftPanelEnumEditor = memo((
         });
         if(response.status === 200) {
             const json:EnumClass = await response.json();
-            setEnums([...(enums ?? []), json]);
+            Project.dispatch({
+                field: "enumTypes",
+                value: [...(Project.state.enumTypes ?? []), json]
+            });
             if(!editingClass) {
                 setEditingClass(json);
             }
@@ -99,16 +76,19 @@ export const LeftPanelEnumEditor = memo((
 
     const nextClassUpdateExecution = useRef<Record<string, {timeout: NodeJS.Timeout, abort:AbortController}>>({});
     const requestEditingClassUpdate = (newEditingClass:EnumClass) => {
-        if(!enums) return;
+        if(!Project.state.enumTypes) return;
         setEditingClass(newEditingClass);
-        setEnums(enums.map((type) => {
-            if(type._key === newEditingClass._key) {
-                return newEditingClass
-            }
-            return type;
-        }));
+        Project.dispatch({
+            field: "enumTypes",
+            value: (Project.state.enumTypes.map((type) => {
+                if(type._key === newEditingClass._key) {
+                    return newEditingClass
+                }
+                return type;
+            }))
+        });
 
-        if( newEditingClass.name.length > 2 && !(enums??[]).some((d) => d._key !== newEditingClass._key && d.name.toLowerCase() == newEditingClass.name)) {
+        if( newEditingClass.name.length > 2 && !(Project.state.enumTypes??[]).some((d) => d._key !== newEditingClass._key && d.name.toLowerCase() == newEditingClass.name)) {
             if(nextClassUpdateExecution.current[newEditingClass._key]) {
                 clearTimeout(nextClassUpdateExecution.current[newEditingClass._key].timeout);
                 nextClassUpdateExecution.current[newEditingClass._key].abort.abort();
@@ -129,7 +109,7 @@ export const LeftPanelEnumEditor = memo((
 
     const deleteClassAbortController = useRef<AbortController>(undefined);
     const deleteClass = async () => {
-        if(!editingClass || !enums) return;
+        if(!editingClass || !Project.state.enumTypes) return;
         if(deleteClassAbortController.current) {
             deleteClassAbortController.current.abort();
         }
@@ -147,8 +127,11 @@ export const LeftPanelEnumEditor = memo((
             body: JSON.stringify(body)
         });
         if(response.status === 200) {
-            const newDataType = enums.filter((d) => d._key !== editingClass._key);
-            setEnums(newDataType);
+            const newDataType = Project.state.enumTypes.filter((d) => d._key !== editingClass._key);
+            Project.dispatch({
+                field: "enumTypes",
+                value: newDataType,
+            });
             setEditingClass(newDataType.length > 0 ? newDataType[0] : undefined);
         }
     }
@@ -282,7 +265,7 @@ export const LeftPanelEnumEditor = memo((
                                     newEditingClass.name = value.replace(/[^a-zA-Z0-9-_]/g, "");
                                     requestEditingClassUpdate(newEditingClass);
                                 }} style={{fontSize:"24px", fontWeight:"500", flex:"1"}} minLength={2}
-                                                  valid={!(enums??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name)}/>
+                                                  valid={!(Project.state.enumTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name)}/>
 
                                 <div>
                                     <Trash2 color={"var(--nodius-red-500)"} style={{cursor:"pointer"}} onClick={deleteClass}/>
@@ -291,7 +274,7 @@ export const LeftPanelEnumEditor = memo((
 
                             {(editingClass?.name.length ?? 2) < 2 ? (
                                 <p style={{color:"var(--nodius-red-500)",fontSize:"16px", fontWeight:"300"}}>Name must be at least 2 characters long.</p>
-                            ) : (enums??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name) ? (
+                            ) : (Project.state.enumTypes??[]).some((d) => d._key !== editingClass?._key && d.name.toLowerCase() == editingClass?.name) ? (
                                 <p>Name '{editingClass?.name} already in use.'</p>
                             ) : null}
                             <InputTransparent value={editingClass?.description ?? ""} setValue={(value) => {
