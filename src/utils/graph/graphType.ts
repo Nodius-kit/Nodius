@@ -225,52 +225,52 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         name: "Container",
         delimiter: true,
         tag: "div",
+        attribute: {
+            dataTypeRender: "",
+        },
         css: [
             {
                 selector: "&",
                 rules: [
                     ["height", "100%"],
-                    ["width", "100%"]
+                    ["width", "100%"],
+                    ["display", "flex"],
+                    ["flex-direction", "column"],
+                    ["padding", "16px"],
+                    ["overflow-y", "auto"],
+                    ["background-color", "var(--nodius-background-paper)"]
                 ]
             }
         ],
-        identifier: "root",
-        content: {
-            type: "text",
-            tag: "p",
-            name: "Text",
-            delimiter: true,
-            identifier:"0",
-            css: [],
-            domEvents: [
-                {
-                    name: "load",
-                    call: `
-                    console.log(globalStorage);
-                    `
-                }
-            ],
-            content: {
-                "fr": "dataType selected: {{JSON.stringify(globalStorage.globalCurrentEntryDataType)}}",
-                "en": "HTML: {{JSON.stringify(globalStorage.globalCurrentEntryDataType)}}",
-            },
-        }
+        identifier: "root"
     },
     domEvents: [
         {
             name: "dblclick",
             call: `
-            
+
             `,
             description: ""
         },
         {
             name: "nodeEnter",
             call: `
-               
+            
+                console.log("enter");
+                // Get the render container
+                const renderContainer = container.querySelector("[dataTypeRender]");
+                if (!renderContainer) return;
+
+                //renderContainer.innerHTML = html;
             `
         },
-
+        {
+            name: "nodeUpdate",
+            call: `
+                
+                console.log("update");
+            `
+        }
     ],
     border: {
         radius:10,

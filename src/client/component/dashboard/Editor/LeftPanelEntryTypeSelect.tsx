@@ -615,7 +615,6 @@ export const LeftPanelEntryTypeSelect = memo((
                         </div>
 
                         <div style={{
-                            maxHeight: "500px",
                             overflowY: "auto",
                             paddingRight: "8px"
                         }}>
