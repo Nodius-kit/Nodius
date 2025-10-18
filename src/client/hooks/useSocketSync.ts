@@ -23,6 +23,7 @@ import {
     GraphInstructions,
     WSApplyInstructionToGraph,
     WSBatchCreateElements,
+    WSBatchDeleteElements,
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUser,
@@ -664,6 +665,120 @@ export const useSocketSync = () => {
         });
     }, [batchCreateElements]);
 
+    const applyBatchDelete = useCallback(async (nodeKeys: string[], edgeKeys: string[]): Promise<{status: boolean, error?: string}> => {
+        if(!Project.state.graph || !Project.state.selectedSheetId) return {
+            status: false,
+            error: "Graph not initialized"
+        };
+
+        const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
+
+        // Delete edges first (to avoid orphaned edges)
+        for(const edgeKey of edgeKeys) {
+            const edge = findEdgeByKey(sheet.edgeMap, edgeKey);
+            if(edge) {
+                // Remove from target map
+                if(edge.target) {
+                    const targetKey = `target-${edge.target}`;
+                    let targetEdges = sheet.edgeMap.get(targetKey) || [];
+                    targetEdges = targetEdges.filter(e => e._key !== edgeKey);
+                    if(targetEdges.length > 0) {
+                        sheet.edgeMap.set(targetKey, targetEdges);
+                    } else {
+                        sheet.edgeMap.delete(targetKey);
+                    }
+                }
+
+                // Remove from source map
+                if(edge.source) {
+                    const sourceKey = `source-${edge.source}`;
+                    let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+                    sourceEdges = sourceEdges.filter(e => e._key !== edgeKey);
+                    if(sourceEdges.length > 0) {
+                        sheet.edgeMap.set(sourceKey, sourceEdges);
+                    } else {
+                        sheet.edgeMap.delete(sourceKey);
+                    }
+                }
+            }
+        }
+
+        // Delete nodes
+        for(const nodeKey of nodeKeys) {
+            sheet.nodeMap.delete(nodeKey);
+        }
+
+        Project.state.refreshCurrentEntryDataType?.();
+
+        // Redraw the graph if GPU motor is available
+        if(gpuMotor.current) {
+            gpuMotor.current.requestRedraw();
+        }
+
+        return {
+            status: true,
+        };
+    }, [Project.state.graph, Project.state.selectedSheetId, Project.state.refreshCurrentEntryDataType]);
+
+    const batchDeleteElements = useCallback(async (nodeKeys: string[], edgeKeys: string[]): Promise<ActionContext> => {
+        const start = Date.now();
+
+        if(!Project.state.selectedSheetId) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "No sheet selected",
+                status: false,
+            };
+        }
+
+        const message: WSMessage<WSBatchDeleteElements> = {
+            type: "batchDeleteElements",
+            sheetId: Project.state.selectedSheetId,
+            nodeKeys: nodeKeys,
+            edgeKeys: edgeKeys
+        };
+
+        const response = await sendMessage(message) as WSResponseMessage<WSBatchDeleteElements>;
+
+        if(response && response._response) {
+            if(response._response.status) {
+                const output = await applyBatchDelete(response.nodeKeys, response.edgeKeys);
+                if(!output.status) {
+                    return {
+                        reason: output.error || "Unknown error applying batch delete",
+                        timeTaken: Date.now() - start,
+                        status: false
+                    };
+                } else {
+                    return {
+                        timeTaken: Date.now() - start,
+                        status: true
+                    };
+                }
+            } else {
+                console.error("Server error while sending batch delete message:", message, " | server output:", response);
+                return {
+                    timeTaken: Date.now() - start,
+                    reason: response._response.message || "Unknown server error while sending batch delete message",
+                    status: false,
+                };
+            }
+        } else {
+            console.error("Client error while sending batch delete message:", message);
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Unknown client error while sending batch delete message",
+                status: false,
+            };
+        }
+    }, [Project.state.selectedSheetId, sendMessage, applyBatchDelete]);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "batchDeleteElements",
+            value: batchDeleteElements
+        });
+    }, [batchDeleteElements]);
 
     const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
         if(packet.type === "applyInstructionToGraph") {
@@ -672,8 +787,11 @@ export const useSocketSync = () => {
         } else if(packet.type === "batchCreateElements") {
             const message = packet as WSMessage<WSBatchCreateElements>;
             await applyBatchCreate(message.nodes, message.edges);
+        } else if(packet.type === "batchDeleteElements") {
+            const message = packet as WSMessage<WSBatchDeleteElements>;
+            await applyBatchDelete(message.nodeKeys, message.edgeKeys);
         }
-    }, [applyGraphInstructions, applyBatchCreate]);
+    }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete]);
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);

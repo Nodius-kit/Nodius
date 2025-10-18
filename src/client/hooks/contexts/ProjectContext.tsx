@@ -58,6 +58,7 @@ export interface ProjectContextType {
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     generateUniqueId?:(amount:number) => Promise<string[]|undefined>,
     batchCreateElements?:(nodes: Node<any>[], edges: Edge[]) => Promise<ActionContext>,
+    batchDeleteElements?:(nodeKeys: string[], edgeKeys: string[]) => Promise<ActionContext>,
     isSynchronized: boolean,
 
     dataTypes?: DataTypeClass[],

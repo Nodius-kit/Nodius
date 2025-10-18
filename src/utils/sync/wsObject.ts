@@ -50,3 +50,10 @@ export interface WSBatchCreateElements {
     nodes: Array<Node<any>>,
     edges: Array<Edge>,
 }
+
+export interface WSBatchDeleteElements {
+    type: "batchDeleteElements",
+    sheetId: string,
+    nodeKeys: Array<string>,
+    edgeKeys: Array<string>,
+}

@@ -246,6 +246,13 @@ export const LeftPanelEntryTypeSelect = memo((
         return connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
     }
 
+    const removeEntryType = async () => {
+        let nodeType = retrieveNodeType();
+        if(nodeType) {
+            await Project.state.batchDeleteElements!([nodeType._key], []);
+        }
+    }
+
     const setEntryType = async (dataType:DataTypeClass) => {
         if(!Project.state.graph) return;
 

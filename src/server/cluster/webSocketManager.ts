@@ -2,6 +2,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import {
     WSApplyInstructionToGraph,
     WSBatchCreateElements,
+    WSBatchDeleteElements,
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUser,
@@ -643,6 +644,102 @@ export class WebSocketManager {
                             ...message,
                             _id: undefined
                         } as WSMessage<WSBatchCreateElements>);
+                    }
+                }
+            } else if(jsonData.type === "batchDeleteElements") {
+                if(!user || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSBatchDeleteElements> = jsonData;
+
+                // Validate that the sheet exists
+                const targetSheet = this.managedGraph[graphKey][message.sheetId];
+                if(!targetSheet) {
+                    if (messageId) return this.sendMessage(ws, {
+                        _id: messageId,
+                        _response: {status: false, message: "Sheet with id "+message.sheetId+" not found"}
+                    } as WSMessage<WSResponseMessage<unknown>>);
+                    return;
+                }
+
+                // Validate all nodes exist before deletion
+                for(const nodeKey of message.nodeKeys) {
+                    if(!targetSheet.nodeMap.has(nodeKey)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Node with _key ${nodeKey} not found`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+                }
+
+                // Validate all edges exist before deletion
+                for(const edgeKey of message.edgeKeys) {
+                    const existingEdge = findEdgeByKey(targetSheet.edgeMap, edgeKey);
+                    if(!existingEdge) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: `Edge with _key ${edgeKey} not found`}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+                }
+
+                // All validations passed, mark as having unsaved changes
+                targetSheet.hasUnsavedChanges = true;
+
+                // Delete edges first (to avoid orphaned edges)
+                for(const edgeKey of message.edgeKeys) {
+                    const edge = findEdgeByKey(targetSheet.edgeMap, edgeKey);
+                    if(edge) {
+                        // Remove from target map
+                        if(edge.target) {
+                            const targetKey = `target-${edge.target}`;
+                            let targetEdges = targetSheet.edgeMap.get(targetKey) || [];
+                            targetEdges = targetEdges.filter(e => e._key !== edgeKey);
+                            if(targetEdges.length > 0) {
+                                targetSheet.edgeMap.set(targetKey, targetEdges);
+                            } else {
+                                targetSheet.edgeMap.delete(targetKey);
+                            }
+                        }
+
+                        // Remove from source map
+                        if(edge.source) {
+                            const sourceKey = `source-${edge.source}`;
+                            let sourceEdges = targetSheet.edgeMap.get(sourceKey) || [];
+                            sourceEdges = sourceEdges.filter(e => e._key !== edgeKey);
+                            if(sourceEdges.length > 0) {
+                                targetSheet.edgeMap.set(sourceKey, sourceEdges);
+                            } else {
+                                targetSheet.edgeMap.delete(sourceKey);
+                            }
+                        }
+                    }
+                }
+
+                // Delete nodes
+                for(const nodeKey of message.nodeKeys) {
+                    targetSheet.nodeMap.delete(nodeKey);
+                }
+
+                // Send success response
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: {status: true}
+                    } as WSMessage<WSResponseMessage<WSBatchDeleteElements>>);
+                }
+
+                // Broadcast to other users
+                for(const otherUser of targetSheet.user) {
+                    if(otherUser.id !== user.id || messageId == undefined) {
+                        this.sendMessage(otherUser.ws, {
+                            ...message,
+                            _id: undefined
+                        } as WSMessage<WSBatchDeleteElements>);
                     }
                 }
             }
