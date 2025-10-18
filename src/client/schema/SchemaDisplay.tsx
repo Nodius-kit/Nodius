@@ -184,6 +184,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             if(domEvent.name === "click" || domEvent.name === "dblclick") {
                                 nodeHTML.style.cursor = "pointer";
                             }
+
+                            const triggerEventOnNode = (nodeId:string, eventName:string) => {
+                                const nodeElement = document.querySelector(`[data-node-key="${nodeId}"]`);
+                                if(nodeElement) {
+                                    const updateEvent = new CustomEvent(eventName, {
+                                        bubbles: false
+                                    });
+                                    nodeElement.dispatchEvent(updateEvent);
+                                }
+                            }
+
                             const callEvent = async (event:any) => {
                                 const fct = new AsyncFunction(
                                     ...[
@@ -196,6 +207,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                                         "getHtmlAllRenderer",
                                         "container",
                                         "overlayContainer",
+                                        "triggerEventOnNode",
                                         domEvent.call
                                     ]
                                 );
@@ -209,7 +221,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                                         Project.state.initiateNewHtmlRenderer,
                                         Project.state.getHtmlAllRenderer,
                                         nodeHTML,
-                                        overlay
+                                        overlay,
+                                        triggerEventOnNode
                                     ]
                                 );
                             }
@@ -259,9 +272,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             await schemaNode.htmlRenderer.htmlMotor.render(updatedConfig.content);
                         }
                     }
+
+                    const nodeElement = document.querySelector(`[data-node-key="${node._key}"]`);
+                    if(nodeElement) {
+                        const updateEvent = new CustomEvent("nodeUpdate", {
+                            bubbles: false
+                        });
+                        nodeElement.dispatchEvent(updateEvent);
+                    }
                 };
 
-                nodeHTML.addEventListener("nodeUpdate", handleNodeUpdate);
+                nodeHTML.addEventListener("nodeUpdateSystem", handleNodeUpdate);
 
                 // Initial attachment
                 attachDomEvents(nodeConfig);
@@ -392,9 +413,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         const triggerNodeUpdate = (nodeKey: string) => {
             const nodeElement = document.querySelector(`[data-node-key="${nodeKey}"]`);
             if(nodeElement) {
-                const updateEvent = new CustomEvent("nodeUpdate", {
+                const updateEvent = new CustomEvent("nodeUpdateSystem", {
                     bubbles: false,
-                    detail: { nodeKey }
+                    detail: {
+                        nodeId: nodeKey
+                    }
                 });
                 nodeElement.dispatchEvent(updateEvent);
             }

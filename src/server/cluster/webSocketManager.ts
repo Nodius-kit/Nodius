@@ -8,14 +8,14 @@ import {
     WSResponseMessage
 } from "../../utils/sync/wsObject";
 import {ClusterManager} from "./clusterManager";
-import {clusterManager} from "../server";
+import {clusterManager, db} from "../server";
 import {Edge, Node} from "../../utils/graph/graphType";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
 import {edgeArrayToMap, findEdgeByKey, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {applyInstruction, InstructionBuilder, validateInstruction} from "../../utils/sync/InstructionBuilder";
 import {HtmlObject} from "../../utils/html/htmlType";
 import {travelHtmlObject} from "../../utils/html/htmlUtils";
-import {travelObject} from "../../utils/objectUtils";
+import {travelObject, deepCopy} from "../../utils/objectUtils";
 
 /**
  * WebSocketManager class to handle WebSocket server in Node.js.
@@ -39,7 +39,12 @@ interface ManagedSheet {
     }>,
     user: Array<ManageUser>,
     nodeMap: Map<string, Node<any>>,
-    edgeMap: Map<string, Edge[]>
+    edgeMap: Map<string, Edge[]>,
+    // Original state when graph was loaded, for diff computation
+    originalNodeMap: Map<string, Node<any>>,
+    originalEdgeMap: Map<string, Edge[]>,
+    // Track if changes have been made
+    hasUnsavedChanges: boolean
 }
 
 export class WebSocketManager {
@@ -50,6 +55,7 @@ export class WebSocketManager {
     private managedGraph:Record<string, Record<string, ManagedSheet>> = {}
 
     private intervalCleaning:NodeJS.Timeout|undefined;
+    private intervalSaving:NodeJS.Timeout|undefined;
 
     /**
      * Constructor to initialize the WebSocket server.
@@ -82,6 +88,8 @@ export class WebSocketManager {
         });
 
         this.intervalCleaning = setInterval(this.clearUnhabitedInstances, 10000);
+        // Save diffs every 30 seconds
+        this.intervalSaving = setInterval(this.savePendingChanges, 30000);
     }
 
     private findUserByWs = (ws: WebSocket): ManageUser | undefined => {
@@ -144,6 +152,9 @@ export class WebSocketManager {
                 }
             }
             if(AllEmpty) {
+                // Save any pending changes before closing the graph
+                await this.saveGraphChanges(graphId);
+
                 // nobody in this graph, delete it
                 delete this.managedGraph[graphId];
                 await clusterManager.removeGraphPeer(graphId);
@@ -158,11 +169,18 @@ export class WebSocketManager {
             avoidCheckingWebSocket: true
         });
         Object.keys(graph._sheets).forEach((sheetId) => {
+            const nodeMap = nodeArrayToMap(graph._sheets[sheetId].nodes);
+            const edgeMap = edgeArrayToMap(graph._sheets[sheetId].edges);
+
             this.managedGraph[graphKey][sheetId] = {
                 instructionHistory: [],
                 user: [],
-                nodeMap: nodeArrayToMap(graph._sheets[sheetId].nodes),
-                edgeMap: edgeArrayToMap(graph._sheets[sheetId].edges),
+                nodeMap: nodeMap,
+                edgeMap: edgeMap,
+                // Deep copy for original state
+                originalNodeMap: new Map(nodeMap),
+                originalEdgeMap: new Map(edgeMap),
+                hasUnsavedChanges: false
             }
         })
         this.uniqueIdGenerator[graphKey] = 0;
@@ -358,6 +376,9 @@ export class WebSocketManager {
                         }
                     }
                 }
+                // Mark sheet as having unsaved changes
+                sheet.hasUnsavedChanges = true;
+
                 for( let i = 0; i < message.instructions.length; i++ ) {
                     const instruction = message.instructions[i];
                     if(instruction.nodeId) {
@@ -583,6 +604,9 @@ export class WebSocketManager {
                 }
 
                 // All validations passed, now add the nodes and edges
+                // Mark sheet as having unsaved changes
+                targetSheet.hasUnsavedChanges = true;
+
                 // Add nodes
                 for(const node of message.nodes) {
                     targetSheet.nodeMap.set(node._key, node);
@@ -662,12 +686,155 @@ export class WebSocketManager {
     }
 
     /**
+     * Save all pending changes for all managed graphs
+     */
+    private savePendingChanges = async () => {
+        for (const graphKey in this.managedGraph) {
+            await this.saveGraphChanges(graphKey);
+        }
+    }
+
+    /**
+     * Save changes for a specific graph to ArangoDB
+     * @param graphKey - The graph key to save changes for
+     */
+    private saveGraphChanges = async (graphKey: string): Promise<void> => {
+        const graph = this.managedGraph[graphKey];
+        if (!graph) return;
+
+        try {
+            const node_collection = db.collection("nodius_nodes");
+            const edge_collection = db.collection("nodius_edges");
+
+            for (const sheetId in graph) {
+                const sheet = graph[sheetId];
+
+                if (!sheet.hasUnsavedChanges) {
+                    continue; // Skip sheets with no changes
+                }
+
+                // Compute node diffs
+                const nodesToUpdate: Node<any>[] = [];
+                const nodesToCreate: Node<any>[] = [];
+                const nodesToDelete: string[] = [];
+
+                // Find updated and new nodes
+                for (const [nodeKey, node] of sheet.nodeMap) {
+                    const originalNode = sheet.originalNodeMap.get(nodeKey);
+                    if (!originalNode) {
+                        // New node
+                        nodesToCreate.push(node);
+                    } else if (JSON.stringify(originalNode) !== JSON.stringify(node)) {
+                        // Modified node
+                        nodesToUpdate.push(node);
+                    }
+                }
+
+                // Find deleted nodes
+                for (const [nodeKey, _] of sheet.originalNodeMap) {
+                    if (!sheet.nodeMap.has(nodeKey)) {
+                        nodesToDelete.push(nodeKey);
+                    }
+                }
+
+                // Compute edge diffs
+                const edgesToUpdate: Edge[] = [];
+                const edgesToCreate: Edge[] = [];
+                const edgesToDelete: string[] = [];
+
+                // Helper to get all edges from edgeMap
+                const getAllEdges = (edgeMap: Map<string, Edge[]>): Map<string, Edge> => {
+                    const allEdges = new Map<string, Edge>();
+                    for (const edges of edgeMap.values()) {
+                        for (const edge of edges) {
+                            allEdges.set(edge._key, edge);
+                        }
+                    }
+                    return allEdges;
+                };
+
+                const currentEdges = getAllEdges(sheet.edgeMap);
+                const originalEdges = getAllEdges(sheet.originalEdgeMap);
+
+                // Find updated and new edges
+                for (const [edgeKey, edge] of currentEdges) {
+                    const originalEdge = originalEdges.get(edgeKey);
+                    if (!originalEdge) {
+                        // New edge
+                        edgesToCreate.push(edge);
+                    } else if (JSON.stringify(originalEdge) !== JSON.stringify(edge)) {
+                        // Modified edge
+                        edgesToUpdate.push(edge);
+                    }
+                }
+
+                // Find deleted edges
+                for (const [edgeKey, _] of originalEdges) {
+                    if (!currentEdges.has(edgeKey)) {
+                        edgesToDelete.push(edgeKey);
+                    }
+                }
+
+                // Execute database operations
+                // Create new nodes
+                for (const node of nodesToCreate) {
+                    await node_collection.save(node);
+                }
+
+                // Update existing nodes
+                for (const node of nodesToUpdate) {
+                    await node_collection.update(node._key, node);
+                }
+
+                // Delete removed nodes
+                for (const nodeKey of nodesToDelete) {
+                    await node_collection.remove(nodeKey);
+                }
+
+                // Create new edges
+                for (const edge of edgesToCreate) {
+                    await edge_collection.save(edge);
+                }
+
+                // Update existing edges
+                for (const edge of edgesToUpdate) {
+                    await edge_collection.update(edge._key, edge);
+                }
+
+                // Delete removed edges
+                for (const edgeKey of edgesToDelete) {
+                    await edge_collection.remove(edgeKey);
+                }
+
+                // Update the original state after successful save
+                sheet.originalNodeMap = new Map(sheet.nodeMap);
+                sheet.originalEdgeMap = new Map(sheet.edgeMap);
+                sheet.hasUnsavedChanges = false;
+
+                console.log(`Saved changes for graph ${graphKey}, sheet ${sheetId}:`, {
+                    nodesCreated: nodesToCreate.length,
+                    nodesUpdated: nodesToUpdate.length,
+                    nodesDeleted: nodesToDelete.length,
+                    edgesCreated: edgesToCreate.length,
+                    edgesUpdated: edgesToUpdate.length,
+                    edgesDeleted: edgesToDelete.length
+                });
+            }
+        } catch (error) {
+            console.error(`Error saving changes for graph ${graphKey}:`, error);
+        }
+    }
+
+    /**
      * Utility function to close the WebSocket server.
      */
     public closeServer(): void {
         this.wss.close(() => {
             console.log('WebSocket server closed');
             clearInterval(this.intervalCleaning);
+            if (this.intervalSaving) {
+                clearInterval(this.intervalSaving);
+            }
         });
     }
 

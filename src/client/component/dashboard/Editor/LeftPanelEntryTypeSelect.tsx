@@ -1,6 +1,6 @@
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
-import {allDataTypes, DataTypeClass, DataTypeConfig} from "../../../../utils/dataType/dataType";
-import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check, Edit3} from "lucide-react";
+import {allDataTypes, DataTypeClass, DataTypeConfig, EnumClass} from "../../../../utils/dataType/dataType";
+import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check, Edit3, Trash2} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {Edge, Graph, Node, NodeTypeEntryType} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
@@ -11,249 +11,14 @@ import {Input} from "../../form/Input";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../../utils/sync/wsObject";
 import {Fade} from "../../animate/Fade";
+import {LeftPanelEntryTypeSelectRecursiveFieldEditor} from "./LeftPanelEntryTypeSelectRecursiveFieldEditor";
 
 
 interface LeftPanelEntryTypeSelectProps {
     graph?:Graph
 }
 
-// Recursive JSON Editor Component for Entry Type Fields
-interface RecursiveFieldEditorProps {
-    field: DataTypeConfig;
-    value: any;
-    onChange: (value: any) => void;
-    depth?: number;
-    allDataTypes: DataTypeClass[] | undefined;
-}
 
-const RecursiveFieldEditor = memo(({
-    field,
-    value,
-    onChange,
-    depth = 0,
-    allDataTypes
-}: RecursiveFieldEditorProps) => {
-    const Theme = useContext(ThemeContext);
-    const [isExpanded, setIsExpanded] = useState(depth < 2); // Auto-expand first 2 levels
-
-    const fieldContainerClass = useDynamicClass(`
-        & {
-            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
-            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
-            border-radius: 8px;
-            padding: 12px;
-            margin-left: ${depth * 16}px;
-            margin-bottom: 8px;
-        }
-
-        & .field-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        & .field-label {
-            font-weight: 500;
-            font-size: 13px;
-            flex: 1;
-        }
-
-        & .field-type-badge {
-            background-color: var(--nodius-primary-main);
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 500;
-        }
-
-        & .field-required {
-            color: var(--nodius-error-main);
-            font-size: 11px;
-        }
-
-        & .nested-fields {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
-        }
-    `);
-
-    // Check if this field's type is a DataType (recursive case)
-    const isNestedDataType = field.typeId === "dataType";
-    const nestedDataType = isNestedDataType && allDataTypes
-        ? allDataTypes.find(dt => dt._key === field.defaultValue)
-        : undefined;
-
-    // For arrays, handle multiple values
-    const isArray = field.isArray;
-    const arrayValues = isArray && Array.isArray(value) ? value : (isArray ? [] : null);
-
-    const handleValueChange = (newValue: any, index?: number) => {
-        if (isArray && index !== undefined) {
-            const newArray = [...(arrayValues || [])];
-            newArray[index] = newValue;
-            onChange(newArray);
-        } else {
-            onChange(newValue);
-        }
-    };
-
-    const addArrayItem = () => {
-        if (isArray) {
-            const newArray = [...(arrayValues || []), nestedDataType ? {} : ""];
-            onChange(newArray);
-        }
-    };
-
-    const removeArrayItem = (index: number) => {
-        if (isArray && arrayValues) {
-            const newArray = arrayValues.filter((_, i) => i !== index);
-            onChange(newArray);
-        }
-    };
-
-    const renderPrimitiveInput = (currentValue: any, index?: number) => {
-        const validTypes = allDataTypes?.filter(dt => !["dataType", "enum"].includes(dt._key)) || [];
-
-        return (
-            <Input
-                type={field.typeId === "int" || field.typeId === "db" ? "number" : "text"}
-                value={currentValue || ""}
-                onChange={(val) => handleValueChange(val, index)}
-                placeholder={`Enter ${field.name}${field.required ? " (required)" : ""}`}
-            />
-        );
-    };
-
-    const renderNestedObject = (currentValue: any, index?: number) => {
-        if (!nestedDataType) return null;
-
-        return (
-            <div className="nested-fields">
-                {nestedDataType.types.map((nestedField, i) => (
-                    <RecursiveFieldEditor
-                        key={i}
-                        field={nestedField}
-                        value={currentValue?.[nestedField.name]}
-                        onChange={(newVal) => {
-                            const updatedObj = { ...(currentValue || {}), [nestedField.name]: newVal };
-                            handleValueChange(updatedObj, index);
-                        }}
-                        depth={depth + 1}
-                        allDataTypes={allDataTypes}
-                    />
-                ))}
-            </div>
-        );
-    };
-
-    return (
-        <div className={fieldContainerClass}>
-            <div className="field-header" onClick={() => isNestedDataType && setIsExpanded(!isExpanded)}>
-                {isNestedDataType && (
-                    isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />
-                )}
-                <span className="field-label">{field.name}</span>
-                <span className="field-type-badge">
-                    {isArray ? "Array<" : ""}{nestedDataType ? nestedDataType.name : field.typeId}{isArray ? ">" : ""}
-                </span>
-                {field.required && <span className="field-required">*required</span>}
-            </div>
-
-            {isNestedDataType && isExpanded ? (
-                isArray ? (
-                    <div>
-                        {arrayValues?.map((item, idx) => (
-                            <div key={idx} style={{ marginBottom: "8px", position: "relative" }}>
-                                <button
-                                    onClick={() => removeArrayItem(idx)}
-                                    style={{
-                                        position: "absolute",
-                                        right: "8px",
-                                        top: "8px",
-                                        background: "var(--nodius-error-main)",
-                                        color: "white",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        padding: "4px 8px",
-                                        cursor: "pointer",
-                                        fontSize: "11px",
-                                        zIndex: 1
-                                    }}
-                                >
-                                    Remove
-                                </button>
-                                {renderNestedObject(item, idx)}
-                            </div>
-                        ))}
-                        <button
-                            onClick={addArrayItem}
-                            style={{
-                                background: "var(--nodius-primary-main)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "6px",
-                                padding: "8px 12px",
-                                cursor: "pointer",
-                                fontSize: "12px",
-                                marginTop: "8px"
-                            }}
-                        >
-                            + Add Item
-                        </button>
-                    </div>
-                ) : (
-                    renderNestedObject(value)
-                )
-            ) : (
-                isArray ? (
-                    <div>
-                        {arrayValues?.map((item, idx) => (
-                            <div key={idx} style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-                                {renderPrimitiveInput(item, idx)}
-                                <button
-                                    onClick={() => removeArrayItem(idx)}
-                                    style={{
-                                        background: "var(--nodius-error-main)",
-                                        color: "white",
-                                        border: "none",
-                                        borderRadius: "4px",
-                                        padding: "4px 8px",
-                                        cursor: "pointer",
-                                        fontSize: "11px"
-                                    }}
-                                >
-                                    Remove
-                                </button>
-                            </div>
-                        ))}
-                        <button
-                            onClick={addArrayItem}
-                            style={{
-                                background: "var(--nodius-primary-main)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "6px",
-                                padding: "8px 12px",
-                                cursor: "pointer",
-                                fontSize: "12px"
-                            }}
-                        >
-                            + Add Item
-                        </button>
-                    </div>
-                ) : (
-                    renderPrimitiveInput(value)
-                )
-            )}
-        </div>
-    );
-});
-RecursiveFieldEditor.displayName = "RecursiveFieldEditor";
 
 export const LeftPanelEntryTypeSelect = memo((
     {
@@ -292,6 +57,7 @@ export const LeftPanelEntryTypeSelect = memo((
         }
         setPreparedType(newPreparedType);
     }
+
 
     const selectInputDataButton = useDynamicClass(`
         & {
@@ -470,17 +236,21 @@ export const LeftPanelEntryTypeSelect = memo((
         }
     `);
 
-    const setEntryType = async (dataType:DataTypeClass) => {
-        if(!Project.state.graph) return;
-        //let nodeType = findFirstNodeByType<NodeTypeEntryType>(Project.state.graph, "entryType");
+    const retrieveNodeType = () : Node<NodeTypeEntryType> | undefined => {
+        if(!Project.state.graph) return undefined;
         const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
 
-        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return;
+        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return undefined;
 
         const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
-        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+        return connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+    }
 
+    const setEntryType = async (dataType:DataTypeClass) => {
+        if(!Project.state.graph) return;
 
+        let nodeType = retrieveNodeType();
+        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
 
         if(nodeType) {
             if(nodeType.data!._key === dataType._key) {
@@ -542,7 +312,7 @@ export const LeftPanelEntryTypeSelect = memo((
                 graphKey: Project.state.graph._key,
                 sourceHandle: "0",
                 undeletable: true,
-                targetHandle: nodeRoot.handles["0"].point[0].id, // we target the center point of the root node
+                targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
                 style: "curved"
             }
 
@@ -551,11 +321,126 @@ export const LeftPanelEntryTypeSelect = memo((
         }
     }
 
-    // Empty function for saving changes - to be implemented by user
-    const handleSaveChanges = (data: Record<string, any>) => {
-        // TODO: Implement save logic here
-        console.log("Save changes:", data);
+    // Validate a single value against a field type
+    const validateFieldValue = (value: any, field: DataTypeConfig): boolean => {
+        if (value === null || value === undefined || value === "") return false;
+
+        // If it's a dataType, recursively validate the nested object
+        if (field.typeId === "dataType") {
+            const nestedDataType = Project.state.dataTypes?.find(dt => dt._key === field.defaultValue);
+            if (!nestedDataType) return false;
+
+            if (field.isArray) {
+                if (!Array.isArray(value)) return false;
+                return value.every(item => validateNestedObject(item, nestedDataType));
+            } else {
+                return validateNestedObject(value, nestedDataType);
+            }
+        }
+
+        // For enum type, check if value is in enum
+        if (field.typeId === "enum") {
+            const enumDef = Project.state.enumTypes?.find(e => e._key === field.defaultValue);
+            if (!enumDef) return false;
+
+            if (field.isArray) {
+                if (!Array.isArray(value)) return false;
+                return value.every(item => enumDef.enum.includes(String(item)));
+            } else {
+                return enumDef.enum.includes(String(value));
+            }
+        }
+
+        // For primitive types, use the .is() function
+        const typeDef = allDataTypes.find(t => t.id === field.typeId);
+        if (!typeDef) return false;
+
+        if (field.isArray) {
+            if (!Array.isArray(value)) return false;
+            return value.every(item => typeDef.is(String(item)));
+        } else {
+            return typeDef.is(String(value));
+        }
+    };
+
+    // Validate a nested object
+    const validateNestedObject = (obj: any, dataType: DataTypeClass): boolean => {
+        if (!obj || typeof obj !== 'object') return false;
+
+        // Check all required fields are present and valid
+        for (const field of dataType.types) {
+            const fieldValue = obj[field.name];
+
+            if (field.required && (fieldValue === null || fieldValue === undefined || fieldValue === "")) {
+                return false;
+            }
+
+            if (fieldValue !== null && fieldValue !== undefined && fieldValue !== "") {
+                if (!validateFieldValue(fieldValue, field)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    };
+
+    // Clean data by removing invalid values
+    const cleanData = (data: Record<string, any>): Record<string, any> => {
+        if (!Project.state.currentEntryDataType) return data;
+
+        const cleaned: Record<string, any> = {};
+
+        for (const field of Project.state.currentEntryDataType.types) {
+            const value = data[field.name];
+
+            // Skip empty values
+            if (value === null || value === undefined || value === "") {
+                continue;
+            }
+
+            // Validate and only include valid values
+            if (validateFieldValue(value, field)) {
+                cleaned[field.name] = value;
+            }
+        }
+
+        return cleaned;
+    };
+
+    // Save function that filters out invalid values
+    const handleSaveChanges = async (data: Record<string, any>) => {
+        const nodeType = retrieveNodeType();
+        if(!nodeType) return;
+
+        const cleanedData = cleanData(data);
+        console.log("Removed invalid values:", Object.keys(data).filter(k => !(k in cleanedData)));
+        const instruction = new InstructionBuilder();
+        instruction.key("data").key("fixedValue").set(cleanedData);
+
+
+        const instructions:Array<GraphInstructions> = [{
+            nodeId: nodeType._key,
+            i: instruction.instruction,
+            noRedraw: true
+        }];
+        const output = await Project.state.updateGraph!(instructions);
+
     }
+
+    useEffect(() => {
+        if(!Project.state.currentEntryDataType || !Project.state.graph) {
+            setEditorData({});
+        } else {
+            const nodeType = retrieveNodeType();
+
+            if(nodeType && nodeType.data && nodeType.data.fixedValue) {
+                setEditorData(nodeType.data.fixedValue);
+            } else {
+                setEditorData({});
+            }
+        }
+    }, [Project.state.currentEntryDataType, Project.state.graph]);
 
     const handleFieldChange = (fieldName: string, value: any) => {
         setEditorData(prev => ({
@@ -577,27 +462,33 @@ export const LeftPanelEntryTypeSelect = memo((
                     left:"100%",
                     zIndex:"1",
                     boxShadow: "rgba(0, 0, 0, 0.35) 0px 0px 6px 0px inset",
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column"
                 }}>
                     <div style={{
-                        margin: "16px",
-                        padding: "16px",
+                        display: "flex",
+                        flexDirection: "column",
+                        height: "100%",
                         background: Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.02),
                         borderRadius: "8px",
-                        border: `1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)}`
+                        border: `1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)}`,
+                        overflow: "hidden"
                     }}>
+                        {/* Fixed Header */}
                         <div style={{
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "space-between",
-                            marginBottom: "16px",
-                            paddingBottom: "12px",
-                            borderBottom: `2px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)}`
+                            padding: "16px",
+                            borderBottom: `2px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)}`,
+                            flexShrink: 0
                         }}>
                             <h6 style={{margin: 0, fontSize: "15px", fontWeight: 600}}>
                                 Configure Entry Data
                             </h6>
                             <button
-                                onClick={() => handleSaveChanges(editorData)}
+                                onClick={async () => await handleSaveChanges(editorData)}
                                 style={{
                                     background: "var(--nodius-success-main)",
                                     color: "white",
@@ -614,31 +505,35 @@ export const LeftPanelEntryTypeSelect = memo((
                             </button>
                         </div>
 
+                        {/* Scrollable Content */}
                         <div style={{
+                            flex: 1,
                             overflowY: "auto",
+                            padding: "16px",
                             paddingRight: "8px"
                         }}>
                             {Project.state.currentEntryDataType && Project.state.currentEntryDataType.types.map((field, index) => (
-                                <RecursiveFieldEditor
+                                <LeftPanelEntryTypeSelectRecursiveFieldEditor
                                     key={index}
                                     field={field}
                                     value={editorData[field.name]}
                                     onChange={(value) => handleFieldChange(field.name, value)}
-                                    allDataTypes={Project.state.dataTypes}
+                                    dataTypeClasses={Project.state.dataTypes}
+                                    enumTypes={Project.state.enumTypes}
                                 />
                             ))}
-                        </div>
 
-                        {Project.state.currentEntryDataType && Project.state.currentEntryDataType.types.length === 0 && (
-                            <div style={{
-                                textAlign: "center",
-                                padding: "32px",
-                                opacity: 0.6,
-                                fontSize: "14px"
-                            }}>
-                                This data type has no fields defined yet.
-                            </div>
-                        )}
+                            {Project.state.currentEntryDataType && Project.state.currentEntryDataType.types.length === 0 && (
+                                <div style={{
+                                    textAlign: "center",
+                                    padding: "32px",
+                                    opacity: 0.6,
+                                    fontSize: "14px"
+                                }}>
+                                    This data type has no fields defined yet.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </Fade>

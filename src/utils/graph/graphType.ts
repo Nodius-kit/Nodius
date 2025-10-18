@@ -248,27 +248,172 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         {
             name: "dblclick",
             call: `
-
             `,
             description: ""
         },
         {
             name: "nodeEnter",
             call: `
-            
-                console.log("enter");
-                // Get the render container
-                const renderContainer = container.querySelector("[dataTypeRender]");
-                if (!renderContainer) return;
 
-                //renderContainer.innerHTML = html;
+                const renderContainer = container.querySelector("[dataTypeRender]");
+                if(renderContainer.children.length == 0){
+                    //first render
+                    //render logic is on the nodeUpdate, we can manually trigger it:
+                    triggerEventOnNode(node._key, "nodeUpdate");
+                }
             `
         },
         {
             name: "nodeUpdate",
             call: `
+                // Select the container element where the JSON viewer will be rendered
+                const renderContainer = container.querySelector("[dataTypeRender]");
                 
-                console.log("update");
+                // Clear any previous content in the render container
+                renderContainer.innerHTML = "";
+                
+                // Check if the necessary data is available before rendering
+                console.log(node.data.fixedValue);
+                if (node.data.fixedValue !== undefined) {
+                  const fixedValue = node.data.fixedValue;
+                
+                  // Add global styles for the JSON viewer if they haven't been added yet
+                  const styleId = 'json-viewer-style';
+                  if (!document.getElementById(styleId)) {
+                    const style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = \`
+                      .json-viewer {
+                        background-color: var(--nodius-background-paper);
+                        padding: 10px;
+                        border-radius: 8px;
+                        box-shadow: var(--nodius-shadow-1);
+                        color: var(--nodius-text-primary);
+                        font-family: monospace;
+                        font-size: 14px;
+                        overflow: auto;
+                      }
+                      .json-key {
+                        color: var(--nodius-primary-main);
+                        font-weight: bold;
+                      }
+                      .json-string {
+                        color: var(--nodius-success-main);
+                      }
+                      .json-number {
+                        color: var(--nodius-info-main);
+                      }
+                      .json-boolean {
+                        color: var(--nodius-warning-main);
+                      }
+                      .json-null {
+                        color: var(--nodius-text-disabled);
+                      }
+                      .json-object, .json-array {
+                        padding-left: 20px;
+                      }
+                      summary {
+                        cursor: pointer;
+                        font-weight: bold;
+                        color: var(--nodius-text-primary);
+                        background-color: var(--nodius-background-default);
+                        padding: 5px;
+                        border-radius: 4px;
+                        margin-bottom: 5px;
+                        transition: var(--nodius-transition-default);
+                      }
+                      summary:hover {
+                        background-color: var(--nodius-primary-paper);
+                      }
+                      .json-key-value, .json-array-item {
+                        display: flex;
+                        align-items: baseline;
+                        margin-bottom: 5px;
+                      }
+                      .json-value {
+                        flex: 1;
+                      }
+                    \`;
+                    document.head.appendChild(style);
+                  }
+                
+                  // Apply the viewer class to the render container for overall styling
+                  renderContainer.classList.add('json-viewer');
+                
+                  // Start rendering the fixedValue recursively
+                  renderValue(fixedValue, renderContainer, true);
+                }
+                
+                // Recursive function to render any value (primitive, object, array) into a parent element
+                function renderValue(value, parent, isRoot = false) {
+                  // Handle null values
+                  if (value === null) {
+                    const span = document.createElement('span');
+                    span.className = 'json-null';
+                    span.textContent = 'null';
+                    parent.appendChild(span);
+                    return;
+                  }
+                
+                  // Determine the type of the value
+                  const type = typeof value;
+                
+                  // Handle primitive types: string, number, boolean
+                  if (type === 'string' || type === 'number' || type === 'boolean') {
+                    const span = document.createElement('span');
+                    span.className = "json-"+type;
+                    span.textContent = type === 'string' ? '"'+value+'"' : value.toString();
+                    parent.appendChild(span);
+                    return;
+                  }
+                
+                  // Handle objects and arrays recursively with collapsible sections
+                  const isArray = Array.isArray(value);
+                  const details = document.createElement('details');
+                  details.open = isRoot; // Expand the root level by default for better user experience
+                  const summary = document.createElement('summary');
+                  summary.textContent = isArray ? "Array ["+value.length+"]" : "Object {"+Object.keys(value).length+"}";
+                  details.appendChild(summary);
+                
+                  const containerDiv = document.createElement('div');
+                  containerDiv.className = isArray ? 'json-array' : 'json-object';
+                
+                  if (isArray) {
+                    // Render array items with indices
+                    value.forEach((item, index) => {
+                      const div = document.createElement('div');
+                      div.className = 'json-array-item';
+                      const indexSpan = document.createElement('span');
+                      indexSpan.className = 'json-key';
+                      indexSpan.textContent = index+": ";
+                      div.appendChild(indexSpan);
+                      const valDiv = document.createElement('div');
+                      valDiv.className = 'json-value';
+                      renderValue(item, valDiv);
+                      div.appendChild(valDiv);
+                      containerDiv.appendChild(div);
+                    });
+                  } else {
+                    // Render object key-value pairs
+                    Object.entries(value).forEach(([key, val]) => {
+                      const div = document.createElement('div');
+                      div.className = 'json-key-value';
+                      const keySpan = document.createElement('span');
+                      keySpan.className = 'json-key';
+                      keySpan.textContent = key+": ";
+                      div.appendChild(keySpan);
+                      const valDiv = document.createElement('div');
+                      valDiv.className = 'json-value';
+                      renderValue(val, valDiv);
+                      div.appendChild(valDiv);
+                      containerDiv.appendChild(div);
+                    });
+                  }
+                
+                  details.appendChild(containerDiv);
+                  parent.appendChild(details);
+                }
+                
             `
         }
     ],

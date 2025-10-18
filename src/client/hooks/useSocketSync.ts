@@ -465,14 +465,13 @@ export const useSocketSync = () => {
                         redrawGraph = true;
                     }
 
-                    // trigger node event update
-                    const nodeHtml = document.querySelector('[data-node-key="'+instruction.nodeId+'"]');
-                    if(nodeHtml) {
-                        nodeHtml.dispatchEvent(new CustomEvent<GraphInstructions>("nodeUpdate", {
-                            bubbles: false,
-                            detail: instruction
-                        }));
-                    }
+                }
+            }
+
+            // trigger node event update
+            for(const instruction of instructions) {
+                if(instruction.nodeId) {
+                    (window as any).triggerNodeUpdate?.(instruction.nodeId);
                 }
             }
 
