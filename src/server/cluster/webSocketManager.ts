@@ -775,6 +775,16 @@ export class WebSocketManager {
                     }
                 }
 
+                // Helper to convert edge to ArangoDB format (source/target -> _from/_to)
+                const edgeToArangoFormat = (edge: Edge): any => {
+                    return {
+                        ...edge,
+                        _from: `nodius_nodes/${edge.source}`,
+                        _to: `nodius_nodes/${edge.target}`
+                        // Keep source and target as well for compatibility
+                    };
+                };
+
                 // Execute database operations
                 // Create new nodes
                 for (const node of nodesToCreate) {
@@ -793,12 +803,14 @@ export class WebSocketManager {
 
                 // Create new edges
                 for (const edge of edgesToCreate) {
-                    await edge_collection.save(edge);
+                    const arangoEdge = edgeToArangoFormat(edge);
+                    await edge_collection.save(arangoEdge);
                 }
 
                 // Update existing edges
                 for (const edge of edgesToUpdate) {
-                    await edge_collection.update(edge._key, edge);
+                    const arangoEdge = edgeToArangoFormat(edge);
+                    await edge_collection.update(edge._key, arangoEdge);
                 }
 
                 // Delete removed edges

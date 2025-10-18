@@ -54,9 +54,10 @@ export interface Node<T> {
     data?: T
 }
 
-// Clean an Edge object
+// Clean an Edge object and translate ArangoDB format (_from/_to) to application format (source/target)
 export function cleanEdge(obj: any): Edge {
-    return pickKeys<Edge>(obj, [
+    const cleaned = pickKeys<Edge>(obj, [
+        "_key",
         "graphKey",
         "sheet",
         "source",
@@ -65,7 +66,20 @@ export function cleanEdge(obj: any): Edge {
         "targetHandle",
         "style",
         "label",
+        "undeletable"
     ]);
+
+    // If _from and _to exist (from ArangoDB), extract source and target from them
+    if (obj._from && !cleaned.source) {
+        // _from format: "nodius_nodes/nodeKey" -> extract "nodeKey"
+        cleaned.source = obj._from.split('/')[1];
+    }
+    if (obj._to && !cleaned.target) {
+        // _to format: "nodius_nodes/nodeKey" -> extract "nodeKey"
+        cleaned.target = obj._to.split('/')[1];
+    }
+
+    return cleaned;
 }
 
 // Clean a Node object
