@@ -9,7 +9,7 @@ import {
     NodeTypeEntryTypeConfig,
     NodeTypeHtmlConfig
 } from "../../../utils/graph/graphType";
-import {HtmlClass} from "../../../utils/html/htmlType";
+import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
 import {HtmlRender, HtmlRenderOption} from "../../../process/html/HtmlRender";
 import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
@@ -35,7 +35,7 @@ export interface UpdateHtmlOption {
 
 export interface htmlRenderContext {
     htmlMotor:HtmlRender,
-    pathOfRender:string[],
+    pathOfRender:string[]|HtmlObject,
     nodeId:string,
 }
 
@@ -52,7 +52,7 @@ export interface ProjectContextType {
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
 
-    initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[], options?:HtmlRenderOption) => Promise<htmlRenderContext>,
+    initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>,
     getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
@@ -61,8 +61,10 @@ export interface ProjectContextType {
     isSynchronized: boolean,
 
     dataTypes?: DataTypeClass[],
-    currentEntryDataType?:DataTypeClass,
     refreshAvailableDataTypes?:() => Promise<void>,
+
+    currentEntryDataType?:DataTypeClass,
+    refreshCurrentEntryDataType?:() => void,
 
     enumTypes?:EnumClass[],
     refreshAvailableEnums?:() => Promise<void>,

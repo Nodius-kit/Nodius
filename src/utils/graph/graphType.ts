@@ -190,9 +190,9 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
             call: `
                 
                 // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
-                if(getHtmlRenderer(node)) return;
-            
                 const render_id = "main"; // unique render id in the node
+                if(getHtmlRenderer(node)?.[render_id]) return;
+            
                 const pathOfRender = ["data"]; // path inside the node where is stored the html
                 const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute
                 const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender);

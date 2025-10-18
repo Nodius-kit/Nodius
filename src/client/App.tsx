@@ -27,7 +27,11 @@ export const App = () => {
 
     const onCloseEditor = useRef<() => void>(undefined);
     const openHtmlEditor:OpenHtmlEditorFct = useCallback((nodeId:string,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
-        if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId) return;
+        if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId || !htmlRenderer) return;
+        if(! Array.isArray(htmlRenderer.pathOfRender)) {
+            console.error("Can't edit html that is not stored in a node");
+            return;
+        }
         onCloseEditor.current = onClose;
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
 

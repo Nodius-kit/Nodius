@@ -22,7 +22,8 @@ interface ChildInfo {
 
 export interface HtmlRenderOption {
     buildingMode?: boolean,
-    language: string
+    language?: string,
+    noFirstRender?: boolean,
 };
 
 

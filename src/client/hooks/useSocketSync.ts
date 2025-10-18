@@ -50,20 +50,31 @@ export const useSocketSync = () => {
     );
 
     /* ------------------------------------ HTML RENDER STORAGE --------------------------------------------------- */
-    const initiateNewHtmlRenderer = async (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[], options?:HtmlRenderOption) => {
+    const initiateNewHtmlRenderer = async (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) :Promise<htmlRenderContext | undefined> => {
         if(!htmlRenderer.current[node._key]) {
             htmlRenderer.current[node._key] = {};
         }
+        if(htmlRenderer.current[node._key][id]) {
+            console.error("Html Renderer with id ", id, "already exist on node", node);
+            return undefined;
+        }
+
         htmlRenderer.current[node._key][id] = {
             htmlMotor: new HtmlRender(container, options),
             pathOfRender: pathOfRender,
             nodeId: node._key
         }
-        let object = node as any;
-        for(const path of pathOfRender) {
-            object = object[path as any];
+        if(!options?.noFirstRender) {
+            if (Array.isArray(pathOfRender)) {
+                let object = node as any;
+                for (const path of pathOfRender) {
+                    object = object[path as any];
+                }
+                await htmlRenderer.current[node._key][id].htmlMotor.render(object);
+            } else {
+                await htmlRenderer.current[node._key][id].htmlMotor.render(pathOfRender);
+            }
         }
-        await htmlRenderer.current[node._key][id].htmlMotor.render(object);
 
         return htmlRenderer.current[node._key][id];
     };
@@ -410,7 +421,7 @@ export const useSocketSync = () => {
         });
 
         if(instructionOutput.status) {
-
+            Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
             for(const instruction of instructions) {
                 if(instruction.edgeId && !instruction.noRedraw) {
@@ -438,11 +449,15 @@ export const useSocketSync = () => {
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
                         for(const renderer of Object.values(renderers)) {
                             if(!instruction.noRedraw) {
-                                let objectHtml: any = newNode;
-                                renderer.pathOfRender.forEach((path) => {
-                                    objectHtml = objectHtml[path];
-                                });
-                                await renderer.htmlMotor.render(objectHtml);
+                                if(Array.isArray(renderer.pathOfRender)) {
+                                    let objectHtml: any = newNode;
+                                    renderer.pathOfRender.forEach((path) => {
+                                        objectHtml = objectHtml[path];
+                                    });
+                                    await renderer.htmlMotor.render(objectHtml);
+                                } else {
+                                    await renderer.htmlMotor.render(renderer.pathOfRender);
+                                }
                             }
                         }
 
@@ -468,7 +483,7 @@ export const useSocketSync = () => {
         } else {
             return instructionOutput.error ?? "Unknown error"
         }
-    }, [Project.state.graph, Project.state.editedHtml, handleIntructionToGraph, Project.state.selectedSheetId]);
+    }, [Project.state.graph, Project.state.editedHtml, handleIntructionToGraph, Project.state.selectedSheetId, Project.state.refreshCurrentEntryDataType]);
 
     const updateGraph = useCallback(async (instructions:Array<GraphInstructions>):Promise<ActionContext> => {
         const start = Date.now();
@@ -578,6 +593,8 @@ export const useSocketSync = () => {
             sheet.edgeMap.set(sourceKey, sourceEdges);
         }
 
+        Project.state.refreshCurrentEntryDataType?.();
+
         // Redraw the graph if GPU motor is available
         if(gpuMotor.current) {
             gpuMotor.current.requestRedraw();
@@ -586,7 +603,7 @@ export const useSocketSync = () => {
         return {
             status: true,
         };
-    }, [Project.state.graph, Project.state.selectedSheetId]);
+    }, [Project.state.graph, Project.state.selectedSheetId, Project.state.refreshCurrentEntryDataType]);
 
     const batchCreateElements = useCallback(async (nodes: Node<any>[], edges: Edge[]): Promise<ActionContext> => {
         const start = Date.now();
@@ -773,14 +790,47 @@ export const useSocketSync = () => {
 
     }, [Project.state.graph, Project.state.dataTypes]);
 
+    const retrieveCurrentDataTypeEntry = useCallback(() => {
+        const emptyCurrentDataType = () => {
+            Project.dispatch({
+                field: "currentEntryDataType",
+                value: undefined
+            });
+        }
+
+        if(!Project.state.graph || !Project.state.dataTypes) {
+            return emptyCurrentDataType();
+        }
+
+        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
+        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return emptyCurrentDataType();
+
+        const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
+        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+
+        if(nodeType) {
+            Project.dispatch({
+                field: "currentEntryDataType",
+                value: Project.state.dataTypes.find((type) => type._key === nodeType.data!._key)
+            });
+        } else {
+            return emptyCurrentDataType();
+        }
+    }, [Project.state.graph, Project.state.dataTypes]);
+
     useEffect(() => {
-        console.log(Project.state.currentEntryDataType);
-    }, [Project.state.currentEntryDataType])
+        if(Project.state.graph) {
+            retrieveCurrentDataTypeEntry();
+        }
+        Project.dispatch({
+            field: "refreshCurrentEntryDataType",
+            value: retrieveCurrentDataTypeEntry,
+        });
+    }, [retrieveCurrentDataTypeEntry]);
 
 
     useEffect(() => {
-        retrieveDataType();
-        retrieveEnum();
+        retrieveDataType().then(retrieveEnum);
         Project.dispatch({
             field: "refreshAvailableDataTypes",
             value: retrieveDataType
@@ -788,7 +838,7 @@ export const useSocketSync = () => {
         Project.dispatch({
             field: "refreshAvailableEnums",
             value: retrieveEnum
-        })
+        });
     }, []);
 
 

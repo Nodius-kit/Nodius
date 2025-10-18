@@ -4,7 +4,7 @@ import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
 import {forwardMouseEvents} from "../../utils/objectUtils";
 import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
-import {ProjectContext} from "../hooks/contexts/ProjectContext";
+import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../App";
 
 interface SchemaDisplayProps {
@@ -70,7 +70,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         node:Node<any>,
         element:HTMLElement,
         overElement:HTMLElement,
-        htmlRenderer: HtmlRender,
+        htmlRenderer?: htmlRenderContext,
     }[]>([]);
     const nodeDisplayContainer = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
@@ -93,7 +93,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 inSchemaNode.current[i].overElement.style.height = inSchemaNode.current[i].element.style.height = `${rect.height / transform.scale}px`;
             }
         };
-        const nodeEnter = (node: Node<any>) => {
+        const nodeEnter = async (node: Node<any>) => {
             if(!Project.state.nodeTypeConfig[node.type]) {
                 console.error("Node type", node.type, "can't be processed");
                 return;
@@ -212,12 +212,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                 // Initial attachment
                 attachDomEvents(nodeConfig);
-                const htmlRenderer = new HtmlRender(nodeHTML);
+                let htmlRenderer:htmlRenderContext|undefined;
                 if(nodeConfig.content) {
-                    htmlRenderer.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
-                    htmlRenderer.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
-                    htmlRenderer.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
-                    htmlRenderer.render(nodeConfig.content);
+                    htmlRenderer = await Project.state.initiateNewHtmlRenderer!(node, "", nodeHTML, nodeConfig.content, {
+                        noFirstRender: true
+                    });
+                    if(htmlRenderer) {
+                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
+                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
+                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
+                        await htmlRenderer.htmlMotor.render(nodeConfig.content);
+                    }
                 }
 
                 const transform = gpuMotor.current.getTransform();
@@ -257,7 +262,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             if (index !== -1){
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].element);
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].overElement);
-                inSchemaNode.current[index].htmlRenderer.dispose();
+                if(inSchemaNode.current[index].htmlRenderer) {
+                    inSchemaNode.current[index].htmlRenderer.htmlMotor.dispose();
+                }
                 inSchemaNode.current.splice(index, 1);
             }
 
