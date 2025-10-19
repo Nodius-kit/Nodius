@@ -358,7 +358,7 @@ export class WebSocketManager {
                 const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
                 this.deleteUserOnGraph(message.userId);
 
-                const peer = clusterManager.getGraphPeerId(message.graphKey);
+                const peer = clusterManager.getInstancehPeerId(message.graphKey);
                 if(!peer || peer != "self") {
                     if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:false, message: "This server don't manage graph with key:"+message.graphKey } } as WSMessage<WSResponseMessage<unknown>>);
                     return;

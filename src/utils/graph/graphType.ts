@@ -136,12 +136,13 @@ export type MotorDomEventMap = "nodeEnter" | "nodeUpdate"
 
 export interface NodeTypeConfig {
     _key: string,
+    type: string,
     workspace:string,
     displayName: string,
     content: HtmlObject,
     category: string,
     alwaysRendered: boolean,
-    node?: Node<any>, // internal config (hardcoded) have null node, so it will not be displayed in the node list for editing
+    node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "posY" | "posX">,
     domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
         radius: number,
@@ -160,6 +161,7 @@ export interface NodeTypeConfig {
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "0",
+    type: "html",
     workspace: "root",
     category: "",
     content: {
@@ -183,6 +185,32 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
     },
     displayName: "Html Editor",
     alwaysRendered: true,
+    node: {
+        type: "html",
+        handles: {
+            0: {
+                position: "fix",
+                point: [
+                    {
+                        id: "0",
+                        type: "out",
+                        accept: "event[]"
+                    },
+                    {
+                        id: "1",
+                        type: "in",
+                        accept: "entryType"
+                    }
+                ]
+            }
+        },
+        size: {
+            width: 640,
+            height: 360,
+            dynamic: true,
+        },
+        data: undefined
+    },
     domEvents: [
         {
             name: "dblclick",
@@ -241,6 +269,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
 
 export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
     _key: "1",
+    type: "entryType",
     workspace: "root",
     displayName: "Entry Data Type",
     alwaysRendered: true,
@@ -268,6 +297,30 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
             }
         ],
         identifier: "root"
+    },
+
+    node: {
+        type: "entryType",
+        handles: {
+            0: {
+                position: "fix",
+                point: [
+                    {
+                        id: "0",
+                        type: "out",
+                        accept: "entryType"
+                    }
+                ]
+            }
+        },
+        size: {
+            width: 300,
+            height: 500,
+            dynamic: true,
+        },
+        data: {
+            _key: undefined
+        }
     },
     domEvents: [
         {

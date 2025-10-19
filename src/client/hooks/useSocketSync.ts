@@ -1,11 +1,12 @@
 import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
-import {api_sync_graph, api_sync_graph_info} from "../../utils/requests/type/api_sync.type";
+import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
-import {Edge, Graph, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
+import {Edge, Graph, Node, NodeTypeConfig, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {WebGpuMotor} from "../schema/motor/webGpuMotor";
 import {api_graph_html} from "../../utils/requests/type/api_workflow.type";
 import {
+    createNodeFromConfig,
     edgeArrayToMap,
     findEdgeByKey,
     findFirstNodeByType,
@@ -26,11 +27,12 @@ import {
     WSBatchDeleteElements,
     WSGenerateUniqueId,
     WSMessage,
-    WSRegisterUserOnGraph,
+    WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
     WSResponseMessage
 } from "../../utils/sync/wsObject";
 import {deepCopy} from "../../utils/objectUtils";
 import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
+import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
 
 export const useSocketSync = () => {
 
@@ -42,7 +44,7 @@ export const useSocketSync = () => {
 
     const gpuMotor = useRef<WebGpuMotor | null>(null);
 
-    const [serverInfo, setServerInfo] = useState<api_sync_graph_info>();
+    const [serverInfo, setServerInfo] = useState<api_sync_info>();
 
     const { connect, sendMessage, setMessageHandler, connectionState, stats, disconnect } = useWebSocket(
         true,  // autoReconnect
@@ -100,35 +102,41 @@ export const useSocketSync = () => {
 
     /* ---------------------------- REQUEST A SERVER CONNECTION BASED ON GRAPH UNIQUE KEY ------------------------- */
     const initWebSocketAbortController = useRef<AbortController>(undefined);
-    const retrieveServerInfo = useCallback(async (graphKey:string):Promise<api_sync_graph_info |undefined> => {
+    const retrieveServerInfo = useCallback(async (body:api_sync):Promise<api_sync_info |undefined> => {
         // look for server
         if(initWebSocketAbortController.current) {
             initWebSocketAbortController.current.abort();
         }
         initWebSocketAbortController.current = new AbortController();
-        const response = await fetch('http://localhost:8426/api/sync/graph', {
+        const response = await fetch('http://localhost:8426/api/sync', {
             method: "POST",
             signal: initWebSocketAbortController.current.signal,
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                graphKey: graphKey
-            } as api_sync_graph)
+            body: JSON.stringify(body)
         });
 
         if(response.status !== 200) {
             return undefined;
         }
 
-        return await response.json() as api_sync_graph_info;
+        return await response.json() as api_sync_info;
     }, []);
     /* ----------------------------------------------------------------------------------------------------------- */
 
     /* -------------------------- START A SYNC WITH THE SERVER BASED ON A HTMLCLASS/GRAPH ------------------------ */
+
+    /*
+        Open a htmlClass => graph with "root" node is an html display editor
+     */
     const openHtmlClassAbortController = useRef<AbortController>(undefined);
     const openHtmlClass = useCallback(async (html:HtmlClass, graph?:Graph):Promise<ActionContext> => {
         const start = Date.now();
+
+        if(connectionState !== "disconnected") {
+            disconnect();
+        }
 
         let htmlGraph = graph; // may change
 
@@ -202,7 +210,9 @@ export const useSocketSync = () => {
             }
         }
 
-        const serverInfo = await retrieveServerInfo(htmlGraph._key);
+        const serverInfo = await retrieveServerInfo({
+            instanceId: "graph"+htmlGraph._key
+        });
         if(!serverInfo) {
             return {
                 timeTaken: Date.now() - start,
@@ -212,15 +222,6 @@ export const useSocketSync = () => {
         } else {
             console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
             setServerInfo(serverInfo);
-        }
-
-        const nodeHtml = findFirstNodeByType(htmlGraph, "html")!;
-        if(!nodeHtml) {
-            return {
-                timeTaken: Date.now() - start,
-                reason: "Can't find HTML type node, corrupted ?",
-                status: false,
-            }
         }
 
         const connected = await connect(`ws://${serverInfo.host}:${serverInfo.port}`);
@@ -282,13 +283,6 @@ export const useSocketSync = () => {
             value: undefined
         });
 
-        // input html may be outdated compared of the html from server side
-        html.object = nodeHtml.data;
-
-        Project.dispatch({
-            field: "html",
-            value: html
-        });
         Project.dispatch({
             field: "isSynchronized",
             value: true
@@ -304,19 +298,193 @@ export const useSocketSync = () => {
             nodes: htmlGraph.sheets[selectedSheetId].nodeMap,
             edges: htmlGraph.sheets[selectedSheetId].edgeMap
         });
-        gpuMotor.current.resetViewport();
+        const rootNode = findFirstNodeWithId(htmlGraph, "root");
+        if(rootNode) {
+            gpuMotor.current.smoothFitToNode(rootNode._key);
+        } else {
+            gpuMotor.current.resetViewport();
+        }
 
         setActiveWindow(1);
         return {
             timeTaken: Date.now() - start,
             status: true,
         }
-    }, [connect, disconnect]);
+    }, [connect, disconnect, connectionState]);
 
     useEffect(() => {
         Project.dispatch({
             field: "openHtmlClass",
             value: openHtmlClass
+        })
+    }, [openHtmlClass]);
+
+    /*
+     open a node editor => empty graph with only the node
+     */
+    const openNodeConfigAbortController = useRef<AbortController>(undefined);
+    const openNodeConfig = useCallback(async (baseNodeConfig:Pick<NodeTypeConfig, "_key" | "workspace" | "lastUpdatedTime">) => {
+        const start = Date.now();
+
+        if(connectionState !== "disconnected") {
+            disconnect();
+        }
+
+        if(openNodeConfigAbortController.current) {
+            openNodeConfigAbortController.current.abort();
+        }
+
+        let nodeConfig:NodeTypeConfig|undefined;
+
+        openNodeConfigAbortController.current = new AbortController();
+        const request = await fetch('http://localhost:8426/api/nodeconfig/get', {
+            method: "POST",
+            signal: openNodeConfigAbortController.current.signal,
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                workspace: baseNodeConfig.workspace,
+                _key: baseNodeConfig._key
+
+            } as api_node_config_get),
+        });
+        if(request.status === 200) {
+            const json = await request.json() as NodeTypeConfig;
+            if(json) {
+                nodeConfig = json;
+            }
+        } else {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't retrieve node config with key, error on HTTP request("+request.status+") "+baseNodeConfig._key,
+                status: false,
+            }
+        }
+
+        if(!nodeConfig) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't retrieve node config with key, error on HTTP request("+request.status+") "+baseNodeConfig._key,
+                status: false,
+            }
+        }
+
+        if(!gpuMotor.current) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't start the synchronization, the GPU display is not working",
+                status: false,
+            }
+        }
+
+        const serverInfo = await retrieveServerInfo({
+            instanceId: "nodeConfig-"+nodeConfig._key,
+        });
+        if(!serverInfo) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't find a server to start a sync",
+                status: false,
+            }
+        } else {
+            console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
+            setServerInfo(serverInfo);
+        }
+
+        // generate fake graph
+        const graph:Omit<Graph, "_sheets"> = {
+            _key: "0",
+            sheets: {
+                "main": {
+                    nodeMap: new Map(),
+                    edgeMap: new Map(),
+                }
+            },
+            lastUpdatedTime: Date.now(),
+            createdTime: Date.now(),
+            sheetsList: {"main":"main"},
+            workspace: nodeConfig.workspace,
+            category: "",
+            name: "Editing "+nodeConfig.displayName,
+            version: 0,
+            permission: 0,
+        }
+
+        const selectedSheetId = "main"
+
+        const baseNode:Node<any> = createNodeFromConfig(nodeConfig, "0", "0", "main");
+        graph.sheets["main"].nodeMap.set("0", baseNode);
+
+        const connected = await connect(`ws://${serverInfo.host}:${serverInfo.port}`);
+        if(!connected) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't connect to server",
+                status: false,
+            }
+        }
+
+        const registerUser:WSMessage<WSRegisterUserOnNodeConfig> = {
+            type: "registerUserOnNodeConfig",
+            userId: Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
+            name: "User",
+            nodeConfigKey: nodeConfig._key,
+            fromTimestamp: nodeConfig.lastUpdatedTime
+        }
+        const response = await sendMessage<{
+            missingMessages: WSMessage<any>[]
+        }>(registerUser);
+        if(!response || !response._response.status) {
+            disconnect();
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Server didn't accept our registration",
+                status: false,
+            }
+        }
+
+        if(response.missingMessages.length > 0) {
+            response.missingMessages.forEach((m) => {
+                for(const i of m.instructions) {
+                    if(i.animatePos) {
+                        delete i.animatePos; // no need animation when try to caught up the current graph
+                    }
+                }
+            })
+            Project.dispatch({
+                field:"caughtUpMessage",
+                value: response.missingMessages
+            });
+        }
+
+        Project.dispatch(({
+            field: "selectedSheetId",
+            value: selectedSheetId,
+        })); // select first sheet id
+        Project.dispatch({
+            field: "graph",
+            value: graph as Graph
+        });
+
+        gpuMotor.current.setScene({
+            nodes: graph.sheets[selectedSheetId].nodeMap,
+            edges: graph.sheets[selectedSheetId].edgeMap
+        });
+
+        gpuMotor.current.smoothFitToNode(baseNode._key);
+
+        setActiveWindow(1);
+        return {
+            timeTaken: Date.now() - start,
+            status: true,
+        }
+    }, [connect, disconnect, connectionState]);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "openNodeConfig",
+            value: openNodeConfig
         })
     }, [openHtmlClass]);
 
@@ -329,7 +497,6 @@ export const useSocketSync = () => {
         for(const instruction of instructions) {
             if(instruction.nodeId) {
                 const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(instruction.nodeId);
-                console.log(node);
                 if(!node) {
                     return {
                         status: false,
@@ -1090,8 +1257,26 @@ export const useSocketSync = () => {
         });
     }, []);
 
+    const resetState = useCallback(() => {
+        Object.values(htmlRenderer.current ?? {}).forEach(node =>
+            Object.values(node).forEach(item => item.htmlMotor?.dispose())
+        );
+        if(Project.state.editedHtml) {
+            Project.dispatch({
+                field: "editedHtml",
+                value: undefined
+            });
+        }
+        Project.dispatch({
+            field: "graph",
+            value: undefined
+        });
+        gpuMotor.current?.resetScene();
+        disconnect();
+    }, [Project.state.editedHtml, Project.state.editedHtml, disconnect]);
+
 
     /* ----------------------------------------------------------------------------------------------------------- */
 
-    return {gpuMotor, activeWindow, setActiveWindow}
+    return {gpuMotor, activeWindow, setActiveWindow, resetState}
 }

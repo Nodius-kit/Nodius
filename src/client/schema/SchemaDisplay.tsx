@@ -36,9 +36,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const zIndex = useRef<number>(1);
 
     const updateOverlayFrameId = useRef<number|undefined>(undefined);
-    const animatePosChangeFrameId = useRef<Record<string, {id:number}>>({});
-    const posAnimationDelay = 300;
-    const posAnimationStep = 5;
+    const animatePosChangeFrameId = useRef<Record<string, {id?:number, lastTime:number, velX:number, velY:number}>>({});
+    const posAnimationDelay = 200;
+    const springStiffness = 100;
+    const damping = 2 * Math.sqrt(springStiffness);
 
 
 
@@ -189,6 +190,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                 const mouseDown = (evt:MouseEvent) => {
 
+                    const currentNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(node!._key);
+                    if(!currentNode) return;
+
                     if(!gpuMotor.current!.isInteractive()) {
                         return;
                     }
@@ -198,9 +202,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                         overlay.style.zIndex = nodeHTML.style.zIndex = zIndex.current+"";
                     }
 
+                    if("toPosX" in currentNode || "toPosY" in currentNode) {
+                        return;
+                    }
 
-                    let lastSavedX = node.posX;
-                    let lastSavedY = node.posY;
+
+                    let lastSavedX = currentNode.posX;
+                    let lastSavedY = currentNode.posY;
                     let lastSaveTime = Date.now();
 
                     let lastX = evt.clientX;
@@ -418,50 +426,65 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     }
 
                     if((updatedNode.toPosX && updatedNode.toPosX != updatedNode.posX) || (updatedNode.toPosY && updatedNode.toPosY != updatedNode.posY)) {
-                       if(animatePosChangeFrameId.current[updatedNode._key]) {
-                           cancelAnimationFrame(animatePosChangeFrameId.current[updatedNode._key].id);
-                       }
-
-                       const animePosTransition = () => {
-                           const currentNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
-                           if(!currentNode || (currentNode.toPosX == undefined && currentNode.toPosY == undefined)) {
-                               delete animatePosChangeFrameId.current[updatedNode._key];
-                               return;
-                           }
-
-                           if(currentNode.toPosX != undefined) {
-                               if(currentNode.posX < currentNode.toPosX - (posAnimationStep/2)) {
-                                   currentNode.posX += posAnimationStep;
-                               } else if(currentNode.posX > currentNode.toPosX + (posAnimationStep/2)) {
-                                   currentNode.posX -= posAnimationStep;
-                               } else {
-                                   currentNode.posX = currentNode.toPosX;
-                                   delete currentNode.toPosX;
-                               }
-                           }
-                           if(currentNode.toPosY != undefined) {
-                               if(currentNode.posY < currentNode.toPosY - (posAnimationStep/2)) {
-                                   currentNode.posY += posAnimationStep;
-                               } else if(currentNode.posY > currentNode.toPosY + (posAnimationStep/2)) {
-                                   currentNode.posY -= posAnimationStep;
-                               } else {
-                                   currentNode.posY = currentNode.toPosY;
-                                   delete currentNode.toPosY;
-                               }
-                           }
-                           gpuMotor.current!.requestRedraw();
-
-                           requestUpdateOverlay();
-
-                           if(!(currentNode.toPosX == undefined && currentNode.toPosY == undefined)) {
-                               animatePosChangeFrameId.current[updatedNode._key] = {
-                                   id: requestAnimationFrame(animePosTransition)
-                               }
-                           }
-                       }
-                        animatePosChangeFrameId.current[updatedNode._key] = {
-                           id: requestAnimationFrame(animePosTransition)
+                        const key = updatedNode._key;
+                        let anim = animatePosChangeFrameId.current[key];
+                        if (anim?.id) {
+                            cancelAnimationFrame(anim.id);
+                        } else {
+                            anim = { lastTime: performance.now(), velX: 0, velY: 0 };
                         }
+                        animatePosChangeFrameId.current[key] = anim;
+
+                        const animePosTransition = () => {
+                            const currentNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
+                            if (!currentNode) {
+                                delete animatePosChangeFrameId.current[key];
+                                return;
+                            }
+
+                            const now = performance.now();
+                            const dt = (now - anim.lastTime) / 1000;
+                            anim.lastTime = now;
+
+                            if (currentNode.toPosX !== undefined) {
+                                const deltaX = currentNode.toPosX - currentNode.posX;
+                                const velX = anim.velX;
+                                if (Math.abs(deltaX) < 0.1 && Math.abs(velX) < 0.1) {
+                                    currentNode.posX = currentNode.toPosX;
+                                    delete currentNode.toPosX;
+                                    anim.velX = 0;
+                                } else {
+                                    const forceX = (springStiffness * deltaX) - (damping * velX);
+                                    anim.velX += forceX * dt;
+                                    currentNode.posX += anim.velX * dt;
+                                }
+                            }
+
+                            if (currentNode.toPosY !== undefined) {
+                                const deltaY = currentNode.toPosY - currentNode.posY;
+                                const velY = anim.velY;
+                                if (Math.abs(deltaY) < 0.1 && Math.abs(velY) < 0.1) {
+                                    currentNode.posY = currentNode.toPosY;
+                                    delete currentNode.toPosY;
+                                    anim.velY = 0;
+                                } else {
+                                    const forceY = (springStiffness * deltaY) - (damping * velY);
+                                    anim.velY += forceY * dt;
+                                    currentNode.posY += anim.velY * dt;
+                                }
+                            }
+
+                            gpuMotor.current!.requestRedraw();
+                            requestUpdateOverlay();
+
+                            if (currentNode.toPosX !== undefined || currentNode.toPosY !== undefined) {
+                                anim.id = requestAnimationFrame(animePosTransition);
+                            } else {
+                                delete animatePosChangeFrameId.current[key];
+                            }
+                        };
+
+                        anim.id = requestAnimationFrame(animePosTransition);
 
                     }
 

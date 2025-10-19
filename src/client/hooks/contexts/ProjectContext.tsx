@@ -23,6 +23,8 @@ export interface ProjectContextProps {
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 
 export type EditedHtmlType = {node:Node<any>, html:HtmlClass, htmlRender:HtmlRender, pathOfRender:string[]}|undefined
+export type EditedNodeTypeConfig = {node:Node<any>, config:NodeTypeConfig}|undefined;
+
 export interface ActionContext {
     timeTaken: number;
     status: boolean;
@@ -46,11 +48,15 @@ export interface ProjectContextType {
     },
     graph?:Graph,
     selectedSheetId?:string,
-    html?:HtmlClass,
+    //html?:HtmlClass,
     editedHtml?: EditedHtmlType,
+    openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
+
+    editedNodeConfig?: EditedNodeTypeConfig,
+    openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
+
     updateHtml?:(instruction:Instruction, options?:UpdateHtmlOption) => Promise<ActionContext>,
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
-    openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
 
     initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>,
     getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,

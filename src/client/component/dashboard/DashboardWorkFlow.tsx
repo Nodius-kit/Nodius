@@ -327,6 +327,7 @@ export const DashboardWorkFlow = memo(({
         if(container.current) {
             renderDashboard.current = new HtmlRender(container.current);
             renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", Project.state.openHtmlClass);
+            renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", Project.state.openNodeConfig);
             renderDashboard.current.render(object);
         }
 

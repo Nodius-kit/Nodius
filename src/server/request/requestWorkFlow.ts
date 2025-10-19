@@ -7,12 +7,21 @@ import {
     api_graph_create, api_graph_delete,
     api_graph_html
 } from "../../utils/requests/type/api_workflow.type";
-import {cleanEdge, cleanNode, Edge, Graph as GraphWF, Node} from "../../utils/graph/graphType";
+import {
+    cleanEdge,
+    cleanNode,
+    Edge,
+    Graph as GraphWF,
+    Node,
+    NodeTypeEntryType,
+    NodeTypeEntryTypeConfig, NodeTypeHtmlConfig
+} from "../../utils/graph/graphType";
 import {aql} from "arangojs";
 import {db, webSocketManager} from "../server";
 import escapeHTML from 'escape-html';
 import {HtmlClass} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
+import {createNodeFromConfig} from "../../utils/graph/nodeUtils";
 
 export class RequestWorkFlow {
 
@@ -328,43 +337,19 @@ export class RequestWorkFlow {
                 }
                 await graph_collection.save(graph);
 
-                const node: Node<any> = {
-                    _key: "root",
-                    graphKey: token_graph,
-                    sheet: "0",
-                    type: "html",
-                    handles: {
-                        0: {
-                            position: "fix",
-                            point: [
-                                {
-                                    id: "0",
-                                    type: "out",
-                                    accept: "event[]"
-                                },
-                                {
-                                    id: "1",
-                                    type: "in",
-                                    accept: "entryType"
-                                }
-                            ]
-                        }
-                    },
-                    posX: 0,
-                    posY: 0,
-                    size: {
-                        width: 640,
-                        height: 360,
-                        dynamic: true,
-                    },
-                    data: htmlObject
-                };
-                await node_collection.save(node);
+                const nodeRoot = createNodeFromConfig<any>(
+                    NodeTypeHtmlConfig,
+                    "root",
+                    token_graph,
+                    "0"
+                );
+                nodeRoot.data = htmlObject;
+                await node_collection.save(nodeRoot);
 
 
                 const classHtml: HtmlClass = {
                     ...safeArangoObject(body.htmlClass),
-                    htmlNodeKey: node._key,
+                    htmlNodeKey: nodeRoot._key,
                     graphKeyLinked: token_graph,
                     _key: token_html,
                     createdTime: Date.now(),

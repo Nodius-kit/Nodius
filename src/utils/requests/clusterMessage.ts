@@ -1,9 +1,9 @@
-export interface CM_IManageGraph {
-    type: "CM_IManageGraph",
-    graphKey: string;
+export interface CM_IManageInstance {
+    type: "CM_IManageInstance",
+    instanceKey: string;
 }
 
-export interface CM_IDontManageGraph {
-    type: "CM_IDontManageGraph",
-    graphKey: string;
+export interface CM_IDontManageInstance {
+    type: "CM_IDontManageInstance",
+    instanceKey: string;
 }

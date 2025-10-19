@@ -2,7 +2,7 @@ import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/ar
 import {Dealer, Publisher, Router, Subscriber} from "zeromq";
 import { randomUUID } from 'crypto';
 import {DocumentCollection} from "arangojs/collections";
-import {CM_IDontManageGraph, CM_IManageGraph} from "../../utils/requests/clusterMessage";
+import {CM_IDontManageInstance, CM_IManageInstance} from "../../utils/requests/clusterMessage";
 
 export interface ClusterNode {
     _key: string;
@@ -38,7 +38,7 @@ export class ClusterManager {
     private dealer: Dealer; // Pour envoyer des messages directs
 
     private connectedPeers = new Map<string, ClusterNode>();
-    private handledGraph = new Map<string, string>();
+    private handledInstance = new Map<string, string>();
     private pendingResponses = new Map<string, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }>();
     private refreshInterval: NodeJS.Timeout|undefined = undefined;
     private cleanupInterval: NodeJS.Timeout|undefined = undefined;
@@ -128,12 +128,12 @@ export class ClusterManager {
             case 'broadcast':
                 this.emit('broadcast', message.payload, message.senderId);
 
-                if(message.payload.type === "CM_IManageGraph") {
-                    const payload = message.payload as CM_IManageGraph;
-                    this.handledGraph.set(payload.graphKey, message.senderId)
-                } else if(message.payload.type === "CM_IDontManageGraph") {
-                    const payload = message.payload as CM_IDontManageGraph;
-                    this.handledGraph.delete(payload.graphKey);
+                if(message.payload.type === "CM_IManageInstance") {
+                    const payload = message.payload as CM_IManageInstance;
+                    this.handledInstance.set(payload.instanceKey, message.senderId)
+                } else if(message.payload.type === "CM_IDontManageInstance") {
+                    const payload = message.payload as CM_IDontManageInstance;
+                    this.handledInstance.delete(payload.instanceKey);
                 }
 
                 break;
@@ -391,24 +391,24 @@ export class ClusterManager {
         }
     }
 
-    public getGraphPeerId(graphKey:string) {
-        return this.handledGraph.get(graphKey);
+    public getInstancehPeerId(graphKey:string) {
+        return this.handledInstance.get(graphKey);
     }
 
-    public async defineGraphPeer(graphKey:string) {
-        this.handledGraph.set(graphKey, "self");
-        const messagePayload:CM_IManageGraph = {
-            type: "CM_IManageGraph",
-            graphKey: graphKey,
+    public async defineInstancePeer(graphKey:string) {
+        this.handledInstance.set(graphKey, "self");
+        const messagePayload:CM_IManageInstance = {
+            type: "CM_IManageInstance",
+            instanceKey: graphKey,
         }
         await this.broadcastJson(messagePayload);
     }
 
     public async removeGraphPeer(graphKey:string) {
-        this.handledGraph.delete(graphKey);
-        const messagePayload:CM_IDontManageGraph = {
-            type: "CM_IDontManageGraph",
-            graphKey: graphKey,
+        this.handledInstance.delete(graphKey);
+        const messagePayload:CM_IDontManageInstance = {
+            type: "CM_IDontManageInstance",
+            instanceKey: graphKey,
         }
         await this.broadcastJson(messagePayload);
     }

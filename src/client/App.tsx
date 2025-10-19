@@ -21,7 +21,8 @@ export const App = () => {
     const {
         setActiveWindow,
         activeWindow,
-        gpuMotor
+        gpuMotor,
+        resetState
     } = useSocketSync();
 
 
@@ -35,10 +36,15 @@ export const App = () => {
         onCloseEditor.current = onClose;
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
 
-        if(node && node.type === "html" && Project.state.html) {
+        let object = node as any;
+        for(const path of htmlRenderer.pathOfRender) {
+            object = object[path];
+        }
+
+        if(node && node.type === "html" && object) {
             const newEditedHtml:EditedHtmlType = {
                 node: node,
-                html: Project.state.html,
+                html: object,
                 htmlRender: htmlRenderer.htmlMotor,
                 pathOfRender: htmlRenderer.pathOfRender,
             }
@@ -47,7 +53,7 @@ export const App = () => {
                 value: newEditedHtml
             });
         }
-    }, [Project.state.html, Project.state.graph, Project.state.selectedSheetId]);
+    }, [Project.state.graph, Project.state.selectedSheetId]);
 
     const onNodeLeave = useCallback((node:Node<any>|undefined, nodeId:string) => {
         if(!Project.state.graph || !Project.state.selectedSheetId) return;
@@ -183,24 +189,8 @@ export const App = () => {
 
     const returnToMenu = useCallback(() => {
         setActiveWindow(0);
-        setTimeout(() => {
-
-            if(Project.state.editedHtml) {
-                Object.values(Project.state.getHtmlAllRenderer?.() ?? {}).forEach(node =>
-                    Object.values(node).forEach(item => item.htmlMotor?.dispose())
-                );
-                Project.dispatch({
-                    field: "editedHtml",
-                    value: undefined
-                });
-                Project.dispatch({
-                    field: "html",
-                    value: undefined
-                });
-            }
-            gpuMotor.current?.resetScene();
-        }, 500);
-    }, [Project.state.editedHtml, Project.state.getHtmlAllRenderer]);
+        setTimeout(resetState, 500);
+    }, [resetState]);
 
 
     return (

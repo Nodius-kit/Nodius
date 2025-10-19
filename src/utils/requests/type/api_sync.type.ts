@@ -1,8 +1,8 @@
-export interface api_sync_graph {
-    graphKey: string;
+export interface api_sync {
+    instanceId: string;
 }
 
-export interface api_sync_graph_info {
+export interface api_sync_info {
     host:string,
     port:number,
 }

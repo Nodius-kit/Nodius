@@ -2,11 +2,16 @@ import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "rea
 import {allDataTypes, DataTypeClass, DataTypeConfig, EnumClass} from "../../../../utils/dataType/dataType";
 import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check, Edit3, Trash2} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
-import {Edge, Graph, Node, NodeTypeEntryType} from "../../../../utils/graph/graphType";
+import {Edge, Graph, Node, NodeTypeEntryType, NodeTypeEntryTypeConfig} from "../../../../utils/graph/graphType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {Collapse} from "../../animate/Collapse";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {findFirstNodeByType, findFirstNodeWithId, findNodeConnected} from "../../../../utils/graph/nodeUtils";
+import {
+    createNodeFromConfig,
+    findFirstNodeByType,
+    findFirstNodeWithId,
+    findNodeConnected
+} from "../../../../utils/graph/nodeUtils";
 import {Input} from "../../form/Input";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../../utils/sync/wsObject";
@@ -290,34 +295,15 @@ export const LeftPanelEntryTypeSelect = memo((
 
             const height = 500;
             const width = 300;
-            nodeType = {
-                _key: nodeKey,
-                graphKey: Project.state.graph._key,
-                sheet: nodeRoot.sheet,
-                type: "entryType",
-                handles: {
-                    0: {
-                        position: "fix",
-                        point: [
-                            {
-                                id: "0",
-                                type: "out",
-                                accept: "entryType"
-                            }
-                        ]
-                    }
-                },
-                posX: nodeRoot.posX - (width+100) ,
-                posY: (nodeRoot.size.height/2)-(height/2),
-                size: {
-                    width: 300,
-                    height: 500,
-                    dynamic: true,
-                },
-                data: {
-                    _key: dataType._key
-                }
-            } as Node<NodeTypeEntryType>;
+            nodeType = createNodeFromConfig<NodeTypeEntryType>(
+                NodeTypeEntryTypeConfig,
+                nodeKey,
+                Project.state.graph._key,
+                nodeRoot.sheet
+            );
+            nodeType.posX = nodeRoot.posX - (width+100);
+            nodeType.posY = (nodeRoot.size.height/2)-(height/2);
+            nodeType.data!._key = dataType._key
 
             const edge:Edge = {
                 _key: edgeKey,

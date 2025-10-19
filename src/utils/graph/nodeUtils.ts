@@ -1,4 +1,5 @@
-import {Edge, Graph, Node, NodeType} from "./graphType";
+import {Edge, Graph, Node, NodeType, NodeTypeConfig} from "./graphType";
+import {deepCopy} from "../objectUtils";
 
 export const flatEdgeMap = (edges:Map<string, Edge[]>):Edge[] => Array.from(edges.entries())
     .filter(([key, value]) => key.startsWith('target')).map(([key, value]) => value).flat();
@@ -103,3 +104,19 @@ export const findEdgeByKey = (map: Map<string, Edge[]>, key: string): Edge | und
     }
     return undefined; // Not found
 };
+
+export const createNodeFromConfig = <T = any>(config:NodeTypeConfig, nodeKey:string, graphKey: string, sheetId: string):Node<T> => {
+    const node: Node<T> = {
+        _key: nodeKey,
+        graphKey: graphKey,
+        sheet: sheetId,
+        posX: 0,
+        posY: 0,
+        size: config.node.size,
+        type: config.type,
+        data: config.node.data,
+        handles: config.node.handles,
+        undeletable: config.node.undeletable,
+    }
+    return deepCopy(node);
+}
