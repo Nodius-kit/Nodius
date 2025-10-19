@@ -35,6 +35,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     const zIndex = useRef<number>(1);
 
+    const updateOverlayFrameId = useRef<number|undefined>(undefined);
     const animatePosChangeFrameId = useRef<Record<string, {id:number}>>({});
     const posAnimationDelay = 300;
     const posAnimationStep = 5;
@@ -109,6 +110,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 inSchemaNode.current[i].overElement.style.height = inSchemaNode.current[i].element.style.height = `${rect.height / transform.scale}px`;
             }
         };
+
+        const requestUpdateOverlay = () => {
+            if(updateOverlayFrameId.current) cancelAnimationFrame(updateOverlayFrameId.current)
+            updateOverlayFrameId.current = requestAnimationFrame(updateOverlays);
+        }
 
         // Function to update HTML renderer dependencies and re-render
         const updateHtmlRendererDependencies = async () => {
@@ -246,7 +252,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             const deltaX = newX - lastX;
                             const deltaY = newY - lastY;
 
-                            console.log(gpuMotor.current!.getTransform().scale);
 
                             const worldDeltaX = deltaX / (gpuMotor.current!.getTransform().scale);
                             const worldDeltaY = deltaY / (gpuMotor.current!.getTransform().scale);
@@ -259,13 +264,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                             gpuMotor.current!.requestRedraw();
 
-                            const rect = gpuMotor.current!.getNodeScreenRect(currentNode._key)!;
-                            if(!rect) {
-                                return;
-                            }
-
-                            overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
-                            overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
+                            requestUpdateOverlay();
 
                             const now = Date.now();
                             if (now - lastSaveTime >= posAnimationDelay && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
@@ -445,13 +444,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                                }
                            }
                            gpuMotor.current!.requestRedraw();
-                           const rect = gpuMotor.current!.getNodeScreenRect(currentNode._key)!;
-                           if(!rect) {
-                               return;
-                           }
 
-                           overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
-                           overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
+                           requestUpdateOverlay();
+
                            if(!(currentNode.toPosX == undefined && currentNode.toPosY == undefined)) {
                                animatePosChangeFrameId.current[updatedNode._key] = {
                                    id: requestAnimationFrame(animePosTransition)
@@ -539,8 +534,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         gpuMotor.current.on("nodeEnter", nodeEnter);
         gpuMotor.current.on("nodeLeave", nodeLeave);
-        gpuMotor.current.on("pan", updateOverlays);
-        gpuMotor.current.on("zoom", updateOverlays);
+        gpuMotor.current.on("pan", requestUpdateOverlay);
+        gpuMotor.current.on("zoom", requestUpdateOverlay);
         gpuMotor.current.on("reset", onReset);
 
         // Check if dependencies have changed and trigger updates
@@ -570,8 +565,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             if(!gpuMotor.current) return;
             gpuMotor.current.off("nodeEnter", nodeEnter);
             gpuMotor.current.off("nodeLeave", nodeLeave);
-            gpuMotor.current.off("pan", updateOverlays);
-            gpuMotor.current.off("zoom", updateOverlays);
+            gpuMotor.current.off("pan", requestUpdateOverlay);
+            gpuMotor.current.off("zoom", requestUpdateOverlay);
             gpuMotor.current.off("reset", onReset);
         }
     }, [

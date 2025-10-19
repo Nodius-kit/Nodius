@@ -541,9 +541,12 @@ export class WebSocketManager {
                 if(message.instructions.length > 20) {
                     ws.close();
                 }
-                const objectList:Array<Node<any> | Edge[]> = [];
 
-                // validate first
+                // Create maps to track unique nodes and edges being modified
+                const modifiedNodes = new Map<string, Node<any>>();
+                const modifiedEdges = new Map<string, [Edge, Edge]>(); // [oldEdge, newEdge]
+
+                // validate first and collect unique objects
                 for(const instruction of message.instructions) {
                     if(!instruction.nodeId && !instruction.edgeId) {
                         if (messageId) return this.sendMessage(ws, {
@@ -553,26 +556,32 @@ export class WebSocketManager {
                         return;
                     }
                     if(instruction.nodeId) {
-                        const node = sheet.nodeMap.get(instruction.nodeId);
-                        if(!node) {
-                            if (messageId) return this.sendMessage(ws, {
-                                _id: messageId,
-                                _response: {status: false, message: "Node with id "+instruction.nodeId+" not found"}
-                            } as WSMessage<WSResponseMessage<unknown>>);
-                            return;
+                        // Get node from either our modified map or the sheet
+                        if(!modifiedNodes.has(instruction.nodeId)) {
+                            const node = sheet.nodeMap.get(instruction.nodeId);
+                            if(!node) {
+                                if (messageId) return this.sendMessage(ws, {
+                                    _id: messageId,
+                                    _response: {status: false, message: "Node with id "+instruction.nodeId+" not found"}
+                                } as WSMessage<WSResponseMessage<unknown>>);
+                                return;
+                            }
+                            modifiedNodes.set(instruction.nodeId, node);
                         }
-                        objectList.push(node);
                     }else if(instruction.edgeId) {
-                        const edge = findEdgeByKey(sheet.edgeMap, instruction.edgeId);
-                        if(!edge) {
-                            if (messageId) return this.sendMessage(ws, {
-                                _id: messageId,
-                                _response: {status: false, message: "edge with id "+instruction.edgeId+" not found"}
-                            } as WSMessage<WSResponseMessage<unknown>>);
-                            return;
+                        // Get edge from either our modified map or the sheet
+                        if(!modifiedEdges.has(instruction.edgeId)) {
+                            const edge = findEdgeByKey(sheet.edgeMap, instruction.edgeId);
+                            if(!edge) {
+                                if (messageId) return this.sendMessage(ws, {
+                                    _id: messageId,
+                                    _response: {status: false, message: "edge with id "+instruction.edgeId+" not found"}
+                                } as WSMessage<WSResponseMessage<unknown>>);
+                                return;
+                            }
+                            // Store [oldEdge, currentEdge] - both start as the same
+                            modifiedEdges.set(instruction.edgeId, [edge, edge]);
                         }
-                        // store old edge first, then new edge
-                        objectList.push([edge, undefined!]);
                     }
                     const validateResult = validateInstruction(instruction.i);
                     if (!validateResult.success) {
@@ -595,12 +604,11 @@ export class WebSocketManager {
                     }
                 }
 
-                // apply instruction
-                for( let i = 0; i < message.instructions.length; i++ ) {
-                    const instruction = message.instructions[i];
+                // apply instructions sequentially to the same object references
+                for(const instruction of message.instructions) {
                     if(instruction.nodeId) {
-                        const oldNode = objectList[i] as Node<any>;
-                        const newNode = applyInstruction(oldNode, instruction.i, (objectBeingApplied) => {
+                        const currentNode = modifiedNodes.get(instruction.nodeId)!;
+                        const newNode = applyInstruction(currentNode, instruction.i, (objectBeingApplied) => {
                             if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                                 const object:any = objectBeingApplied;
                                 if(object.identifier !== instruction?.targetedIdentifier) {
@@ -613,7 +621,7 @@ export class WebSocketManager {
                         });
 
                         if(newNode.success) {
-                            objectList[i] = newNode.value;
+                            modifiedNodes.set(instruction.nodeId, newNode.value);
                         } else {
                             if (messageId) return this.sendMessage(ws, {
                                 _id: messageId,
@@ -622,8 +630,9 @@ export class WebSocketManager {
                             return;
                         }
                     } else if(instruction.edgeId) {
-                        const oldNEdge = objectList[i] as Edge[];
-                        const newEdge = applyInstruction(oldNEdge[0], instruction.i, (objectBeingApplied) => {
+                        const edgePair = modifiedEdges.get(instruction.edgeId)!;
+                        const currentEdge = edgePair[1]; // Get the latest version
+                        const newEdge = applyInstruction(currentEdge, instruction.i, (objectBeingApplied) => {
                             if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                                 const object:any = objectBeingApplied;
                                 if(object.identifier !== instruction?.targetedIdentifier) {
@@ -636,7 +645,7 @@ export class WebSocketManager {
                         });
 
                         if(newEdge.success) {
-                            (objectList[i] as Edge[])[1] = newEdge.value;
+                            edgePair[1] = newEdge.value; // Update the new edge
                         } else {
                             if (messageId) return this.sendMessage(ws, {
                                 _id: messageId,
@@ -649,12 +658,13 @@ export class WebSocketManager {
                 // Mark sheet as having unsaved changes
                 sheet.hasUnsavedChanges = true;
 
-                for( let i = 0; i < message.instructions.length; i++ ) {
-                    const instruction = message.instructions[i];
-                    if(instruction.nodeId) {
-                        sheet.nodeMap.set(instruction.nodeId, objectList[i] as Node<any>);
-                    } else if(instruction.edgeId) {
-                        const edges = objectList[i] as Edge[];
+                // Update all modified nodes in the sheet
+                for(const [nodeId, node] of modifiedNodes) {
+                    sheet.nodeMap.set(nodeId, node);
+                }
+
+                // Update all modified edges in the sheet
+                for(const [edgeId, edges] of modifiedEdges) {
 
                         //remove old
                         if(edges[0].target) {
@@ -715,9 +725,6 @@ export class WebSocketManager {
                             if(!some) edgeListSource.push(edges[1]);
                             sheet.edgeMap.set(sourceKey, edgeListSource);
                         }
-
-
-                    }
                 }
 
                 // Add to instruction history
