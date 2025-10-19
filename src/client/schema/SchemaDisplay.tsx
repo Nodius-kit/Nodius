@@ -206,6 +206,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     let lastX = evt.clientX;
                     let lastY = evt.clientY;
 
+                    let timeoutSave:NodeJS.Timeout|undefined;
+
 
                     gpuMotor.current!.enableInteractive(false);
 
@@ -233,6 +235,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             dontApplyToMySelf: true,
                         });
                         Project.state.updateGraph!(insts);
+                        lastSaveTime = Date.now();
                     }
 
                     const mouseMove = (evt:MouseEvent) => {
@@ -266,12 +269,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                             requestUpdateOverlay();
 
-                            const now = Date.now();
-                            if (now - lastSaveTime >= posAnimationDelay && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
-                                saveNodePosition(currentNode);
-                                lastSaveTime = now;
-                                lastSavedX = currentNode.posX;
-                                lastSavedY = currentNode.posY;
+                            if((currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
+                                const now = Date.now();
+                                if (now - lastSaveTime >= posAnimationDelay) {
+                                    saveNodePosition(currentNode);
+                                } else {
+                                    if(timeoutSave) clearTimeout(timeoutSave);
+                                    timeoutSave = setTimeout(() => {saveNodePosition(currentNode);
+                                    }, posAnimationDelay - (now - lastSaveTime));
+                                }
                             }
 
                         });
