@@ -17,7 +17,7 @@ interface WebSocketHookReturn {
     stats: WebSocketStats;
     connect: (url: string) => Promise<boolean>;
     disconnect: () => void;
-    sendMessage:  <T extends any>(message: WSMessage<T>) => Promise<WSResponseMessage<WSMessage<T>>|undefined>;
+    sendMessage:  <T extends any>(message: WSMessage<any>) => Promise<WSResponseMessage<T>|undefined>;
     setMessageHandler: (handler: (message: any) => Promise<void>) => void;
 }
 

@@ -35,6 +35,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     const zIndex = useRef<number>(1);
 
+    const animatePosChangeFrameId = useRef<Record<string, {id:number}>>({});
+    const posAnimationDelay = 300;
+    const posAnimationStep = 5;
+
 
 
 
@@ -203,21 +207,24 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                     disableTextSelection();
 
-                    const saveNodePosition = () => {
+                    const saveNodePosition = (currentNode:Node<any>) => {
                         const insts:Array<GraphInstructions> = [];
                         const instructionsX = new InstructionBuilder();
                         const instructionsY = new InstructionBuilder();
-                        instructionsX.key("posX").set(node.posX);
-                        instructionsY.key("posY").set(node.posY);
+                        instructionsX.key("posX").set(currentNode.posX);
+                        instructionsY.key("posY").set(currentNode.posY);
+
                         insts.push({
                             i: instructionsX.instruction,
-                            nodeId: node._key,
-                            animatePos: true
+                            nodeId: currentNode._key,
+                            animatePos: true,
+                            dontApplyToMySelf: true,
                         },
                         {
                             i: instructionsY.instruction,
-                            nodeId: node._key,
-                            animatePos: true
+                            nodeId: currentNode._key,
+                            animatePos: true,
+                            dontApplyToMySelf: true,
                         });
                         Project.state.updateGraph!(insts);
                     }
@@ -225,34 +232,47 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     const mouseMove = (evt:MouseEvent) => {
                         if(animationFrame) cancelAnimationFrame(animationFrame);
                         animationFrame = requestAnimationFrame(() => {
+                            if(!Project.state.graph) return;
+                            if(!Project.state.selectedSheetId) return;
+                            if(!node) return;
+
+                            // because each time node is updated, his ref change we have to take it back
+                            const currentNode = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(node!._key);
+                            if(!currentNode) return;
+
                             const newX = evt.clientX;
                             const newY = evt.clientY;
 
                             const deltaX = newX - lastX;
                             const deltaY = newY - lastY;
 
-                            const worldDeltaX = deltaX / gpuMotor.current!.getTransform().scale;
-                            const worldDeltaY = deltaY / gpuMotor.current!.getTransform().scale;
+                            console.log(gpuMotor.current!.getTransform().scale);
 
-                            node.posX += worldDeltaX;
-                            node.posY += worldDeltaY;
+                            const worldDeltaX = deltaX / (gpuMotor.current!.getTransform().scale);
+                            const worldDeltaY = deltaY / (gpuMotor.current!.getTransform().scale);
+
+                            currentNode.posX += worldDeltaX;
+                            currentNode.posY += worldDeltaY;
 
                             lastX = newX;
                             lastY = newY;
 
                             gpuMotor.current!.requestRedraw();
 
-                            const rect = gpuMotor.current!.getNodeScreenRect(node._key)!;
+                            const rect = gpuMotor.current!.getNodeScreenRect(currentNode._key)!;
+                            if(!rect) {
+                                return;
+                            }
 
                             overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
                             overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
 
                             const now = Date.now();
-                            if (now - lastSaveTime >= 300 && (node.posX !== lastSavedX || node.posY !== lastSavedY)) {
-                                saveNodePosition();
+                            if (now - lastSaveTime >= posAnimationDelay && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
+                                saveNodePosition(currentNode);
                                 lastSaveTime = now;
-                                lastSavedX = node.posX;
-                                lastSavedY = node.posY;
+                                lastSavedX = currentNode.posX;
+                                lastSavedY = currentNode.posY;
                             }
 
                         });
@@ -264,7 +284,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                         window.removeEventListener("mouseup", mouseUp);
                         gpuMotor.current!.enableInteractive(true);
                         enableTextSelection();
-                        saveNodePosition();
+
+                        if(!Project.state.graph) return;
+                        if(!Project.state.selectedSheetId) return;
+                        if(!node) return;
+
+                        // because each time node is updated, his ref change we have to take it back
+                        const currentNode = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(node!._key);
+                        if(!currentNode) return;
+                        saveNodePosition(currentNode);
                     }
 
                     window.addEventListener("mouseup", mouseUp);
@@ -352,7 +380,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                 // Handle nodeUpdate to refresh event listeners and HTML renderer when node changes
                 const handleNodeUpdate = async () => {
-                    const updatedNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key);
+                    const updatedNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
                     if (!updatedNode) return;
 
                     const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
@@ -383,6 +411,59 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                         });
                         nodeElement.dispatchEvent(updateEvent);
                     }
+
+                    if((updatedNode.toPosX && updatedNode.toPosX != updatedNode.posX) || (updatedNode.toPosY && updatedNode.toPosY != updatedNode.posY)) {
+                       if(animatePosChangeFrameId.current[updatedNode._key]) {
+                           cancelAnimationFrame(animatePosChangeFrameId.current[updatedNode._key].id);
+                       }
+
+                       const animePosTransition = () => {
+                           const currentNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
+                           if(!currentNode || (currentNode.toPosX == undefined && currentNode.toPosY == undefined)) {
+                               delete animatePosChangeFrameId.current[updatedNode._key];
+                               return;
+                           }
+
+                           if(currentNode.toPosX != undefined) {
+                               if(currentNode.posX < currentNode.toPosX - (posAnimationStep/2)) {
+                                   currentNode.posX += posAnimationStep;
+                               } else if(currentNode.posX > currentNode.toPosX + (posAnimationStep/2)) {
+                                   currentNode.posX -= posAnimationStep;
+                               } else {
+                                   currentNode.posX = currentNode.toPosX;
+                                   delete currentNode.toPosX;
+                               }
+                           }
+                           if(currentNode.toPosY != undefined) {
+                               if(currentNode.posY < currentNode.toPosY - (posAnimationStep/2)) {
+                                   currentNode.posY += posAnimationStep;
+                               } else if(currentNode.posY > currentNode.toPosY + (posAnimationStep/2)) {
+                                   currentNode.posY -= posAnimationStep;
+                               } else {
+                                   currentNode.posY = currentNode.toPosY;
+                                   delete currentNode.toPosY;
+                               }
+                           }
+                           gpuMotor.current!.requestRedraw();
+                           const rect = gpuMotor.current!.getNodeScreenRect(currentNode._key)!;
+                           if(!rect) {
+                               return;
+                           }
+
+                           overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
+                           overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
+                           if(!(currentNode.toPosX == undefined && currentNode.toPosY == undefined)) {
+                               animatePosChangeFrameId.current[updatedNode._key] = {
+                                   id: requestAnimationFrame(animePosTransition)
+                               }
+                           }
+                       }
+                        animatePosChangeFrameId.current[updatedNode._key] = {
+                           id: requestAnimationFrame(animePosTransition)
+                        }
+
+                    }
+
                 };
 
                 nodeHTML.addEventListener("nodeUpdateSystem", handleNodeUpdate);

@@ -12,7 +12,7 @@ import {
 import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
 import {HtmlRender, HtmlRenderOption} from "../../../process/html/HtmlRender";
 import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
-import {GraphInstructions} from "../../../utils/sync/wsObject";
+import {GraphInstructions, WSMessage} from "../../../utils/sync/wsObject";
 import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 
 export interface ProjectContextProps {
@@ -69,6 +69,8 @@ export interface ProjectContextType {
 
     enumTypes?:EnumClass[],
     refreshAvailableEnums?:() => Promise<void>,
+
+    caughtUpMessage?: WSMessage<any>[] // used to caught up missing message while connecting
 
 }
 export const ProjectContextDefaultValue: ProjectContextType = {

@@ -136,6 +136,7 @@ export type MotorDomEventMap = "nodeEnter" | "nodeUpdate"
 
 export interface NodeTypeConfig {
     _key: string,
+    workspace:string,
     displayName: string,
     content: HtmlObject,
     category: string,
@@ -152,11 +153,14 @@ export interface NodeTypeConfig {
         hover: {
             color: string,
         }
-    }
+    },
+    lastUpdatedTime: number,
+    createdTime: number,
 }
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "0",
+    workspace: "root",
     category: "",
     content: {
         type: "block",
@@ -229,12 +233,15 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         hover: {
             color: "var(--nodius-primary-light)",
         }
-    }
+    },
+    lastUpdatedTime: Date.now(),
+    createdTime: Date.now(),
 }
 
 
 export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
     _key: "1",
+    workspace: "root",
     displayName: "Entry Data Type",
     alwaysRendered: true,
     category: "",
@@ -445,5 +452,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         hover: {
             color: "var(--nodius-primary-light)",
         }
-    }
+    },
+    lastUpdatedTime: Date.now(),
+    createdTime: Date.now(),
 }

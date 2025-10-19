@@ -21,12 +21,12 @@ import {
 } from "../../utils/sync/InstructionBuilder";
 import {
     GraphInstructions,
-    WSApplyInstructionToGraph,
+    WSApplyInstructionToGraph, WSApplyInstructionToNodeConfig,
     WSBatchCreateElements,
     WSBatchDeleteElements,
     WSGenerateUniqueId,
     WSMessage,
-    WSRegisterUser,
+    WSRegisterUserOnGraph,
     WSResponseMessage
 } from "../../utils/sync/wsObject";
 import {deepCopy} from "../../utils/objectUtils";
@@ -186,6 +186,14 @@ export const useSocketSync = () => {
             }
         }
 
+        if(!htmlGraph) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't retrieve graph with key "+html.graphKeyLinked,
+                status: false,
+            }
+        }
+
         if(!gpuMotor.current) {
             return {
                 timeTaken: Date.now() - start,
@@ -226,14 +234,17 @@ export const useSocketSync = () => {
 
         const selectedSheetId = Object.keys(htmlGraph.sheets)[0];
 
-        const registerUser:WSMessage<WSRegisterUser> = {
-            type: "registerUser",
+        const registerUser:WSMessage<WSRegisterUserOnGraph> = {
+            type: "registerUserOnGraph",
             userId: Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
             name: "User",
             sheetId: selectedSheetId,
-            graphKey: htmlGraph._key
+            graphKey: htmlGraph._key,
+            fromTimestamp: htmlGraph.lastUpdatedTime
         }
-        const response = await sendMessage(registerUser);
+        const response = await sendMessage<{
+            missingMessages: WSMessage<any>[]
+        }>(registerUser);
         if(!response || !response._response.status) {
             disconnect();
             return {
@@ -242,6 +253,21 @@ export const useSocketSync = () => {
                 status: false,
             }
         }
+
+        if(response.missingMessages.length > 0) {
+            response.missingMessages.forEach((m) => {
+                for(const i of m.instructions) {
+                    if(i.animatePos) {
+                        delete i.animatePos; // no need animation when try to caught up the current graph
+                    }
+                }
+            })
+            Project.dispatch({
+                field:"caughtUpMessage",
+                value: response.missingMessages
+            });
+        }
+
 
         Project.dispatch(({
             field: "selectedSheetId",
@@ -303,18 +329,27 @@ export const useSocketSync = () => {
         for(const instruction of instructions) {
             if(instruction.nodeId) {
                 const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(instruction.nodeId);
+                console.log(node);
                 if(!node) {
                     return {
                         status: false,
                         error: "Can't find node with id :"+instruction.nodeId,
                     };
                 }
+
+                // this is a special case, for animating a smooth posX and posY change, sync  between html render and gpu render,
+                // if destination of instruction is posX/posY change it to toPosX and toPosY, this is client only
+                // temporary value set to animate transition
+
+                if(instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posX") {
+                    instruction.i.p[0] = "toPosX";
+                } else if(instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posY") {
+                    instruction.i.p[0] = "toPosY";
+                }
+
                 const newNode = applyInstruction(node, instruction.i, beforeApply ? ((objectBeingApplied) => beforeApply(instruction, objectBeingApplied)) : undefined);
                 if(newNode.success) {
                     Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.set(instruction.nodeId, newNode.value);
-                    return {
-                        status: true,
-                    }
                 } else {
                     console.error(newNode, instruction.i, node);
                     return {
@@ -409,6 +444,7 @@ export const useSocketSync = () => {
 
 
     const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+
         const instructionOutput = await handleIntructionToGraph(instructions,(currentGraphInstrution, objectBeingApplied) => {
             if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                 const object:HtmlObject = objectBeingApplied;
@@ -424,10 +460,31 @@ export const useSocketSync = () => {
         if(instructionOutput.status) {
             Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
+            const nodeAlreadyCheck:string[] = [];
+            const edgeAlreadyCheck:string[] = [];
             for(const instruction of instructions) {
                 if(instruction.edgeId && !instruction.noRedraw) {
                     redrawGraph = true;
+
+                    if(edgeAlreadyCheck.includes(instruction.edgeId)) {
+                        continue;
+                    }
+                    edgeAlreadyCheck.push(instruction.edgeId);
+
+                    // futur work
                 } else if(instruction.nodeId) {
+
+                    if(!instruction.noRedraw) {
+                        redrawGraph = true;
+                    }
+
+
+                    // avoid triggering multiple event for one nodeid, triggering useless re-render
+                    if(nodeAlreadyCheck.includes(instruction.nodeId)) {
+                        continue;
+                    }
+                    nodeAlreadyCheck.push(instruction.nodeId);
+
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                     if(Project.state.editedHtml && instruction.nodeId === Project.state.editedHtml.node._key) {
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
@@ -448,8 +505,11 @@ export const useSocketSync = () => {
                     } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
                         const renderers = htmlRenderer.current[instruction.nodeId];
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
-                        for(const renderer of Object.values(renderers)) {
-                            if(!instruction.noRedraw) {
+                        for(const [key, renderer] of Object.entries(renderers)) {
+                            if(!instruction.noRedraw && key !== "") {
+                                // key == "" meaning that this is SchemaDisplay that created this renderer
+                                // and updating the node (calling triggerNodeUpdate), will tell SchemaDisplay to trigger a re render with a custom context
+                                // that we can't handle here
                                 if(Array.isArray(renderer.pathOfRender)) {
                                     let objectHtml: any = newNode;
                                     renderer.pathOfRender.forEach((path) => {
@@ -462,17 +522,10 @@ export const useSocketSync = () => {
                             }
                         }
 
-                    } else if(!instruction.noRedraw) {
-                        redrawGraph = true;
                     }
 
-                }
-            }
-
-            // trigger node event update
-            for(const instruction of instructions) {
-                if(instruction.nodeId) {
                     (window as any).triggerNodeUpdate?.(instruction.nodeId);
+
                 }
             }
 
@@ -492,11 +545,13 @@ export const useSocketSync = () => {
             instructions: instructions
         }
 
+
+
         const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToGraph>;
 
         if(response && response._response) {
             if(response._response.status) {
-                const output = await applyGraphInstructions(response.instructions);
+                const output = await applyGraphInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
                 if(output) {
                     return {
                         reason: output,
@@ -844,6 +899,31 @@ export const useSocketSync = () => {
             await applyBatchDelete(message.nodeKeys, message.edgeKeys);
         }
     }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete]);
+
+
+    const workingOnCaughtUp = useRef<boolean>(false);
+    useEffect(() => {
+        if(!Project.state.caughtUpMessage) return;
+        if(!Project.state.graph || !handleIncomingMessage) return;
+
+        if(!workingOnCaughtUp.current) {
+            workingOnCaughtUp.current = true;
+            const messages = deepCopy(Project.state.caughtUpMessage);
+            (async () => {
+                console.log("Caught on ",messages.length+" message(s)");
+                for(const message of messages) {
+                    await handleIncomingMessage(message);
+                }
+                workingOnCaughtUp.current = false;
+            })();
+        }
+
+        Project.dispatch({
+            field: "caughtUpMessage",
+            value: undefined
+        });
+
+    }, [Project.state.graph, Project.state.caughtUpMessage, handleIncomingMessage]);
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);

@@ -390,8 +390,11 @@ export class RequestWorkFlow {
         const graphCursor = await db.query(graphQuery);
         const graphData:GraphWF = (await graphCursor.all())[0];
         if(options?.build) {
+
+            // can t work in cluster system, user should retrieve last instruction since last save
+
             // Check if graph is already managed in webSocketManager
-            const managedSheets = webSocketManager.getManagedGraphSheets(graphKey);
+            /*const managedSheets = webSocketManager.getManagedGraphSheets(graphKey);
 
             if (managedSheets && !options?.avoidCheckingWebSocket) {
                 // Graph is open in webSocketManager, use it instead of querying ArangoDB
@@ -425,7 +428,7 @@ export class RequestWorkFlow {
                         };
                     }
                 }
-            } else {
+            } else {*/
                 // Graph not in webSocketManager, query from ArangoDB as before
                 graphData._sheets = {};
                 for (const sheetId of Object.keys(graphData.sheetsList)) {
@@ -451,7 +454,7 @@ export class RequestWorkFlow {
                         edges: allEdges.map((edge) => cleanEdge(edge)),
                     };
                 }
-            }
+            //}
         }
         return graphData;
     }

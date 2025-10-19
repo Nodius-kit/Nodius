@@ -1,22 +1,21 @@
 import WebSocket, { WebSocketServer } from 'ws';
 import {
-    WSApplyInstructionToGraph,
+    WSApplyInstructionToGraph, WSApplyInstructionToNodeConfig,
     WSBatchCreateElements,
-    WSBatchDeleteElements,
+    WSBatchDeleteElements, WSDisconnedUserOnGraph, WSDisconnectUserOnNodeConfig,
     WSGenerateUniqueId,
     WSMessage,
-    WSRegisterUser,
-    WSResponseMessage
+    WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
+    WSResponseMessage, GraphInstructions
 } from "../../utils/sync/wsObject";
-import {ClusterManager} from "./clusterManager";
 import {clusterManager, db} from "../server";
-import {Edge, Node} from "../../utils/graph/graphType";
+import {Edge, Node, NodeTypeConfig} from "../../utils/graph/graphType";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
 import {edgeArrayToMap, findEdgeByKey, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {applyInstruction, InstructionBuilder, validateInstruction} from "../../utils/sync/InstructionBuilder";
 import {HtmlObject} from "../../utils/html/htmlType";
 import {travelHtmlObject} from "../../utils/html/htmlUtils";
-import {travelObject, deepCopy} from "../../utils/objectUtils";
+import {travelObject} from "../../utils/objectUtils";
 
 /**
  * WebSocketManager class to handle WebSocket server in Node.js.
@@ -24,7 +23,8 @@ import {travelObject, deepCopy} from "../../utils/objectUtils";
  * manages incoming messages as JSON, and provides utility functions for sending messages.
  */
 
-// todo: avoid multiple access to edge / node at the same time, atomic waitw
+// todo: avoid multiple access to edge / node at the same time, atomic wait
+// todo: Check user permission to open graph / nodeconfig
 
 interface ManageUser {
     id: string,
@@ -33,9 +33,9 @@ interface ManageUser {
     ws:WebSocket
 }
 
-interface ManagedSheet {
+interface ManagedSheet { // management of sheet in graph
     instructionHistory: Array<{
-        ws:WSApplyInstructionToGraph,
+        message:WSMessage<any>,
         time:number,
     }>,
     user: Array<ManageUser>,
@@ -48,12 +48,27 @@ interface ManagedSheet {
     hasUnsavedChanges: boolean
 }
 
+interface ManagedNodeConfig { // management of editing/creating node config
+    instructionHistory: Array<{
+        message:WSMessage<any>,
+        time:number,
+    }>,
+    user: Array<ManageUser>,
+
+    config: NodeTypeConfig,
+    // for diff computation
+    originalConfig: NodeTypeConfig,
+    // Track if changes have been made
+    hasUnsavedChanges: boolean
+}
+
 export class WebSocketManager {
     private wss: WebSocketServer;
     private clients: Set<WebSocket> = new Set(); // Set to store connected clients
 
     private uniqueIdGenerator:Record<string, number> = {};
     private managedGraph:Record<string, Record<string, ManagedSheet>> = {}
+    private managedNodeConfig:Record<string, ManagedNodeConfig> = {}
 
     private intervalCleaning:NodeJS.Timeout|undefined;
     private intervalSaving:NodeJS.Timeout|undefined;
@@ -93,7 +108,7 @@ export class WebSocketManager {
         this.intervalSaving = setInterval(this.savePendingChanges, 30000);
     }
 
-    private findUserByWs = (ws: WebSocket): ManageUser | undefined => {
+    private findUserOnGraphByWs = (ws: WebSocket): ManageUser | undefined => {
         for (const graphId in this.managedGraph) {
             // each graph
             for (const sheetId in this.managedGraph[graphId]) {
@@ -121,7 +136,17 @@ export class WebSocketManager {
         return undefined;
     }
 
-    private deleteUser = (userId:string) => {
+    private findNodeConfigWithWs = (ws: WebSocket): ManagedNodeConfig | undefined => {
+        for(const nodeConfigId in this.managedNodeConfig) {
+            const nodeConfig = this.managedNodeConfig[nodeConfigId];
+            if(nodeConfig.user.some((user: ManageUser) => user.ws === ws)) {
+                return nodeConfig;
+            }
+        }
+        return undefined;
+    }
+
+    private deleteUserOnGraph = (userId:string) => {
         for(const graphId in this.managedGraph) {
             // each graph
             for(const sheetId in this.managedGraph[graphId]) {
@@ -130,6 +155,15 @@ export class WebSocketManager {
                 if(sheet.user.some((user:ManageUser) => user.id === userId)) {
                     sheet.user = sheet.user.filter(user => user.id !== userId);
                 }
+            }
+        }
+    }
+
+    private deleteUserOnNodeConfig = (userId:string) => {
+        for(const nodeConfigId in this.managedNodeConfig) {
+            const nodeConfig = this.managedNodeConfig[nodeConfigId];
+            if(nodeConfig.user.some((user:ManageUser) => user.id === userId)) {
+                nodeConfig.user = nodeConfig.user.filter(user => user.id !== userId);
             }
         }
     }
@@ -161,6 +195,25 @@ export class WebSocketManager {
                 await clusterManager.removeGraphPeer(graphId);
             }
         }
+
+        // Clean up node configs with no users
+        for(const nodeConfigId in this.managedNodeConfig) {
+            const nodeConfig = this.managedNodeConfig[nodeConfigId];
+
+            // Remove all disconnected users
+            nodeConfig.user = nodeConfig.user.filter(user =>
+                user.ws.readyState === WebSocket.OPEN ||
+                user.ws.readyState === WebSocket.CONNECTING
+            );
+
+            if(nodeConfig.user.length === 0) {
+                // Save any pending changes before closing the node config
+                await this.saveNodeConfigChanges(nodeConfigId);
+
+                // nobody editing this node config, delete it
+                delete this.managedNodeConfig[nodeConfigId];
+            }
+        }
     }
 
     private initGraph = async (graphKey:string) => {
@@ -169,6 +222,9 @@ export class WebSocketManager {
             build: true,
             avoidCheckingWebSocket: true
         });
+        if (!graph) {
+            throw new Error(`Graph with key ${graphKey} not found`);
+        }
         Object.keys(graph._sheets).forEach((sheetId) => {
             const nodeMap = nodeArrayToMap(graph._sheets[sheetId].nodes);
             const edgeMap = edgeArrayToMap(graph._sheets[sheetId].edges);
@@ -187,18 +243,59 @@ export class WebSocketManager {
         this.uniqueIdGenerator[graphKey] = 0;
         Object.values(this.managedGraph[graphKey]).forEach((sheet: ManagedSheet) => {
             sheet.nodeMap.forEach((node) => {
-                this.updateMaxId(graphKey, node);  // Traverse node (or node.data if identifiers are only there)
+                this.updateMaxIdOnGraph(graphKey, node);  // Traverse node (or node.data if identifiers are only there)
             });
             for (const edgeList of sheet.edgeMap.values()) {
                 edgeList.forEach((edge) => {
-                    this.updateMaxId(graphKey, edge);  // Traverse edge (or edge.data if identifiers are only there)
+                    this.updateMaxIdOnGraph(graphKey, edge);  // Traverse edge (or edge.data if identifiers are only there)
                 });
             }
         });
         this.uniqueIdGenerator[graphKey] += 1;  // Start from max + 1
     }
 
-    private updateMaxId(graphKey: string, obj: any): void {
+    private initNodeConfig = async (nodeConfigKey:string) => {
+        const nodeConfig_collection = db.collection("nodius_node_config");
+
+        // Load the node config from the database
+        const config = await nodeConfig_collection.document(nodeConfigKey) as NodeTypeConfig;
+
+        if (!config) {
+            throw new Error(`NodeConfig with key ${nodeConfigKey} not found`);
+        }
+
+        // Initialize the managed node config
+        this.managedNodeConfig[nodeConfigKey] = {
+            instructionHistory: [],
+            user: [],
+            config: config,
+            originalConfig: JSON.parse(JSON.stringify(config)), // Deep copy
+            hasUnsavedChanges: false
+        };
+
+        // Initialize unique ID generator for this node config
+        this.uniqueIdGenerator[nodeConfigKey] = 0;
+
+        // Update max ID based on existing identifiers in the config
+        this.updateMaxIdOnNodeConfig(nodeConfigKey, config);
+        this.uniqueIdGenerator[nodeConfigKey] += 1;  // Start from max + 1
+    }
+
+    private updateMaxIdOnNodeConfig(nodeConfigKey: string, obj: any): void {
+        travelObject(obj, (o) => {
+            if (o.identifier !== undefined && typeof o.identifier === 'string') {
+                try {
+                    const num = parseInt(o.identifier, 36);
+                    if (num > this.uniqueIdGenerator[nodeConfigKey]) {
+                        this.uniqueIdGenerator[nodeConfigKey] = num;
+                    }
+                } catch (e) {}
+            }
+            return true;
+        });
+    }
+
+    private updateMaxIdOnGraph(graphKey: string, obj: any): void {
         travelObject(obj, (o) => {
             if (o.identifier !== undefined && typeof o.identifier === 'string') {
                 try {
@@ -212,6 +309,19 @@ export class WebSocketManager {
         });
     }
 
+    private binarySearchTime(arr:Array<{
+        message:WSMessage<any>,
+        time:number,
+    }>, timestamp:number) {
+        let low = 0, high = arr.length;
+        while (low < high) {
+            const mid = (low + high) >> 1;
+            if (arr[mid].time <= timestamp) low = mid + 1;
+            else high = mid;
+        }
+        return low;
+    }
+
     /**
      * Handles incoming messages by parsing them as JSON.
      * @param ws - The WebSocket client that sent the message.
@@ -223,27 +333,30 @@ export class WebSocketManager {
             console.log('Received JSON message:', jsonData);
 
             const messageId = (jsonData as WSMessage<any>)._id;
+
+            // in case of graph editing user
             const sheet = this.findSheetWithWs(ws);
             const graphKey = sheet ? Object.keys(this.managedGraph).find((graphKey) => Object.values(this.managedGraph[graphKey]).some((s) => s == sheet)) : undefined;
-            const user = sheet?.user.find((user) => user.ws === ws);
-            console.log(
-                [
-                    graphKey !== undefined && "graphKey is set",
-                    sheet !== undefined && "sheet is set",
-                    user !== undefined && "user is set",
-                ].filter(Boolean).join(", ")
-            );
+            const graphUser = sheet?.user.find((user) => user.ws === ws);
+
+            // in case of nodeConfig editing user
+            const nodeConfig = this.findNodeConfigWithWs(ws);
+            const nodeConfigUser = nodeConfig?.user.find((user) => user.ws === ws);
+
             if(jsonData.type === "__ping__") {
-                if(user) {
-                    user.lastPing = Date.now();
+                if(graphUser) {
+                    graphUser.lastPing = Date.now();
+                    return this.sendMessage(ws, {type: "__pong__"});
+                } else if(nodeConfigUser) {
+                    nodeConfigUser.lastPing = Date.now();
                     return this.sendMessage(ws, {type: "__pong__"});
                 } else {
                     ws.close();
                 }
                 return;
-            } else if(jsonData.type === "registerUser") {
-                const message:WSMessage<WSRegisterUser> = jsonData;
-                this.deleteUser(message.userId);
+            } else if(jsonData.type === "registerUserOnGraph") {
+                const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
+                this.deleteUserOnGraph(message.userId);
 
                 const peer = clusterManager.getGraphPeerId(message.graphKey);
                 if(!peer || peer != "self") {
@@ -260,11 +373,167 @@ export class WebSocketManager {
                     lastPing: Date.now(),
                     ws: ws
                 });
-                if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:true } } as WSMessage<WSResponseMessage<unknown>>);
+
+                const history = this.managedGraph[message.graphKey][message.sheetId].instructionHistory;
+                const startIndex = this.binarySearchTime(history, message.fromTimestamp);
+                const instructionsSince = history.slice(startIndex);
+
+                if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:true }, missingMessages: instructionsSince.map((i) => i.message) } as WSMessage<WSResponseMessage<{
+                    missingMessages: WSMessage<any>[]
+                }>>);
                 return;
 
+            } else if(jsonData.type === "disconnedUserOnGraph") {
+                const message:WSMessage<WSDisconnedUserOnGraph> = jsonData;
+                this.deleteUserOnGraph(message.userId);
+                return;
+            } else if(jsonData.type === "registerUserOnNodeConfig") {
+                const message:WSMessage<WSRegisterUserOnNodeConfig> = jsonData;
+                this.deleteUserOnNodeConfig(message.userId);
+
+                // Initialize node config if not already managed
+                if(!this.managedNodeConfig[message.nodeConfigKey]) {
+                    try {
+                        await this.initNodeConfig(message.nodeConfigKey);
+                    } catch (error) {
+                        if(messageId) return this.sendMessage(ws, {
+                            _id:messageId,
+                            _response: { status:false, message: "Failed to load node config: " + (error as Error).message }
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+                }
+
+                // Add user to the node config
+                this.managedNodeConfig[message.nodeConfigKey].user.push({
+                    name: message.name,
+                    id: message.userId,
+                    lastPing: Date.now(),
+                    ws: ws
+                });
+
+                const history = this.managedNodeConfig[message.nodeConfigKey].instructionHistory;
+                const startIndex = this.binarySearchTime(history, message.fromTimestamp);
+                const instructionsSince = history.slice(startIndex);
+
+
+                if(messageId) return this.sendMessage(ws, {
+                    _id:messageId,
+                    _response: { status:true },
+                    missingMessages: instructionsSince.map((i) => i.message)
+                } as WSMessage<WSResponseMessage<{
+                    missingMessages: WSMessage<any>[]
+                }>>);
+                return;
+            } else if(jsonData.type === "disconnectUserOnNodeConfig") {
+                const message:WSMessage<WSDisconnectUserOnNodeConfig> = jsonData;
+                this.deleteUserOnNodeConfig(message.userId);
+                return;
+            } else if(jsonData.type === "applyInstructionToNodeConfig") {
+                if(!nodeConfigUser || !nodeConfig) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSApplyInstructionToNodeConfig> = jsonData;
+                if(message.instructions.length > 20) {
+                    ws.close();
+                    return;
+                }
+
+                // Find the nodeConfigKey to access uniqueIdGenerator
+                const nodeConfigKey = Object.keys(this.managedNodeConfig).find(
+                    (key) => this.managedNodeConfig[key] === nodeConfig
+                );
+
+                if(!nodeConfigKey) {
+                    if (messageId) return this.sendMessage(ws, {
+                        _id: messageId,
+                        _response: {status: false, message: "Node config not found in managed configs"}
+                    } as WSMessage<WSResponseMessage<unknown>>);
+                    return;
+                }
+
+                // Validate all instructions first
+                for(const instruction of message.instructions) {
+                    const validateResult = validateInstruction(instruction.i);
+                    if (!validateResult.success) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: "Invalid instruction: " + validateResult.error}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    const insertedObject = instruction.i.v as HtmlObject;
+                    if(instruction.applyUniqIdentifier && insertedObject?.identifier != undefined) {
+                        // ensure each new element have unique identifier
+                        travelHtmlObject(insertedObject, (obj) => {
+                            if(this.uniqueIdGenerator[nodeConfigKey] === undefined) {
+                                this.uniqueIdGenerator[nodeConfigKey] = 0;
+                            }
+                            obj.identifier = (this.uniqueIdGenerator[nodeConfigKey]++).toString(36);
+                            return true;
+                        });
+                    }
+                }
+
+                // Apply all instructions
+                let currentConfig = nodeConfig.config;
+                for(const instruction of message.instructions) {
+                    const result = applyInstruction(currentConfig, instruction.i, (objectBeingApplied) => {
+                        if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+                            const object:any = objectBeingApplied;
+                            if(object.identifier !== instruction?.targetedIdentifier) {
+                                console.error("wrong action, target:", instruction.targetedIdentifier, "found:", object.identifier);
+                                return false;
+                            }
+                            return true;
+                        }
+                        return true;
+                    });
+
+                    if(result.success) {
+                        currentConfig = result.value;
+                    } else {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: "Error while applying instruction: " + result.error}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+                }
+
+                // Update the config
+                nodeConfig.config = currentConfig;
+                nodeConfig.hasUnsavedChanges = true;
+
+                // Add to instruction history
+                nodeConfig.instructionHistory.push({
+                    message: message,
+                    time: Date.now()
+                });
+
+                // Send success response to sender
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: {status: true}
+                    } as WSMessage<WSResponseMessage<WSApplyInstructionToNodeConfig>>);
+                }
+
+                // Broadcast to other users editing this nodeConfig
+                for(const otherUser of nodeConfig.user) {
+                    if(otherUser.id !== nodeConfigUser.id || messageId == undefined) {
+                        this.sendMessage(otherUser.ws, {
+                            ...message,
+                            _id: undefined
+                        } as WSMessage<WSApplyInstructionToNodeConfig>);
+                    }
+                }
+
             } else if(jsonData.type === "applyInstructionToGraph") {
-                if(!user || !sheet || !graphKey) {
+                if(!graphUser || !sheet || !graphKey) {
                     ws.close();
                     return;
                 }
@@ -273,8 +542,6 @@ export class WebSocketManager {
                     ws.close();
                 }
                 const objectList:Array<Node<any> | Edge[]> = [];
-
-                
 
                 // validate first
                 for(const instruction of message.instructions) {
@@ -327,6 +594,8 @@ export class WebSocketManager {
                         });
                     }
                 }
+
+                // apply instruction
                 for( let i = 0; i < message.instructions.length; i++ ) {
                     const instruction = message.instructions[i];
                     if(instruction.nodeId) {
@@ -451,6 +720,12 @@ export class WebSocketManager {
                     }
                 }
 
+                // Add to instruction history
+                sheet.instructionHistory.push({
+                    message: message,
+                    time: Date.now()
+                });
+
                 if (messageId) this.sendMessage(ws, {
                     ...message,
                     _id: messageId,
@@ -458,7 +733,7 @@ export class WebSocketManager {
                 } as WSMessage<WSResponseMessage<WSApplyInstructionToGraph>>);
 
                 for(const otherUser of sheet.user) {
-                    if(otherUser.id !== user.id || messageId == undefined) {
+                    if(otherUser.id !== graphUser.id || messageId == undefined) {
                         this.sendMessage(otherUser.ws, {
                             ...message,
                             _id: undefined
@@ -466,7 +741,7 @@ export class WebSocketManager {
                     }
                 }
             } else if(jsonData.type === "generateUniqueId") {
-                if(!user || !sheet || !graphKey) {
+                if(!graphUser || !sheet || !graphKey) {
                     ws.close();
                     return;
                 }
@@ -483,7 +758,7 @@ export class WebSocketManager {
                     } as WSMessage<WSResponseMessage<WSGenerateUniqueId>>);
                 }
             } else if(jsonData.type === "batchCreateElements") {
-                if(!user || !sheet || !graphKey) {
+                if(!graphUser || !sheet || !graphKey) {
                     ws.close();
                     return;
                 }
@@ -628,6 +903,11 @@ export class WebSocketManager {
                     targetSheet.edgeMap.set(sourceKey, sourceEdges);
                 }
 
+                sheet.instructionHistory.push({
+                    message: message,
+                    time: Date.now()
+                });
+
                 // Send success response
                 if (messageId) {
                     this.sendMessage(ws, {
@@ -639,7 +919,7 @@ export class WebSocketManager {
 
                 // Broadcast to other users
                 for(const otherUser of targetSheet.user) {
-                    if(otherUser.id !== user.id || messageId == undefined) {
+                    if(otherUser.id !== graphUser.id || messageId == undefined) {
                         this.sendMessage(otherUser.ws, {
                             ...message,
                             _id: undefined
@@ -647,7 +927,7 @@ export class WebSocketManager {
                     }
                 }
             } else if(jsonData.type === "batchDeleteElements") {
-                if(!user || !sheet || !graphKey) {
+                if(!graphUser || !sheet || !graphKey) {
                     ws.close();
                     return;
                 }
@@ -735,6 +1015,11 @@ export class WebSocketManager {
                     targetSheet.nodeMap.delete(nodeKey);
                 }
 
+                sheet.instructionHistory.push({
+                    message: message,
+                    time: Date.now()
+                });
+
                 // Send success response with filtered edge keys
                 if (messageId) {
                     this.sendMessage(ws, {
@@ -747,7 +1032,7 @@ export class WebSocketManager {
 
                 // Broadcast to other users with filtered edge keys
                 for(const otherUser of targetSheet.user) {
-                    if(otherUser.id !== user.id || messageId == undefined) {
+                    if(otherUser.id !== graphUser.id || messageId == undefined) {
                         this.sendMessage(otherUser.ws, {
                             ...message,
                             edgeKeys: finalEdgeKeys, // Send back the actually deleted edges
@@ -796,11 +1081,14 @@ export class WebSocketManager {
     }
 
     /**
-     * Save all pending changes for all managed graphs
+     * Save all pending changes for all managed graphs and node configs
      */
     private savePendingChanges = async () => {
         for (const graphKey in this.managedGraph) {
             await this.saveGraphChanges(graphKey);
+        }
+        for (const nodeConfigKey in this.managedNodeConfig) {
+            await this.saveNodeConfigChanges(nodeConfigKey);
         }
     }
 
@@ -816,12 +1104,17 @@ export class WebSocketManager {
             const node_collection = db.collection("nodius_nodes");
             const edge_collection = db.collection("nodius_edges");
 
+            // Track if any sheets had changes
+            let hadAnyChanges = false;
+
             for (const sheetId in graph) {
                 const sheet = graph[sheetId];
 
                 if (!sheet.hasUnsavedChanges) {
                     continue; // Skip sheets with no changes
                 }
+
+                hadAnyChanges = true;
 
                 // Compute node diffs
                 const nodesToUpdate: Node<any>[] = [];
@@ -942,8 +1235,59 @@ export class WebSocketManager {
                     edgesDeleted: edgesToDelete.length
                 });
             }
+
+            // Update the graph's lastUpdatedTime if there were any changes
+            if (hadAnyChanges) {
+                const graph_collection = db.collection("nodius_graphs");
+                await graph_collection.update(graphKey, {
+                    lastUpdatedTime: Date.now()
+                });
+            }
         } catch (error) {
             console.error(`Error saving changes for graph ${graphKey}:`, error);
+        }
+    }
+
+    /**
+     * Save changes for a specific node config to ArangoDB
+     * @param nodeConfigKey - The node config key to save changes for
+     */
+    private saveNodeConfigChanges = async (nodeConfigKey: string): Promise<void> => {
+        const managedConfig = this.managedNodeConfig[nodeConfigKey];
+        if (!managedConfig) return;
+
+        try {
+            if (!managedConfig.hasUnsavedChanges) {
+                return; // Skip if no changes
+            }
+
+            const nodeConfig_collection = db.collection("nodius_node_config");
+
+            // Check if the config has actually changed
+            if (JSON.stringify(managedConfig.originalConfig) !== JSON.stringify(managedConfig.config)) {
+                // Update lastUpdatedTime
+                const updatedConfig = {
+                    ...managedConfig.config,
+                    lastUpdatedTime: Date.now()
+                };
+
+                // Update the node config in the database
+                await nodeConfig_collection.update(nodeConfigKey, updatedConfig);
+
+                // Update the managed config with the new timestamp
+                managedConfig.config = updatedConfig;
+
+                // Update the original config after successful save
+                managedConfig.originalConfig = JSON.parse(JSON.stringify(updatedConfig));
+                managedConfig.hasUnsavedChanges = false;
+
+                console.log(`Saved changes for node config ${nodeConfigKey}`);
+            } else {
+                // No actual changes, just mark as saved
+                managedConfig.hasUnsavedChanges = false;
+            }
+        } catch (error) {
+            console.error(`Error saving changes for node config ${nodeConfigKey}:`, error);
         }
     }
 

@@ -8,6 +8,7 @@ import {RequestWorkFlow} from "./request/requestWorkFlow";
 import {RequestBuilder} from "./request/requestBuilder";
 import {RequestDataType} from "./request/requestDataType";
 import {RequestSync} from "./request/requestSync";
+import {RequestNodeConfig} from "./request/requestNodeConfig";
 
 const args =  parseArgs();
 
@@ -52,6 +53,7 @@ RequestWorkFlow.init(app);
 RequestBuilder.init(app);
 RequestDataType.init(app);
 RequestSync.init(app);
+RequestNodeConfig.init(app);
 
 export const peerHost = args.get("host");
 export const peerPort = parseInt(args.get("port"));
