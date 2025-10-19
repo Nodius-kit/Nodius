@@ -28,7 +28,8 @@ export interface GraphInstructions {
     edgeId?: string,
     applyUniqIdentifier?:string, // key to apply unique identifier
     targetedIdentifier?:string, // security check
-    noRedraw?: boolean,
+    noRedraw?: boolean, // don't trigger a re render
+    animatePos?:boolean, // animate pos change
 }
 
 export interface WSRegisterUser {

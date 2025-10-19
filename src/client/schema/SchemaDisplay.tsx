@@ -188,6 +188,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     }
 
 
+                    let lastSavedX = node.posX;
+                    let lastSavedY = node.posY;
+                    let lastSaveTime = Date.now();
+
                     let lastX = evt.clientX;
                     let lastY = evt.clientY;
 
@@ -199,7 +203,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     disableTextSelection();
 
                     const saveNodePosition = () => {
-
+                        Project.state.updateGraph
                     }
 
                     const mouseMove = (evt:MouseEvent) => {
@@ -227,6 +231,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
                             overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
 
+                            const now = Date.now();
+                            if (now - lastSaveTime >= 300 && (node.posX !== lastSavedX || node.posY !== lastSavedY)) {
+                                saveNodePosition();
+                                lastSaveTime = now;
+                                lastSavedX = node.posX;
+                                lastSavedY = node.posY;
+                            }
+
                         });
                     }
 
@@ -236,6 +248,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                         window.removeEventListener("mouseup", mouseUp);
                         gpuMotor.current!.enableInteractive(true);
                         enableTextSelection();
+                        saveNodePosition();
                     }
 
                     window.addEventListener("mouseup", mouseUp);
