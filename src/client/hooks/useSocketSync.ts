@@ -769,7 +769,7 @@ export const useSocketSync = () => {
         // Filter out undeletable edges
         for(const edgeKey of edgeKeysSet) {
             const edge = findEdgeByKey(sheet.edgeMap, edgeKey);
-            if(edge && !edge.undeletable) {
+            if(edge) {
                 finalEdgeKeys.push(edgeKey);
             }
         }

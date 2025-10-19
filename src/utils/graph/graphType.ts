@@ -32,6 +32,9 @@ export interface Edge {
 export interface Node<T> {
     _key: string,
     graphKey: string,
+
+    undeletable?: boolean,
+
     type: NodeType,
     sheet:string,
     size: {

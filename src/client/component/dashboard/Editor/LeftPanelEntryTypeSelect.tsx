@@ -167,8 +167,16 @@ export const LeftPanelEntryTypeSelect = memo((
             font-size: 12px;
             font-weight: 500;
             display: flex;
+            justify-content: space-between;
             align-items: center;
             gap: 6px;
+        }
+        
+        & .type-badge div {
+            display: flex;
+            flex-direction: row;
+            gap: 6px;
+            align-items: center;
         }
 
         & .type-name {
@@ -659,8 +667,11 @@ export const LeftPanelEntryTypeSelect = memo((
                                     <div className="type-header">
                                         <div style={{flex:1}}>
                                             <div className="type-badge">
-                                                <Check height={14} width={14}/>
-                                                Active
+                                                <div>
+                                                    <Check height={14} width={14}/>
+                                                    Active
+                                                </div>
+                                                <Trash2 size={18} onClick={removeEntryType} style={{cursor:"pointer"}}/>
                                             </div>
                                         </div>
                                     </div>

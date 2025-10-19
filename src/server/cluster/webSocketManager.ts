@@ -685,10 +685,7 @@ export class WebSocketManager {
                         } as WSMessage<WSResponseMessage<unknown>>);
                         return;
                     }
-                    // Only include deletable edges
-                    if(!existingEdge.undeletable) {
-                        finalEdgeKeys.push(edgeKey);
-                    }
+                    finalEdgeKeys.push(edgeKey);
                 }
 
                 // Ensure we have something to delete

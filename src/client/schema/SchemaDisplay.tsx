@@ -1,18 +1,19 @@
-import {memo, useContext, useEffect, useRef, MouseEvent, forwardRef, useLayoutEffect} from "react";
+import {memo, useContext, useEffect, useRef, forwardRef, useLayoutEffect} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
-import {forwardMouseEvents} from "../../utils/objectUtils";
+import {disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
 import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
 import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../App";
+import {InstructionBuilder} from "../../utils/sync/InstructionBuilder";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
-    onCanvasClick: (evt:MouseEvent) => void,
+    onCanvasClick: (evt:React.MouseEvent) => void,
     openHtmlEditor: OpenHtmlEditorFct,
     onNodeEnter?: (node: Node<any>) => void,
-    onNodeLeave?: (node: Node<any>) => void,
+    onNodeLeave?: (node: Node<any>|undefined, nodeId:string) => void,
 }
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
@@ -30,6 +31,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const gpuMotor = useRef<WebGpuMotor>(undefined);
 
     const Theme = useContext(ThemeContext);
+
+    const zIndex = useRef<number>(1);
 
 
 
@@ -151,8 +154,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 overlay.style.position = 'absolute';
                 overlay.style.pointerEvents = 'none';
                 overlay.style.cursor = "pointer";
-                overlay.style.zIndex = "1000000";
                 overlay.style.transition = "outline ease-in-out 0.3s";
+
 
                 const nodeConfig = Project.state.nodeTypeConfig[node.type];
 
@@ -171,6 +174,75 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 nodeHTML.addEventListener("mouseenter", mouseEnter);
                 overlay.addEventListener("mouseleave",mouseLeave)
                 nodeHTML.addEventListener("mouseleave", mouseLeave);
+
+
+                const mouseDown = (evt:MouseEvent) => {
+
+                    if(!gpuMotor.current!.isInteractive()) {
+                        return;
+                    }
+
+                    if((overlay.style.zIndex == "" ? 0 : parseInt(overlay.style.zIndex)) < zIndex.current) {
+                        zIndex.current++;
+                        overlay.style.zIndex = nodeHTML.style.zIndex = zIndex.current+"";
+                    }
+
+
+                    let lastX = evt.clientX;
+                    let lastY = evt.clientY;
+
+
+                    gpuMotor.current!.enableInteractive(false);
+
+                    let animationFrame:number|undefined;
+
+                    disableTextSelection();
+
+                    const saveNodePosition = () => {
+
+                    }
+
+                    const mouseMove = (evt:MouseEvent) => {
+                        if(animationFrame) cancelAnimationFrame(animationFrame);
+                        animationFrame = requestAnimationFrame(() => {
+                            const newX = evt.clientX;
+                            const newY = evt.clientY;
+
+                            const deltaX = newX - lastX;
+                            const deltaY = newY - lastY;
+
+                            const worldDeltaX = deltaX / gpuMotor.current!.getTransform().scale;
+                            const worldDeltaY = deltaY / gpuMotor.current!.getTransform().scale;
+
+                            node.posX += worldDeltaX;
+                            node.posY += worldDeltaY;
+
+                            lastX = newX;
+                            lastY = newY;
+
+                            gpuMotor.current!.requestRedraw();
+
+                            const rect = gpuMotor.current!.getNodeScreenRect(node._key)!;
+
+                            overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
+                            overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
+
+                        });
+                    }
+
+                    const mouseUp = (evt:MouseEvent) => {
+                        if(animationFrame) cancelAnimationFrame(animationFrame);
+                        window.removeEventListener("mousemove", mouseMove);
+                        window.removeEventListener("mouseup", mouseUp);
+                        gpuMotor.current!.enableInteractive(true);
+                        enableTextSelection();
+                    }
+
+                    window.addEventListener("mouseup", mouseUp);
+                    window.addEventListener("mousemove", mouseMove);
+                }
+
+                nodeHTML.addEventListener("mousedown", mouseDown);
 
                 // Store event listeners for cleanup and reattachment
                 const eventListenerMap = new Map<string, (event: any) => void>();
@@ -196,6 +268,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             }
 
                             const callEvent = async (event:any) => {
+                                const currentNode = Project.state.graph!.sheets[Project.state.selectedSheetId!]!.nodeMap.get(node._key);
+                                if(!currentNode) return;
                                 const fct = new AsyncFunction(
                                     ...[
                                         "event",
@@ -215,7 +289,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                                     ...[
                                         event,
                                         gpuMotor.current,
-                                        Project.state.graph!.sheets[Project.state.selectedSheetId!]!.nodeMap.get(node._key),
+                                        currentNode,
                                         openHtmlEditor,
                                         Project.state.getHtmlRenderer,
                                         Project.state.initiateNewHtmlRenderer,
@@ -322,21 +396,23 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
             onNodeEnter?.(node);
         }
-        const nodeLeave = (node: Node<any>) => {
+        const nodeLeave = (node: Node<any>|undefined, nodeId:string) => {
 
 
             if(!nodeDisplayContainer.current) return;
 
-            onNodeLeave?.(node);
+            onNodeLeave?.(node, nodeId);
 
-            const nodeConfig = Project.state.nodeTypeConfig[node.type];
-            if(!nodeConfig || nodeConfig.alwaysRendered) return;
+            if(node) {
+                const nodeConfig = Project.state.nodeTypeConfig[node.type];
+                if (!nodeConfig || nodeConfig.alwaysRendered) return;
 
-            const index = inSchemaNode.current.findIndex((n) => n.node === node);
-            if (index !== -1){
+            }
+            const index = inSchemaNode.current.findIndex((n) => n.node._key === nodeId);
+            if (index !== -1) {
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].element);
                 nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].overElement);
-                if(inSchemaNode.current[index].htmlRenderer) {
+                if (inSchemaNode.current[index].htmlRenderer) {
                     inSchemaNode.current[index].htmlRenderer.htmlMotor.dispose();
                 }
                 inSchemaNode.current.splice(index, 1);

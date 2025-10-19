@@ -432,7 +432,10 @@ export class WebGpuMotor implements GraphicalMotor {
 		});
 
 		this.canvas.addEventListener("mousemove", (e) => {
-			if(!this.interactiveEnabled) return;
+			if(!this.interactiveEnabled) {
+				this.isPanning = false;
+				return;
+			}
 			if (this.isPanning) {
 				const dx = e.clientX - this.lastMouseX;
 				const dy = e.clientY - this.lastMouseY;
@@ -485,7 +488,7 @@ export class WebGpuMotor implements GraphicalMotor {
 			if(this.scene) {
 				for (const edge of this.relevantEdges) {
 					if (this.isPointNearEdge(world, edge)) {
-						this.emit("edgeClick", edge);
+						this.emit("edgeClick", edge, edge._key);
 						return;
 					}
 				}
@@ -500,7 +503,7 @@ export class WebGpuMotor implements GraphicalMotor {
 						world.y >= node.posY &&
 						world.y <= node.posY + node.size.height
 					) {
-						this.emit("nodeClick", node);
+						this.emit("nodeClick", node, node._key);
 						return;
 					}
 				}
@@ -690,12 +693,12 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 		for (const id of this.visibleNodes) {
 			if (!this.prevVisibleNodes.has(id)) {
-				this.emit("nodeEnter", this.scene.nodes.get(id)!);
+				this.emit("nodeEnter", this.scene.nodes.get(id)!, id);
 			}
 		}
 		for (const id of this.prevVisibleNodes) {
 			if (!this.visibleNodes.has(id)) {
-				this.emit("nodeLeave", this.scene.nodes.get(id)!);
+				this.emit("nodeLeave", this.scene.nodes.get(id), id);
 			}
 		}
 
@@ -948,7 +951,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (updates.posY !== undefined) node.posY = updates.posY;
 		if (updates.size !== undefined && typeof updates.size !== "string") node.size = updates.size;
 		this.dirty = true;
-		this.emit("nodeChange", node);
+		this.emit("nodeChange", node, node._key);
 	}
 
 	public getScene(): MotorScene | undefined {
@@ -989,10 +992,23 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 	}
 
-	private emit<K extends keyof MotorEventMap>(event: K, arg: Parameters<MotorEventMap[K]>[0]): void {
+	private emit<K extends keyof MotorEventMap>(
+		event: K,
+		arg: Parameters<MotorEventMap[K]>[0]
+	): void;
+	private emit<K extends keyof MotorEventMap>(
+		event: K,
+		arg: Parameters<MotorEventMap[K]>[0],
+		extra: Parameters<MotorEventMap[K]>[1]
+	): void;
+	private emit<K extends keyof MotorEventMap>(
+		event: K,
+		arg: any,
+		extra?: any
+	): void {
 		const listeners = this.eventListeners[event];
 		if (listeners) {
-			listeners.forEach((cb) => (cb as any)(arg));
+			listeners.forEach((cb) => (cb as any)(arg, extra));
 		}
 	}
 
@@ -1076,6 +1092,10 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	public enableInteractive(value:boolean): void {
 		this.interactiveEnabled = value;
+	}
+
+	public isInteractive(): boolean {
+		return this.interactiveEnabled;
 	}
 
 	public resetViewport():void {

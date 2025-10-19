@@ -49,29 +49,41 @@ export const App = () => {
         }
     }, [Project.state.html, Project.state.graph, Project.state.selectedSheetId]);
 
-    const onNodeLeave = useCallback((node:Node<any>) => {
-        if (node._key === Project.state.editedHtml?.node._key) {
-            Project.dispatch({
-                field: "editedHtml",
-                value: undefined
-            });
-            onCloseEditor.current?.();
-        }
+    const onNodeLeave = useCallback((node:Node<any>|undefined, nodeId:string) => {
+        if(!Project.state.graph || !Project.state.selectedSheetId) return;
+        if(node) {
+            if (node._key === Project.state.editedHtml?.node._key) {
+                Project.dispatch({
+                    field: "editedHtml",
+                    value: undefined
+                });
+                onCloseEditor.current?.();
+            }
 
-        const nodeConfig = Project.state.nodeTypeConfig[node.type];
-        if (!nodeConfig || !nodeConfig.alwaysRendered) {
-            const renderers = Project.state.getHtmlRenderer!(node);
-            Object.values(renderers ?? {}).forEach(renderer => {
-                renderer.htmlMotor.dispose();
-            })
-        }
+            const nodeConfig = Project.state.nodeTypeConfig[node.type];
+            if (!nodeConfig || !nodeConfig.alwaysRendered) {
+                const renderers = Project.state.getHtmlRenderer!(node);
+                Object.values(renderers ?? {}).forEach(renderer => {
+                    renderer.htmlMotor.dispose();
+                })
+            }
 
-        const nodeLeaveEvent = new CustomEvent("nodeLeave", {});
-        const nodeElement = document.querySelector("[data-node-key='"+node._key+"']");
-        if(nodeElement) {
-            nodeElement.dispatchEvent(nodeLeaveEvent);
+            const nodeLeaveEvent = new CustomEvent("nodeLeave", {});
+            const nodeElement = document.querySelector("[data-node-key='" + node._key + "']");
+            if (nodeElement) {
+                nodeElement.dispatchEvent(nodeLeaveEvent);
+            }
+        } else {
+            // node deleted
+            if(Project.state.editedHtml?.node._key === nodeId) {
+                Project.dispatch({
+                    field: "editedHtml",
+                    value: undefined
+                });
+                onCloseEditor.current?.();
+            }
         }
-    }, [Project.state.editedHtml, Project.state.getHtmlRenderer]);
+    }, [Project.state.editedHtml, Project.state.getHtmlRenderer, Project.state.graph, Project.state.selectedSheetId]);
 
     const onNodeEnter = useCallback((node:Node<any>) => {
         const nodeEnterEvent = new CustomEvent("nodeEnter", {
