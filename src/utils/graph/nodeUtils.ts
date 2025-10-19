@@ -113,7 +113,7 @@ export const createNodeFromConfig = <T = any>(config:NodeTypeConfig, nodeKey:str
         posX: 0,
         posY: 0,
         size: config.node.size,
-        type: config.type,
+        type: config._key,
         data: config.node.data,
         handles: config.node.handles,
         undeletable: config.node.undeletable,

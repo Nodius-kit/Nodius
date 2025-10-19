@@ -206,7 +206,15 @@ export const App = () => {
             <ThemeContextParser/>
             <ProjectLoader/>
 
-            <MultiFade active={activeWindow} timeout={250} extraCss={{position:"absolute", inset:"0px", pointerEvents:"none", overflow: "hidden", zIndex:"10000000"}}>
+            <MultiFade active={activeWindow} timeout={250}
+                       extraCss={{
+                           position:"absolute",
+                           inset:"0px",
+                           overflow: "hidden",
+                           zIndex:"10000000",
+                           pointerEvents: activeWindow == 1 ? "none" : "inherit"
+            }}
+            >
 
                 <DashboardWorkFlow />
 

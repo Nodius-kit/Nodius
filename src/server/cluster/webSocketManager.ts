@@ -358,7 +358,7 @@ export class WebSocketManager {
                 const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
                 this.deleteUserOnGraph(message.userId);
 
-                const peer = clusterManager.getInstancehPeerId(message.graphKey);
+                const peer = clusterManager.getInstancehPeerId("graph-"+message.graphKey);
                 if(!peer || peer != "self") {
                     if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:false, message: "This server don't manage graph with key:"+message.graphKey } } as WSMessage<WSResponseMessage<unknown>>);
                     return;
@@ -390,6 +390,12 @@ export class WebSocketManager {
             } else if(jsonData.type === "registerUserOnNodeConfig") {
                 const message:WSMessage<WSRegisterUserOnNodeConfig> = jsonData;
                 this.deleteUserOnNodeConfig(message.userId);
+
+                const peer = clusterManager.getInstancehPeerId("nodeConfig-"+message.nodeConfigKey);
+                if(!peer || peer != "self") {
+                    if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:false, message: "This server don't manage nodeConfig with key:"+message.nodeConfigKey } } as WSMessage<WSResponseMessage<unknown>>);
+                    return;
+                }
 
                 // Initialize node config if not already managed
                 if(!this.managedNodeConfig[message.nodeConfigKey]) {

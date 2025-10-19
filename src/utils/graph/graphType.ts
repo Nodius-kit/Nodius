@@ -136,14 +136,14 @@ export type MotorDomEventMap = "nodeEnter" | "nodeUpdate"
 
 export interface NodeTypeConfig {
     _key: string,
-    type: string,
     workspace:string,
     displayName: string,
+    description: string,
     content: HtmlObject,
     category: string,
     alwaysRendered: boolean,
     node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "posY" | "posX">,
-    domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
+    domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
         radius: number,
         width: number,
@@ -160,8 +160,7 @@ export interface NodeTypeConfig {
 }
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
-    _key: "0",
-    type: "html",
+    _key: "html",
     workspace: "root",
     category: "",
     content: {
@@ -184,6 +183,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         identifier: "root"
     },
     displayName: "Html Editor",
+    description: "",
     alwaysRendered: true,
     node: {
         type: "html",
@@ -268,10 +268,10 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
 
 
 export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
-    _key: "1",
-    type: "entryType",
+    _key: "entryType",
     workspace: "root",
     displayName: "Entry Data Type",
+    description: "",
     alwaysRendered: true,
     category: "",
     content: {

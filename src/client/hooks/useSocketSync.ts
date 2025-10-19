@@ -211,7 +211,7 @@ export const useSocketSync = () => {
         }
 
         const serverInfo = await retrieveServerInfo({
-            instanceId: "graph"+htmlGraph._key
+            instanceId: "graph-"+htmlGraph._key
         });
         if(!serverInfo) {
             return {
@@ -250,7 +250,7 @@ export const useSocketSync = () => {
             disconnect();
             return {
                 timeTaken: Date.now() - start,
-                reason: "Server didn't accept our registration",
+                reason: "Server didn't accept our registration"+(response?._response.message ? ": "+response?._response.message : ""),
                 status: false,
             }
         }
@@ -300,7 +300,9 @@ export const useSocketSync = () => {
         });
         const rootNode = findFirstNodeWithId(htmlGraph, "root");
         if(rootNode) {
-            gpuMotor.current.smoothFitToNode(rootNode._key);
+            gpuMotor.current.smoothFitToNode(rootNode._key, {
+                padding: 100
+            });
         } else {
             gpuMotor.current.resetViewport();
         }
@@ -472,7 +474,9 @@ export const useSocketSync = () => {
             edges: graph.sheets[selectedSheetId].edgeMap
         });
 
-        gpuMotor.current.smoothFitToNode(baseNode._key);
+        gpuMotor.current.smoothFitToNode(baseNode._key, {
+            padding: 100
+        });
 
         setActiveWindow(1);
         return {

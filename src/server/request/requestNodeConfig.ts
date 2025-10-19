@@ -127,6 +127,7 @@ export class RequestNodeConfig {
                 // Generate unique token
                 const token_nodeConfig = await createUniqueToken(nodeConfig_collection);
 
+                body.nodeConfig.node.type = token_nodeConfig;
                 // Create the node config document
                 const now = Date.now();
                 const nodeConfigDoc = {

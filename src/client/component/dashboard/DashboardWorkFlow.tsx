@@ -1,347 +1,256 @@
-import {memo, useCallback, useContext, useEffect, useRef} from "react";
-import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
-import {Graph} from "../../../utils/graph/graphType";
-import {HtmlRender} from "../../../process/html/HtmlRender";
-import {ProjectContext} from "../../hooks/contexts/ProjectContext";
+import {memo, useCallback, useContext, useEffect, useRef, useState} from "react";
+import {HtmlClass} from "../../../utils/html/htmlType";
+import {Graph, NodeTypeConfig} from "../../../utils/graph/graphType";
+import {ThemeContext} from "../../hooks/contexts/ThemeContext";
+import {useDynamicClass} from "../../hooks/useDynamicClass";
+import {DashboardHtmlWorkflow} from "./DashboardHtmlWorkflow";
+import {DashboardNodeConfigurations} from "./DashboardNodeConfigurations";
 
 interface DashboardWorkFlowProps {
 }
 
-const object:HtmlObject = {
-    tag: "div",
-    css: [{
-        selector: "&",
-        rules: [
-            ["background-color", "var(--nodius-background-default)"],
-            ["display", "flex"],
-            ["justify-content", "center"],
-            ["width", "100%"],
-            ["height", "100%"]
-        ]
-    }],
-    name: "Container",
-    delimiter: true,
-
-    domEvents: [
-        {
-            name: "load",
-            call: `
-                globalStorage.load = true;
-                // retrieve category
-                if(currentStorage.retrieveCategoriesAbort) {
-                    currentStorage.retrieveCategoriesAbort.abort();
-                }
-                currentStorage.retrieveCategoriesAbort = new AbortController();
-                let response = await fetch('http://localhost:8426/api/category/list', {
-                    method: "POST",
-                    signal: currentStorage.retrieveCategoriesAbort.signal,
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        workspace: "root"
-                    })
-                });
-                if(response.status === 200) {
-                    const json = await response.json();
-                    globalStorage.categories = json;
-                }
-                
-                // retrieve HTML WF
-                if(currentStorage.retrieveHtmlAbort) {
-                    currentStorage.retrieveHtmlAbort.abort();
-                }
-                currentStorage.retrieveHtmlAbort = new AbortController();
-                response = await fetch('http://localhost:8426/api/graph/get', {
-                    method: "POST",
-                    signal: currentStorage.retrieveHtmlAbort.signal,
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        workspace: "root",
-                        retrieveHtml: {
-                            buildGraph: false,
-                            length: 20,
-                            offset: 0
-                        }
-                    }),
-                });
-                if(response.status === 200) {
-                    const json = await response.json();
-                    globalStorage.htmlClass = json;
-                }
-                
-                globalStorage.load = false;
-            `
-        }
-    ],
-
-    identifier: "root",
-    type: "block",
-    content: {
-        tag: "div",
-        identifier: "0",
-        name: "Column",
-        delimiter: true,
-        type:"list",
-        css: [{
-            selector: "&",
-            rules: [
-                ["flex", "1"],
-                ["display", "flex"],
-                ["max-width", "1200px"],
-                ["flex-direction", "column"]
-            ]
-        }],
-        content: [
-            {
-                type:"array",
-                tag:"div",
-                name: "Conditional Row",
-                delimiter: true,
-                css: [
-                    {
-                        selector: "&",
-                        rules: [
-                            ["flex", "1"],
-                            ["display", "flex"],
-                            ["flex-direction", "row"],
-                            ["gap", "10px"],
-                            ["margin", "20px"]
-                        ]
-                    }
-                ],
-                identifier: "1",
-                workflowEvents: [
-                    {
-                        name: "variableChange",
-                        call: `
-                            if (event.variable === 'htmlClass') {
-                                renderElement();
-                            }
-                        `
-                    }
-                ],
-                content: {
-                    numberOfContent: "LEN(globalStorage.htmlClass)",
-                    indexVariableName: "index",
-                    content: {
-                        type:"block",
-                        name: "Container",
-                        delimiter: true,
-                        css: [],
-                        identifier: "2",
-                        tag:"div",
-                        content: {
-                            type:"list",
-                            css: [
-                                {
-                                    selector: "&",
-                                    rules: [
-                                        ["padding", "50px"],
-                                        ["border", "1px solid var(--nodius-grey-700)"],
-                                        ["border-radius", "10px"],
-                                        ["background-color", "var(--nodius-background-paper)"]
-                                    ]
-                                }
-                            ],
-                            identifier: "3",
-                            tag: "div",
-                            content: [
-                                {
-                                    type: "text",
-                                    tag: "p",
-                                    name: "Text",
-                                    delimiter: true,
-                                    identifier:"5",
-                                    css: [],
-                                    content: {
-                                        "fr": "HTML: {{globalStorage.htmlClass[index].html.name}}",
-                                        "en": "HTML: {{globalStorage.htmlClass[index].html.name}}",
-                                    },
-                                },
-                                {
-                                    type:"text",
-                                    tag:"button",
-                                    name: "Text",
-                                    delimiter: true,
-                                    identifier: "4",
-                                    css: [],
-                                    content: {
-                                        "fr": "edit",
-                                        "en": "edit",
-                                    },
-                                    domEvents: [
-                                        {
-                                            name:"click",
-                                            call: `
-                                                const action = await globalStorage.openHtmlClass(globalStorage.htmlClass[index].html, globalStorage.htmlClass[index].graph);
-                                                console.log(action);
-                                            `
-                                        }
-                                    ]
-                                },
-                                {
-                                    type:"text",
-                                    tag:"button",
-                                    name: "Text",
-                                    delimiter: true,
-                                    identifier: "6",
-                                    css: [],
-                                    content: {
-                                        "fr": "delete",
-                                        "en": "delete",
-                                    },
-                                    domEvents: [
-                                        {
-                                            name:"click",
-                                            call: `
-                                               if(currentStorage.retrieveHtmlAbort) {
-                                                   currentStorage.retrieveHtmlAbort.abort();
-                                               }
-                                               currentStorage.retrieveHtmlAbort = new AbortController();
-                                               response = await fetch('http://localhost:8426/api/graph/delete', {
-                                                   method: "POST",
-                                                   signal: currentStorage.retrieveHtmlAbort.signal,
-                                                   headers: {
-                                                       "Content-Type": "application/json",
-                                                   },
-                                                   body: JSON.stringify({
-                                                       htmlToken: globalStorage.htmlClass[index].html._key
-                                                   }),
-                                               });
-                                            `
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                    },
-                    noContent: {
-                        type:"block",
-                        name: "Container",
-                        delimiter: true,
-                        css: [],
-                        identifier: "2-nocontent",
-                        tag:"div",
-                        content: {
-                            type: "list",
-                            name: "Row",
-                            delimiter: true,
-                            css: [
-                                {
-                                    selector: "&",
-                                    rules: [
-                                        ["padding", "50px"],
-                                        ["border", "1px solid var(--nodius-grey-700)"],
-                                        ["border-radius", "10px"],
-                                        ["background-color", "var(--nodius-background-paper)"]
-                                    ]
-                                }
-                            ],
-                            identifier: "3-nocontent",
-                            tag: "div",
-                            content: [
-                                {
-                                    type:"text",
-                                    tag:"button",
-                                    name: "Text",
-                                    delimiter: true,
-                                    identifier: "4-nocontent",
-                                    css: [],
-                                    content: {
-                                        "fr": "Create",
-                                        "en": "Create",
-                                    },
-                                    domEvents: [
-                                        {
-                                            name:"click",
-                                            call: `
-                                                const name = prompt("Name");
-                                                 if(currentStorage.createHtmlClassAbort) {
-                                                    currentStorage.createHtmlClassAbort.abort();
-                                                }
-                                                currentStorage.createHtmlClassAbort = new AbortController();
-                                                let response = await fetch('http://localhost:8426/api/graph/create', {
-                                                    method: "POST",
-                                                    signal: currentStorage.createHtmlClassAbort.signal,
-                                                    headers: {
-                                                        "Content-Type": "application/json",
-                                                    },
-                                                    body: JSON.stringify({
-                                                        htmlClass: {
-                                                            workspace: "root",
-                                                            category: "default",
-                                                            name: name,
-                                                            permission: 0,
-                                                            object: {
-                                                                type: "block",
-                                                                name: "Container",
-                                                                delimiter: true,
-                                                                tag: "div",
-                                                                css: [
-                                                                    {
-                                                                      selector: "&",
-                                                                      rules: [
-                                                                        ["height", "100%"],
-                                                                        ["width", "100%"]
-                                                                      ]
-                                                                    }
-                                                                ],
-                                                                identifier: "root"
-                                                            }
-                                                        },
-                                                    })
-                                                });
-                                                if(response.status === 200) {
-                                                    renderElementWithIdentifier("root");
-                                                }
-                                             
-                                            `
-                                        }
-                                    ]
-                                }
-                            ]
-                        },
-                    }
-                }
-            }
-        ]
-    }
-
+interface HtmlClassWithGraph {
+    html: HtmlClass;
+    graph: Graph;
 }
 
-export const DashboardWorkFlow = memo(({
+export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
+    const Theme = useContext(ThemeContext);
 
-}:DashboardWorkFlowProps) => {
+    // State management - separate categories for HTML and NodeConfig
+    const [categoriesHtml, setCategoriesHtml] = useState<string[]>([]);
+    const [categoriesNodeConfig, setCategoriesNodeConfig] = useState<string[]>([]);
+    const [selectedCategoryHtml, setSelectedCategoryHtml] = useState<string | null>(null);
+    const [selectedCategoryNodeConfig, setSelectedCategoryNodeConfig] = useState<string | null>(null);
 
+    const [htmlClasses, setHtmlClasses] = useState<HtmlClassWithGraph[]>([]);
+    const [nodeConfigs, setNodeConfigs] = useState<NodeTypeConfig[]>([]);
 
-    const renderDashboard = useRef<HtmlRender>(undefined);
-    const Project = useContext(ProjectContext);
+    const [loading, setLoading] = useState<boolean>(true);
 
-    const container = useRef<HTMLDivElement>(null);
+    // Abort controllers
+    const abortControllers = useRef<{
+        categoriesHtml?: AbortController;
+        categoriesNodeConfig?: AbortController;
+        htmlClasses?: AbortController;
+        nodeConfigs?: AbortController;
+    }>({});
 
-    useEffect(() => {
-        if(!Project.state.openHtmlClass) return;
-        if(container.current) {
-            renderDashboard.current = new HtmlRender(container.current);
-            renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", Project.state.openHtmlClass);
-            renderDashboard.current.setVariableInGlobalStorage("openHtmlClass", Project.state.openNodeConfig);
-            renderDashboard.current.render(object);
+    // Dynamic classes
+    const containerClass = useDynamicClass(`
+        & {
+            background-color: var(--nodius-background-default);
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
         }
+    `);
 
-        return () => {
-            if(renderDashboard.current) {
-                renderDashboard.current.dispose();
-                renderDashboard.current = undefined;
+    const mainColumnClass = useDynamicClass(`
+        & {
+            flex: 1;
+            display: flex;
+            max-width: 1400px;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            overflow-y: auto;
+        }
+    `);
+
+    // Data fetching functions
+    const fetchCategoriesHtml = useCallback(async () => {
+        if (abortControllers.current.categoriesHtml) {
+            abortControllers.current.categoriesHtml.abort();
+        }
+        abortControllers.current.categoriesHtml = new AbortController();
+
+        try {
+            const response = await fetch('http://localhost:8426/api/category/list', {
+                method: "POST",
+                signal: abortControllers.current.categoriesHtml.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root"
+                })
+            });
+
+            if (response.status === 200) {
+                const json = await response.json();
+                setCategoriesHtml(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching HTML categories:", error);
             }
         }
-    }, [container.current]);
+    }, []);
+
+    const fetchCategoriesNodeConfig = useCallback(async () => {
+        if (abortControllers.current.categoriesNodeConfig) {
+            abortControllers.current.categoriesNodeConfig.abort();
+        }
+        abortControllers.current.categoriesNodeConfig = new AbortController();
+
+        try {
+            const response = await fetch('http://localhost:8426/api/nodeconfig/category/list', {
+                method: "POST",
+                signal: abortControllers.current.categoriesNodeConfig.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root"
+                })
+            });
+
+            if (response.status === 200) {
+                const json = await response.json();
+                setCategoriesNodeConfig(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching NodeConfig categories:", error);
+            }
+        }
+    }, []);
+
+    const fetchHtmlClasses = useCallback(async () => {
+        if (abortControllers.current.htmlClasses) {
+            abortControllers.current.htmlClasses.abort();
+        }
+        abortControllers.current.htmlClasses = new AbortController();
+
+        try {
+            const response = await fetch('http://localhost:8426/api/graph/get', {
+                method: "POST",
+                signal: abortControllers.current.htmlClasses.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    retrieveHtml: {
+                        buildGraph: false,
+                        length: 100,
+                        offset: 0
+                    }
+                }),
+            });
+
+            if (response.status === 200) {
+                const json = await response.json();
+                setHtmlClasses(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching HTML classes:", error);
+            }
+        }
+    }, []);
+
+    const fetchNodeConfigs = useCallback(async () => {
+        if (abortControllers.current.nodeConfigs) {
+            abortControllers.current.nodeConfigs.abort();
+        }
+        abortControllers.current.nodeConfigs = new AbortController();
+
+        try {
+            const response = await fetch('http://localhost:8426/api/nodeconfig/list', {
+                method: "POST",
+                signal: abortControllers.current.nodeConfigs.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root"
+                }),
+            });
+
+            if (response.status === 200) {
+                const json = await response.json();
+                setNodeConfigs(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching node configs:", error);
+            }
+        }
+    }, []);
+
+    // Load all data
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        await Promise.all([
+            fetchCategoriesHtml(),
+            fetchCategoriesNodeConfig(),
+            fetchHtmlClasses(),
+            fetchNodeConfigs()
+        ]);
+        setLoading(false);
+    }, [fetchCategoriesHtml, fetchCategoriesNodeConfig, fetchHtmlClasses, fetchNodeConfigs]);
+
+    // Refresh functions for child components
+    const refreshHtmlClasses = useCallback(async () => {
+        await fetchHtmlClasses();
+        await fetchCategoriesHtml(); // Refresh categories as well in case new ones were created
+    }, [fetchHtmlClasses, fetchCategoriesHtml]);
+
+    const refreshNodeConfigs = useCallback(async () => {
+        await fetchNodeConfigs();
+        await fetchCategoriesNodeConfig(); // Refresh categories as well in case new ones were created
+    }, [fetchNodeConfigs, fetchCategoriesNodeConfig]);
+
+    useEffect(() => {
+        loadData();
+
+        return () => {
+            // Cleanup abort controllers
+            Object.values(abortControllers.current).forEach(controller => {
+                controller?.abort();
+            });
+        };
+    }, [loadData]);
+
+    if (loading) {
+        return (
+            <div className={containerClass}>
+                <div className={mainColumnClass}>
+                    <div style={{textAlign: "center", padding: "40px"}}>
+                        <p>Loading...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div ref={container} style={{width:"100%", height:"100%", pointerEvents:"all"}}>
+        <div className={containerClass}>
+            <div className={mainColumnClass}>
+                {/* HTML Workflows Section */}
+                <DashboardHtmlWorkflow
+                    htmlClasses={htmlClasses}
+                    selectedCategory={selectedCategoryHtml}
+                    categories={categoriesHtml}
+                    onRefresh={refreshHtmlClasses}
+                    onCategoryChange={setSelectedCategoryHtml}
+                />
 
+                {/* Node Configurations Section */}
+                <DashboardNodeConfigurations
+                    nodeConfigs={nodeConfigs}
+                    selectedCategory={selectedCategoryNodeConfig}
+                    categories={categoriesNodeConfig}
+                    onRefresh={refreshNodeConfigs}
+                    onCategoryChange={setSelectedCategoryNodeConfig}
+                />
+            </div>
         </div>
-    )
+    );
 });
+
+DashboardWorkFlow.displayName = "DashboardWorkFlow";

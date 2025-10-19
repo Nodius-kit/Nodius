@@ -36,7 +36,7 @@ export const MultiFade = memo(({
         <>
             {React.Children.map(children, (child, index) => (
                 <Fade in={index === visibleIndex} timeout={timeout} unmountOnExit={true}>
-                    <div style={{ width: "100%", height: "100%", pointerEvents: index === visibleIndex ? 'inherit':'none', ...(extraCss ?? {}) }}>{
+                    <div style={{ width: "100%", height: "100%", pointerEvents: index === visibleIndex ? 'inherit':'none', ...(extraCss ?? {}) }} data-multifade={index}>{
                         index === displayedIndex ? child : null
                     }</div>
                 </Fade>
