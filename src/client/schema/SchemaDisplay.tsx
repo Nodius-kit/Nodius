@@ -7,6 +7,7 @@ import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
 import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../App";
 import {InstructionBuilder} from "../../utils/sync/InstructionBuilder";
+import {GraphInstructions} from "../../utils/sync/wsObject";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -203,7 +204,22 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     disableTextSelection();
 
                     const saveNodePosition = () => {
-                        Project.state.updateGraph
+                        const insts:Array<GraphInstructions> = [];
+                        const instructionsX = new InstructionBuilder();
+                        const instructionsY = new InstructionBuilder();
+                        instructionsX.key("posX").set(node.posX);
+                        instructionsY.key("posY").set(node.posY);
+                        insts.push({
+                            i: instructionsX.instruction,
+                            nodeId: node._key,
+                            animatePos: true
+                        },
+                        {
+                            i: instructionsY.instruction,
+                            nodeId: node._key,
+                            animatePos: true
+                        });
+                        Project.state.updateGraph!(insts);
                     }
 
                     const mouseMove = (evt:MouseEvent) => {

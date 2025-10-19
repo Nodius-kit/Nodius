@@ -138,8 +138,9 @@ export interface NodeTypeConfig {
     _key: string,
     displayName: string,
     content: HtmlObject,
-    content_html_graph_key: string,
+    category: string,
     alwaysRendered: boolean,
+    node?: Node<any>, // internal config (hardcoded) have null node, so it will not be displayed in the node list for editing
     domEvents?: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
         radius: number,
@@ -156,7 +157,7 @@ export interface NodeTypeConfig {
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "0",
-    content_html_graph_key: "",
+    category: "",
     content: {
         type: "block",
         name: "Container",
@@ -236,7 +237,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
     _key: "1",
     displayName: "Entry Data Type",
     alwaysRendered: true,
-    content_html_graph_key: "",
+    category: "",
     content: {
         type: "block",
         name: "Container",

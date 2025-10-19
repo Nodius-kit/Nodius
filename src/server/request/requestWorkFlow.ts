@@ -18,7 +18,7 @@ export class RequestWorkFlow {
 
     public static init = async (app:HttpServer) => {
         const class_collection:DocumentCollection = await ensureCollection("nodius_html_class");
-        const category_collection:DocumentCollection = await ensureCollection("nodius_category");
+        const category_collection:DocumentCollection = await ensureCollection("nodius_workflow_category");
         const graph_collection: DocumentCollection = await ensureCollection("nodius_graphs");
         const node_collection: DocumentCollection = await ensureCollection("nodius_nodes");
 
@@ -35,7 +35,7 @@ export class RequestWorkFlow {
             }
 
             let query = aql`
-                FOR doc IN nodius_category
+                FOR doc IN nodius_workflow_category
                 FILTER doc.workspace == ${escapeHTML(body.workspace)}
                 COLLECT category = doc.category
                 RETURN category
@@ -53,10 +53,10 @@ export class RequestWorkFlow {
 
             // Delete matching category
             const cursor = await db.query(aql`
-              FOR c IN nodius_category
+              FOR c IN nodius_workflow_category
                 FILTER c.workspace == ${workspace} 
                 AND c._key == ${key}
-                REMOVE c IN nodius_category
+                REMOVE c IN nodius_workflow_category
                 RETURN OLD
             `);
 
@@ -76,7 +76,7 @@ export class RequestWorkFlow {
 
             // Check if category already exists
             const cursor = await db.query(aql`
-              FOR c IN nodius_category
+              FOR c IN nodius_workflow_category
                 FILTER c.workspace == ${workspace} 
                 AND c.category == ${categoryName}
                 LIMIT 1
