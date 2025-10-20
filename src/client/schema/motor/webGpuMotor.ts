@@ -1186,17 +1186,18 @@ export class WebGpuMotor implements GraphicalMotor {
 		const centerX = this.canvas!.width / 2;
 		const centerY = this.canvas!.height / 2;
 
-		// Calculate what the translate values should be to center on the target point
-		const targetTranslateX = centerX - options.x * options.zoom;
-		const targetTranslateY = centerY - options.y * options.zoom;
-
 		// Store starting values
 		const startScale = this.transform.scale;
 		const startTranslateX = this.transform.translateX;
 		const startTranslateY = this.transform.translateY;
 
-		// Store target values
-		const targetScale = options.zoom;
+		// Store target values, clamped to valid zoom range
+		const targetScale = Math.max(this.minZoom, Math.min(this.maxZoom, options.zoom));
+
+		// Calculate what the translate values should be to center on the target point
+		// Use the clamped targetScale instead of options.zoom for accurate positioning
+		const targetTranslateX = centerX - options.x * targetScale;
+		const targetTranslateY = centerY - options.y * targetScale;
 
 		const startTime = performance.now();
 
