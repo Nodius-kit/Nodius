@@ -13,7 +13,7 @@ import {LeftPanelTypeEditor} from "./Editor/LeftPanelTypeEditor";
 import {LeftPanelEnumEditor} from "./Editor/LeftPanelEnumEditor";
 import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
-import {WebGpuMotor} from "../../schema/motor/webGpuMotor";
+import {WebGpuMotor} from "../../schema/motor/webGpuMotor/index";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,

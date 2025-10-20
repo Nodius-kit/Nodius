@@ -1,5 +1,5 @@
 import {memo, useContext, useEffect, useRef, forwardRef, useLayoutEffect} from "react";
-import {WebGpuMotor} from "./motor/webGpuMotor";
+import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
 import {disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";

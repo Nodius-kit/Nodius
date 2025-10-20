@@ -3,7 +3,7 @@ import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from
 import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
 import {Edge, Graph, Node, NodeTypeConfig, NodeTypeEntryType} from "../../utils/graph/graphType";
-import {WebGpuMotor} from "../schema/motor/webGpuMotor";
+import {WebGpuMotor} from "../schema/motor/webGpuMotor/index";
 import {api_graph_html} from "../../utils/requests/type/api_workflow.type";
 import {
     createNodeFromConfig,
