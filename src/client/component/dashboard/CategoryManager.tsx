@@ -1,10 +1,10 @@
 import {memo, useCallback, useRef} from "react";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Plus, Tag, X, Filter} from "lucide-react";
+import {Plus, Tag, X, Filter, Edit2} from "lucide-react";
 import {Collapse} from "../animate/Collapse";
 import {useContext} from "react";
-import {api_category_create, api_category_delete} from "../../../utils/requests/type/api_workflow.type";
+import {api_category_create, api_category_delete, api_category_rename} from "../../../utils/requests/type/api_workflow.type";
 
 export interface CategoryData {
     _key: string;
@@ -44,6 +44,7 @@ export const CategoryManager = memo(({
     const abortControllers = useRef<{
         createCategory?: AbortController;
         deleteCategory?: AbortController;
+        renameCategory?: AbortController;
     }>({});
 
     // Category statistics
@@ -52,6 +53,7 @@ export const CategoryManager = memo(({
         name: cat.category,
         count: itemCounts[cat.category] || 0
     }));
+
 
     // Dynamic classes
     const categoryManagerClass = useDynamicClass(`
@@ -114,6 +116,22 @@ export const CategoryManager = memo(({
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
             padding: 2px 6px;
             border-radius: 10px;
+        }
+
+        & .rename-category-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--nodius-primary-main);
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            transition: var(--nodius-transition-default);
+        }
+
+        & .rename-category-btn:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.primary[Theme.state.theme].main, 0.1)};
         }
 
         & .delete-category-btn {
@@ -294,6 +312,43 @@ export const CategoryManager = memo(({
         }
     }, [type, itemCounts, selectedCategory, onRefresh, onCategoryChange]);
 
+    const handleRenameCategory = useCallback(async (categoryKey: string, currentName: string) => {
+        const newName = prompt("Enter new category name:", currentName);
+        if (!newName || newName.trim() === "" || newName.trim() === currentName) return;
+
+        if (abortControllers.current.renameCategory) {
+            abortControllers.current.renameCategory.abort();
+        }
+        abortControllers.current.renameCategory = new AbortController();
+
+        try {
+            const response = await fetch('http://localhost:8426/api/category/rename', {
+                method: "POST",
+                signal: abortControllers.current.renameCategory.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    _key: categoryKey,
+                    newName: newName.trim()
+                } as api_category_rename)
+            });
+
+            if (response.status === 200) {
+                await onRefresh();
+            } else {
+                const errorData = await response.json();
+                alert(`Failed to rename category: ${errorData.error || "Unknown error"}`);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error renaming category:", error);
+                alert("Failed to rename category. Please try again.");
+            }
+        }
+    }, [onRefresh]);
+
     return (
         <>
             {/* Category Manager Panel */}
@@ -320,6 +375,13 @@ export const CategoryManager = memo(({
                                     <div className="category-count">
                                         {cat.count} item{cat.count !== 1 ? 's' : ''}
                                     </div>
+                                    <button
+                                        className="rename-category-btn"
+                                        onClick={() => handleRenameCategory(cat._key, cat.name)}
+                                        title="Rename category"
+                                    >
+                                        <Edit2 height={14} width={14}/>
+                                    </button>
                                     <button
                                         className="delete-category-btn"
                                         onClick={() => handleDeleteCategory(cat._key, cat.name)}

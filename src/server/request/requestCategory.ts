@@ -5,6 +5,7 @@ import {
     api_category_create,
     api_category_delete,
     api_category_list,
+    api_category_rename,
 } from "../../utils/requests/type/api_workflow.type";
 import {aql} from "arangojs";
 import {db} from "../server";
@@ -56,6 +57,53 @@ export class RequestCategory {
                 return res.status(404).json({error: "Category not found"});
             }
             return res.status(200).json({success: true, deleted});
+        });
+
+        app.post("/api/category/rename", async (req: Request, res: Response) => {
+            const body: api_category_rename = req.body;
+
+            const categoryKey = escapeHTML(body._key);
+            const newName = escapeHTML(body.newName);
+            const workspace = escapeHTML(body.workspace);
+
+            // Check if the category exists
+            const checkCursor = await db.query(aql`
+              FOR c IN ${category_collection}
+                FILTER c._key == ${categoryKey}
+                RETURN c
+            `);
+
+            const existingCategory = await checkCursor.next();
+            if (!existingCategory) {
+                return res.status(404).json({error: "Category not found"});
+            }
+
+            // Check if new name already exists in this workspace and type
+            const duplicateCursor = await db.query(aql`
+              FOR c IN ${category_collection}
+                FILTER c.workspace == ${workspace}
+                AND c.category == ${newName}
+                AND c.type == ${existingCategory.type}
+                AND c._key != ${categoryKey}
+                LIMIT 1
+                RETURN c
+            `);
+
+            const duplicate = await duplicateCursor.next();
+            if (duplicate) {
+                return res.status(400).json({error: "A category with this name already exists"});
+            }
+
+            // Update the category name
+            const updateCursor = await db.query(aql`
+              FOR c IN ${category_collection}
+                FILTER c._key == ${categoryKey}
+                UPDATE c WITH { category: ${newName} } IN ${category_collection}
+                RETURN NEW
+            `);
+
+            const updated = await updateCursor.next();
+            return res.status(200).json({success: true, updated});
         });
 
         app.post("/api/category/create", async (req: Request, res: Response) => {

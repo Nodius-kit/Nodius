@@ -17,6 +17,12 @@ export interface api_category_delete {
     _key: string;
 }
 
+export interface api_category_rename {
+    workspace: string;
+    _key: string;
+    newName: string;
+}
+
 
 type api_graph_create_exclude = "graphKeyLinked" | "createdTime" | "lastUpdatedTime" | "_key" | "version" | "htmlNodeKey"
 export interface api_graph_create {

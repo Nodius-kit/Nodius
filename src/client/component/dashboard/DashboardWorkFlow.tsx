@@ -114,6 +114,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
 
             if (response.status === 200) {
                 const json = await response.json();
+
                 setCategoriesNodeConfig(json);
             }
         } catch (error) {
