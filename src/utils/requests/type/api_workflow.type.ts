@@ -3,16 +3,18 @@ import {Graph} from "../../graph/graphType";
 
 export interface api_category_list {
     workspace: string;
+    type: "workflow" | "nodeconfig"
 }
 
 export interface api_category_create {
     workspace: string;
     category: string;
+    type: "workflow" | "nodeconfig"
 }
 
 export interface api_category_delete {
     workspace: string;
-    _key: string;
+    category: string;
 }
 
 

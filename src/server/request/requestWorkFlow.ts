@@ -27,7 +27,7 @@ export class RequestWorkFlow {
 
     public static init = async (app:HttpServer) => {
         const class_collection:DocumentCollection = await ensureCollection("nodius_html_class");
-        const category_collection:DocumentCollection = await ensureCollection("nodius_workflow_category");
+        const category_collection:DocumentCollection = await ensureCollection("nodius_category");
         const graph_collection: DocumentCollection = await ensureCollection("nodius_graphs");
         const node_collection: DocumentCollection = await ensureCollection("nodius_nodes");
 
@@ -43,9 +43,13 @@ export class RequestWorkFlow {
                 return;
             }
 
+            // Determine collection based on type (default to workflow for backwards compatibility)
+            const type = body.type || "workflow";
+
             let query = aql`
-                FOR doc IN nodius_workflow_category
-                FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                FOR doc IN ${category_collection}
+                FILTER doc.workspace == ${escapeHTML(body.workspace)} 
+                AND doc.type == ${escapeHTML(type)}
                 COLLECT category = doc.category
                 RETURN category
             `;
@@ -58,14 +62,17 @@ export class RequestWorkFlow {
             const body: api_category_delete = req.body;
 
             const workspace = escapeHTML(body.workspace);
-            const key = escapeHTML(body._key);
+            const category = escapeHTML(body.category);
 
+
+
+            console.log(body);
             // Delete matching category
             const cursor = await db.query(aql`
-              FOR c IN nodius_workflow_category
-                FILTER c.workspace == ${workspace} 
-                AND c._key == ${key}
-                REMOVE c IN nodius_workflow_category
+              FOR c IN ${category_collection}
+                FILTER c.workspace == ${workspace}
+                AND c.category == ${category}
+                REMOVE c IN ${category_collection}
                 RETURN OLD
             `);
 
@@ -83,11 +90,15 @@ export class RequestWorkFlow {
             const workspace = escapeHTML(body.workspace);
             const categoryName = escapeHTML(body.category);
 
+            // Determine collection based on type (default to workflow for backwards compatibility)
+            const type = body.type || "workflow";
+
             // Check if category already exists
             const cursor = await db.query(aql`
-              FOR c IN nodius_workflow_category
-                FILTER c.workspace == ${workspace} 
+              FOR c IN ${category_collection}
+                FILTER c.workspace == ${workspace}
                 AND c.category == ${categoryName}
+                AND c.type == ${escapeHTML(type)}
                 LIMIT 1
                 RETURN c
             `);
@@ -102,7 +113,8 @@ export class RequestWorkFlow {
             const token_category = await createUniqueToken(category_collection);
             const category = {
                 _key: token_category,
-                workspace,
+                workspace: workspace,
+                type: type,
                 category: categoryName,
             };
 

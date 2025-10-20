@@ -5,6 +5,7 @@ import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {DashboardHtmlWorkflow} from "./DashboardHtmlWorkflow";
 import {DashboardNodeConfigurations} from "./DashboardNodeConfigurations";
+import {api_category_list} from "../../../utils/requests/type/api_workflow.type";
 
 interface DashboardWorkFlowProps {
 }
@@ -75,8 +76,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root"
-                })
+                    workspace: "root",
+                    type: "workflow"
+                } as api_category_list)
             });
 
             if (response.status === 200) {
@@ -97,15 +99,16 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         abortControllers.current.categoriesNodeConfig = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/nodeconfig/category/list', {
+            const response = await fetch('http://localhost:8426/api/category/list', {
                 method: "POST",
                 signal: abortControllers.current.categoriesNodeConfig.signal,
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root"
-                })
+                    workspace: "root",
+                    type: "nodeconfig"
+                } as api_category_list)
             });
 
             if (response.status === 200) {
