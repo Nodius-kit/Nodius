@@ -460,6 +460,12 @@ export const useSocketSync = () => {
             });
         }
 
+        Project.state.nodeTypeConfig[nodeConfig._key] = nodeConfig;
+        Project.dispatch({
+            field: "nodeTypeConfig",
+            value: {...Project.state.nodeTypeConfig}
+        });
+
         Project.dispatch(({
             field: "selectedSheetId",
             value: selectedSheetId,
@@ -474,6 +480,7 @@ export const useSocketSync = () => {
             edges: graph.sheets[selectedSheetId].edgeMap
         });
 
+        gpuMotor.current.enableInteractive(false);
         gpuMotor.current.smoothFitToNode(baseNode._key, {
             padding: 100
         });
@@ -483,7 +490,7 @@ export const useSocketSync = () => {
             timeTaken: Date.now() - start,
             status: true,
         }
-    }, [connect, disconnect, connectionState]);
+    }, [connect, disconnect, connectionState, Project.state.nodeTypeConfig]);
 
     useEffect(() => {
         Project.dispatch({
