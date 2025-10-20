@@ -59,6 +59,7 @@ export const useSocketSync = () => {
         }
         if(htmlRenderer.current[node._key][id]) {
             console.error("Html Renderer with id ", id, "already exist on node", node);
+            console.trace();
             return undefined;
         }
 

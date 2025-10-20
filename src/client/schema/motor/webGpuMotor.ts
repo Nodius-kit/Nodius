@@ -7,7 +7,7 @@ import {
 	backgroundType
 } from "./graphicalMotor"
 import {handleSide, Edge, Node} from "../../../utils/graph/graphType";
-import {documentHaveActiveElement} from "../../../utils/objectUtils";
+import {deepCopy, documentHaveActiveElement} from "../../../utils/objectUtils";
 
 interface HandleInfo {
 	side: handleSide;
@@ -72,6 +72,17 @@ export class WebGpuMotor implements GraphicalMotor {
 	private maxZoom:number = 1;
 	private minZoom:number = 1;
 	private pressed: KeyState = {}
+	private lastFitOperation: {
+		type: 'node' | 'area';
+		nodeId?: string;
+		bounds?: { minX: number; minY: number; maxX: number; maxY: number };
+		options?: {
+			padding?: number;
+			duration?: number;
+			easing?: (t: number) => number;
+		};
+	} | null = null;
+	private userHasMovedManually: boolean = false;
 
 	public async init(container: HTMLElement, convas:HTMLCanvasElement, options?: GraphicalMotorOptions): Promise<void> {
 		if (!navigator.gpu) {
@@ -108,6 +119,9 @@ export class WebGpuMotor implements GraphicalMotor {
 		this.resizeObserver = new ResizeObserver(() => {
 			this.updateCanvasSize(container);
 			this.dirty = true;
+
+			// Re-apply last fit operation if conditions are met
+			this.reapplyFitIfNeeded();
 		});
 		this.resizeObserver.observe(container);
 
@@ -418,6 +432,46 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 	}
 
+	private reapplyFitIfNeeded(): void {
+		// Check if all conditions are met to re-apply the fit
+		if (!this.interactiveEnabled &&
+		    this.lastFitOperation &&
+		    !this.userHasMovedManually) {
+
+			// Re-apply the last fit operation without animation (duration: 0)
+			if (this.lastFitOperation.type === 'node' && this.lastFitOperation.nodeId) {
+				// Call smoothFitToNode without triggering a new storage
+				// We need to temporarily prevent re-storing
+				const savedOp = this.lastFitOperation;
+				const savedUserMoved = this.userHasMovedManually;
+
+				this.smoothFitToNode(this.lastFitOperation.nodeId, {
+					padding: this.lastFitOperation.options?.padding,
+					duration: 0, // Instant transition on resize
+					easing: this.lastFitOperation.options?.easing
+				});
+
+				// Restore the saved state (because smoothFitToNode resets these)
+				this.lastFitOperation = savedOp;
+				this.userHasMovedManually = savedUserMoved;
+			} else if (this.lastFitOperation.type === 'area' && this.lastFitOperation.bounds) {
+				// Call smoothFitToArea without triggering a new storage
+				const savedOp = this.lastFitOperation;
+				const savedUserMoved = this.userHasMovedManually;
+
+				this.smoothFitToArea(this.lastFitOperation.bounds, {
+					padding: this.lastFitOperation.options?.padding,
+					duration: 0, // Instant transition on resize
+					easing: this.lastFitOperation.options?.easing
+				});
+
+				// Restore the saved state
+				this.lastFitOperation = savedOp;
+				this.userHasMovedManually = savedUserMoved;
+			}
+		}
+	}
+
 	private setupInputEvents(): void {
 		if (!this.canvas) return;
 
@@ -428,6 +482,7 @@ export class WebGpuMotor implements GraphicalMotor {
 				this.isPanning = true;
 				this.lastMouseX = e.clientX;
 				this.lastMouseY = e.clientY;
+				this.userHasMovedManually = true;
 			}
 		});
 
@@ -472,6 +527,7 @@ export class WebGpuMotor implements GraphicalMotor {
 			this.transform.translateX = mouseX - wx * newScale;
 			this.transform.translateY = mouseY - wy * newScale;
 			this.transform.scale = newScale;
+			this.userHasMovedManually = true;
 			this.dirty = true;
 			this.emit("zoom", this.transform);
 		}, { passive: false });
@@ -677,12 +733,10 @@ export class WebGpuMotor implements GraphicalMotor {
 		const visMaxX = Math.max(tl.x, br.x);
 		const visMinY = Math.min(tl.y, br.y);
 		const visMaxY = Math.max(tl.y, br.y);
-
 		this.prevVisibleNodes = new Set(this.visibleNodes);
 		this.visibleNodes.clear();
 
 		for (const [id, node] of this.scene.nodes) {
-			if (typeof node.size === "string") continue;
 			const nMinX = node.posX;
 			const nMaxX = node.posX + node.size.width;
 			const nMinY = node.posY;
@@ -1059,6 +1113,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		} else if(key === "ArrowRight") {
 			this.transform.translateX -= workValue;
 		}
+		this.userHasMovedManually = true;
 		this.requestRedraw();
 		this.emit("pan", this.transform);
 	}
@@ -1147,7 +1202,7 @@ export class WebGpuMotor implements GraphicalMotor {
 
 		const animate = (currentTime: number) => {
 			const elapsed = currentTime - startTime;
-			const progress = Math.min(elapsed / duration, 1);
+			const progress = duration <= 0 ? 1 : Math.min(elapsed / duration, 1);
 			const easedProgress = easing(progress);
 
 			// Interpolate values
@@ -1170,8 +1225,11 @@ export class WebGpuMotor implements GraphicalMotor {
 				}
 			}
 		};
-
-		this.animationFrameId = requestAnimationFrame(animate);
+		if(duration <= 0) {
+			animate(startTime);
+		}  else {
+			this.animationFrameId = requestAnimationFrame(animate);
+		}
 	}
 
 	//  Smooth transition to fit a specific node or area
@@ -1184,6 +1242,18 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (!this.scene) return;
 		const node = this.scene.nodes.get(nodeId);
 		if (!node || typeof node.size === "string") return;
+
+		// Store this operation for potential re-application on resize
+		this.lastFitOperation = {
+			type: 'node',
+			nodeId: nodeId,
+			options: {
+				padding: options?.padding,
+				duration: options?.duration,
+				easing: options?.easing
+			}
+		};
+		this.userHasMovedManually = false;
 
 		const padding = options?.padding ?? 50;
 
@@ -1221,6 +1291,18 @@ export class WebGpuMotor implements GraphicalMotor {
 		easing?: (t: number) => number;
 		onComplete?: () => void;
 	}): void {
+		// Store this operation for potential re-application on resize
+		this.lastFitOperation = {
+			type: 'area',
+			bounds: { ...bounds },
+			options: {
+				padding: options?.padding,
+				duration: options?.duration,
+				easing: options?.easing
+			}
+		};
+		this.userHasMovedManually = false;
+
 		const padding = options?.padding ?? 50;
 
 		const width = bounds.maxX - bounds.minX;
