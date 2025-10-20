@@ -6,6 +6,7 @@ import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {DashboardHtmlWorkflow} from "./DashboardHtmlWorkflow";
 import {DashboardNodeConfigurations} from "./DashboardNodeConfigurations";
 import {api_category_list} from "../../../utils/requests/type/api_workflow.type";
+import {CategoryData} from "./CategoryManager";
 
 interface DashboardWorkFlowProps {
 }
@@ -19,8 +20,8 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
     const Theme = useContext(ThemeContext);
 
     // State management - separate categories for HTML and NodeConfig
-    const [categoriesHtml, setCategoriesHtml] = useState<string[]>([]);
-    const [categoriesNodeConfig, setCategoriesNodeConfig] = useState<string[]>([]);
+    const [categoriesHtml, setCategoriesHtml] = useState<CategoryData[]>([]);
+    const [categoriesNodeConfig, setCategoriesNodeConfig] = useState<CategoryData[]>([]);
     const [selectedCategoryHtml, setSelectedCategoryHtml] = useState<string | null>(null);
     const [selectedCategoryNodeConfig, setSelectedCategoryNodeConfig] = useState<string | null>(null);
 

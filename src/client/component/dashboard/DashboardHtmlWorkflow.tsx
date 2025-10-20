@@ -6,12 +6,12 @@ import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {Input} from "../form/Input";
 import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
-import {CategoryManager} from "./CategoryManager";
+import {CategoryManager, CategoryData} from "./CategoryManager";
 
 interface DashboardHtmlWorkflowProps {
     htmlClasses: HtmlClassWithGraph[];
     selectedCategory: string | null;
-    categories: string[];
+    categories: CategoryData[];
     onRefresh: () => Promise<void>;
     onCategoryChange: (category: string | null) => void;
 }
@@ -49,7 +49,7 @@ export const DashboardHtmlWorkflow = memo(({
 
     // Category item counts
     const itemCounts = categories.reduce((acc, cat) => {
-        acc[cat] = htmlClasses.filter(h => h.html.category === cat).length;
+        acc[cat.category] = htmlClasses.filter(h => h.html.category === cat.category).length;
         return acc;
     }, {} as { [key: string]: number });
 

@@ -14,7 +14,7 @@ export interface api_category_create {
 
 export interface api_category_delete {
     workspace: string;
-    category: string;
+    _key: string;
 }
 
 

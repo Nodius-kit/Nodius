@@ -5,12 +5,12 @@ import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {Input} from "../form/Input";
 import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
-import {CategoryManager} from "./CategoryManager";
+import {CategoryManager, CategoryData} from "./CategoryManager";
 
 interface DashboardNodeConfigurationsProps {
     nodeConfigs: NodeTypeConfig[];
     selectedCategory: string | null;
-    categories: string[];
+    categories: CategoryData[];
     onRefresh: () => Promise<void>;
     onCategoryChange: (category: string | null) => void;
 }
@@ -43,7 +43,7 @@ export const DashboardNodeConfigurations = memo(({
 
     // Category item counts
     const itemCounts = categories.reduce((acc, cat) => {
-        acc[cat] = nodeConfigs.filter(n => n.category === cat).length;
+        acc[cat.category] = nodeConfigs.filter(n => n.category === cat.category).length;
         return acc;
     }, {} as { [key: string]: number });
 

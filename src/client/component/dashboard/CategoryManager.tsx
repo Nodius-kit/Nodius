@@ -6,9 +6,14 @@ import {Collapse} from "../animate/Collapse";
 import {useContext} from "react";
 import {api_category_create, api_category_delete} from "../../../utils/requests/type/api_workflow.type";
 
+export interface CategoryData {
+    _key: string;
+    category: string;
+}
+
 interface CategoryManagerProps {
     type: "workflow" | "nodeconfig";
-    categories: string[];
+    categories: CategoryData[];
     selectedCategory: string | null;
     itemCounts: { [key: string]: number };
     totalItems: number;
@@ -43,8 +48,9 @@ export const CategoryManager = memo(({
 
     // Category statistics
     const categoryStats = categories.map(cat => ({
-        name: cat,
-        count: itemCounts[cat] || 0
+        _key: cat._key,
+        name: cat.category,
+        count: itemCounts[cat.category] || 0
     }));
 
     // Dynamic classes
@@ -238,7 +244,7 @@ export const CategoryManager = memo(({
         }
     }, [type, onRefresh]);
 
-    const handleDeleteCategory = useCallback(async (categoryName: string) => {
+    const handleDeleteCategory = useCallback(async (categoryKey: string, categoryName: string) => {
         const itemCount = itemCounts[categoryName] || 0;
 
         if (itemCount > 0) {
@@ -266,7 +272,7 @@ export const CategoryManager = memo(({
                 },
                 body: JSON.stringify({
                     workspace: "root",
-                    category: categoryName
+                    _key: categoryKey
                 } as api_category_delete)
             });
 
@@ -306,7 +312,7 @@ export const CategoryManager = memo(({
                     {categories.length > 0 ? (
                         <div className="category-list">
                             {categoryStats.map((cat) => (
-                                <div key={cat.name} className="category-item">
+                                <div key={cat._key} className="category-item">
                                     <div className="category-name">
                                         <Tag height={12} width={12}/>
                                         {cat.name}
@@ -316,7 +322,7 @@ export const CategoryManager = memo(({
                                     </div>
                                     <button
                                         className="delete-category-btn"
-                                        onClick={() => handleDeleteCategory(cat.name)}
+                                        onClick={() => handleDeleteCategory(cat._key, cat.name)}
                                         title="Delete category"
                                     >
                                         <X height={14} width={14}/>
@@ -358,7 +364,7 @@ export const CategoryManager = memo(({
                             </div>
                             {categoryStats.map((cat) => (
                                 <div
-                                    key={cat.name}
+                                    key={cat._key}
                                     className={`filter-pill ${selectedCategory === cat.name ? "active" : "inactive"}`}
                                     onClick={() => onCategoryChange(cat.name)}
                                 >

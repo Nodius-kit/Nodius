@@ -5,6 +5,7 @@ import {Database} from "arangojs";
 import {ClusterManager, ClusterNode} from "./cluster/clusterManager";
 import {WebSocketManager} from "./cluster/webSocketManager";
 import {RequestWorkFlow} from "./request/requestWorkFlow";
+import {RequestCategory} from "./request/requestCategory";
 import {RequestBuilder} from "./request/requestBuilder";
 import {RequestDataType} from "./request/requestDataType";
 import {RequestSync} from "./request/requestSync";
@@ -50,6 +51,7 @@ if(args.get("mode", "production") == "development") {
     });
 }
 RequestWorkFlow.init(app);
+RequestCategory.init(app);
 RequestBuilder.init(app);
 RequestDataType.init(app);
 RequestSync.init(app);
