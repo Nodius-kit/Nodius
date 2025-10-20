@@ -36,7 +36,9 @@ export interface GraphicalMotor {
 	init(container: HTMLElement, convas:HTMLCanvasElement, options?: GraphicalMotorOptions): Promise<void>;
 	dispose(): void;
 	setScene(scene: MotorScene): void;
+	resetScene(): void;
 	getScene(): MotorScene | undefined;
+	updateNode(id: string, updates: Partial<Pick<Node<any>, 'posX' | 'posY' | 'size'>>): void;
 	setTransform(transform: Partial<ViewTransform>): void;
 	getTransform(): ViewTransform;
 	on<K extends keyof MotorEventMap>(event: K, cb: MotorEventMap[K]): void;
@@ -44,11 +46,39 @@ export interface GraphicalMotor {
 	worldToScreen(point: { x: number; y: number }): { x: number; y: number };
 	screenToWorld(point: { x: number; y: number }): { x: number; y: number };
 	requestRedraw(): void;
+	initKeyboardShortcut(): void;
+	disposeKeyboardShortcut(): void;
 	// HTML overlay support: returns node's screen-space rect for syncing DOM overlays
 	getNodeScreenRect?(nodeId: string): { x: number; y: number; width: number; height: number } | undefined;
 	getContainerDraw():HTMLElement;
 	enableInteractive(value:boolean): void;
+	isInteractive(): boolean;
 	resetViewport(): void;
+	smoothTransitionTo(options: {
+		x: number;
+		y: number;
+		zoom: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void;
+	smoothFitToNode(nodeId: string, options?: {
+		padding?: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void;
+	smoothFitToArea(bounds: {
+		minX: number;
+		minY: number;
+		maxX: number;
+		maxY: number;
+	}, options?: {
+		padding?: number;
+		duration?: number;
+		easing?: (t: number) => number;
+		onComplete?: () => void;
+	}): void;
 }
 
 
