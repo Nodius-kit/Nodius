@@ -1,3 +1,26 @@
+/**
+ * @file LeftPanelEnumEditor.tsx
+ * @description Enum type definition and management editor
+ * @module dashboard/Editor
+ *
+ * Allows users to create and manage enumeration types:
+ * - Define new enums with multiple values
+ * - Edit existing enum definitions
+ * - Delete unused enums
+ * - Search and filter enums by name
+ * - Add/remove enum values
+ *
+ * Features:
+ * - Inline enum editing with validation
+ * - Value uniqueness checking
+ * - Enum usage tracking (prevents deletion of enums in use)
+ * - Quick value addition/removal
+ * - Import/export enum definitions
+ *
+ * Enums defined here can be used in custom types, node configurations,
+ * and throughout the system for controlled value selection.
+ */
+
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass, EnumClass} from "../../../../utils/dataType/dataType";
 import {Binary, FileUp, List, ListTree, Plus, Search, Trash2, X, Info, AlertCircle} from "lucide-react";

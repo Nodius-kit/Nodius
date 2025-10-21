@@ -1,3 +1,25 @@
+/**
+ * @file SchemaDisplay.tsx
+ * @description Canvas-based graph visualization with WebGPU rendering
+ * @module schema
+ *
+ * Provides the main graph visualization component:
+ * - SchemaDisplay: WebGPU-based graph canvas with HTML overlay rendering
+ * - WebGpuMotor integration: High-performance graph rendering
+ * - HTML overlays: Dynamic HTML rendering within graph nodes
+ * - Node interactions: Enter/leave events, click handling
+ * - Position animation: Spring-based smooth node movement
+ *
+ * Key features:
+ * - WebGPU rendering for graph visualization
+ * - HTML overlay z-index management
+ * - Animated position changes with spring physics
+ * - HtmlRender lifecycle management per node
+ * - Mouse event forwarding to canvas
+ * - Dynamic overlay updates (60fps cap)
+ * - Node event handlers for hover/selection
+ */
+
 import {memo, useContext, useEffect, useRef, forwardRef, useLayoutEffect} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";

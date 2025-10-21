@@ -1,3 +1,23 @@
+/**
+ * @file App.tsx
+ * @description Main application component coordinating dashboard and schema editor
+ * @module client
+ *
+ * Root component managing application state and views:
+ * - App: Main application container with view switching
+ * - useSocketSync integration: WebSocket connection and graph synchronization
+ * - HTML editor: Inline HTML component editing workflow
+ * - Multi-view support: Dashboard and schema editor with smooth transitions
+ *
+ * Key features:
+ * - MultiFade transitions between dashboard and editor
+ * - HTML editor opening from graph nodes
+ * - Undo/redo for HTML editing with Ctrl+Z
+ * - Theme context parser integration
+ * - Project loader for async operations
+ * - Keyboard shortcut handling
+ */
+
 import {SchemaDisplay} from "./schema/SchemaDisplay";
 import {ThemeContextParser} from "./hooks/contexts/ThemeContextParser";
 import {ProjectLoader} from "./component/animate/ProjectLoader";

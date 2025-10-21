@@ -1,3 +1,30 @@
+/**
+ * @file webSocketManager.ts
+ * @description Real-time WebSocket server for collaborative graph editing
+ * @module server/cluster
+ *
+ * Manages WebSocket connections for real-time collaboration:
+ * - WebSocketManager: Main WebSocket server coordinating all connections
+ * - Graph session management: Multi-user editing with instruction history
+ * - Node config editing: Real-time node configuration updates
+ * - Instruction processing: Validates and applies graph modifications
+ * - Auto-save system: Periodic persistence of changes to database
+ *
+ * Key features:
+ * - Multi-user session support per graph/sheet
+ * - Instruction history with timestamps for catch-up
+ * - Unique ID generation for graph elements
+ * - Batch create/delete operations
+ * - Diff computation for unsaved changes
+ * - Periodic cleanup of disconnected users
+ * - Integration with ClusterManager for distributed operation
+ * - Message validation and error handling
+ *
+ * TODO:
+ * - Implement atomic operations to avoid concurrent modification
+ * - Add user permission checks for graph/nodeconfig access
+ */
+
 import WebSocket, { WebSocketServer } from 'ws';
 import {
     WSApplyInstructionToGraph, WSApplyInstructionToNodeConfig,
@@ -16,15 +43,6 @@ import {applyInstruction, InstructionBuilder, validateInstruction} from "../../u
 import {HtmlObject} from "../../utils/html/htmlType";
 import {travelHtmlObject} from "../../utils/html/htmlUtils";
 import {travelObject} from "../../utils/objectUtils";
-
-/**
- * WebSocketManager class to handle WebSocket server in Node.js.
- * It opens a WebSocket server on the specified port in the constructor,
- * manages incoming messages as JSON, and provides utility functions for sending messages.
- */
-
-// todo: avoid multiple access to edge / node at the same time, atomic wait
-// todo: Check user permission to open graph / nodeconfig
 
 interface ManageUser {
     id: string,

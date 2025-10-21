@@ -1,3 +1,21 @@
+/**
+ * @file api_workflow.type.ts
+ * @description Type definitions for workflow and graph API requests
+ * @module requests/type
+ *
+ * API request/response types for workflow and graph operations:
+ * - api_category_*: Category management (list, create, delete, rename)
+ * - api_graph_create: Create new HTML workflow with graph
+ * - api_graph_delete: Delete workflow by HTML or graph token
+ * - api_graph_html: Retrieve HTML classes and/or graphs with options
+ *
+ * Key features:
+ * - Support for both workflow and nodeconfig category types
+ * - Flexible graph retrieval with pagination and build options
+ * - Token-based identification for workflows
+ * - Omits auto-generated fields in create operations
+ */
+
 import {HtmlClass, HtmlObject} from "../../html/htmlType";
 import {Graph} from "../../graph/graphType";
 

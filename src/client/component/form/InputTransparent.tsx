@@ -1,3 +1,30 @@
+/**
+ * @file InputTransparent.tsx
+ * @description Transparent inline input that seamlessly blends into content
+ * @module component/form
+ *
+ * A minimalist input component designed to appear as plain text until user interaction.
+ * Perfect for inline editing scenarios where a traditional input would feel too heavy.
+ *
+ * Behavior:
+ * - **Default State**: Appears as regular text, no visible input styling
+ * - **Hover State**: Subtle background and border appear to indicate edit ability
+ * - **Focus State**: Full edit mode with visible styling and cursor
+ * - **Validation**: Automatically reverts to last valid value if validation fails on blur
+ *
+ * Validation Features:
+ * - Minimum length checking (minLength prop)
+ * - Custom validation via valid prop
+ * - Automatic rollback to lastValidValue if validation fails
+ * - lastValidValue updates only when all validation passes
+ *
+ * Common Use Cases:
+ * - Inline title editing
+ * - Editable labels
+ * - Seamless form fields
+ * - Dashboard text editing
+ */
+
 import React, { useState, memo, useRef, useEffect } from 'react';
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 
@@ -10,12 +37,6 @@ interface InputTransparentProps {
     minLength?: number;
     valid?: boolean;
 }
-
-/**
- * A transparent input component that becomes visible on hover and editable on click
- * Appears as plain text by default, making it seamless with the surrounding content
- * Validates minimum length and custom validation on blur, restoring last valid value if validation fails
- */
 export const InputTransparent = memo(({
                                           type = 'text',
                                           value,

@@ -1,3 +1,46 @@
+/**
+ * @file useElementSize.ts
+ * @description Element size tracking hook using ResizeObserver with zoom correction
+ * @module client/hooks
+ *
+ * Monitors an HTML element's bounding rectangle and automatically updates when the element
+ * resizes or the page zooms. Uses ResizeObserver for efficient, native size tracking.
+ *
+ * Features:
+ * - **ResizeObserver**: Native browser API for efficient size tracking
+ * - **Zoom Correction**: Automatically adjusts for document.documentElement.style.zoom
+ * - **Callback Ref Pattern**: Compatible with React's ref callback pattern
+ * - **Auto-Updates**: Fires on element resize, zoom changes
+ * - **Cleanup**: Properly disconnects observer on unmount
+ * - **Generic Type Support**: Works with any HTMLElement subtype
+ *
+ * Returns:
+ * - refCallBack: Callback ref to attach to the element
+ * - bounds: Current DOMRect with zoom-corrected dimensions
+ * - ref: Direct reference to the element
+ *
+ * Zoom Handling:
+ * - Reads document.documentElement.style.zoom
+ * - Multiplies all DOMRect properties by (1 / zoom)
+ * - Ensures consistent measurements regardless of zoom level
+ *
+ * Use Cases:
+ * - Responsive component layouts
+ * - Dynamic canvas sizing
+ * - Tooltip positioning
+ * - Virtualized list item measurements
+ * - Column width synchronization in tables
+ *
+ * @example
+ * const { refCallBack, bounds } = useElementSize();
+ *
+ * return (
+ *   <div ref={refCallBack}>
+ *     {bounds && `Width: ${bounds.width}px`}
+ *   </div>
+ * );
+ */
+
 import {useCallback, useEffect, useState} from "react";
 
 type UseElementSizeReturn<T> = {

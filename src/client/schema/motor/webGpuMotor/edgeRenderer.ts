@@ -1,8 +1,26 @@
+/**
+ * @file edgeRenderer.ts
+ * @description WebGPU renderer for graph edges (connections between nodes)
+ * @module webGpuMotor
+ *
+ * Renders edges with support for:
+ * - Straight lines between handles
+ * - Curved bezier paths with automatic control points
+ * - Dynamic buffer resizing for varying edge counts
+ * - Edge path calculation for click detection
+ *
+ * Uses cubic bezier curves for smooth curved edges, with control points
+ * calculated based on handle directions and distance.
+ */
+
 import { Edge } from "../../../../utils/graph/graphType";
 import { MotorScene } from "../graphicalMotor";
 import { Point } from "./types";
 import { getHandleInfo, getHandlePosition, getDir } from "./handleUtils";
 
+/**
+ * Renders graph edges (connections between nodes) using WebGPU
+ */
 export class EdgeRenderer {
 	private device: GPUDevice;
 	private format: GPUTextureFormat;

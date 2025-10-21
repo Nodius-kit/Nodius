@@ -1,4 +1,20 @@
 /**
+ * @file numericUtils.ts
+ * @description Numeric and geometric utility functions for coordinate calculations
+ * @module utils
+ *
+ * Provides utilities for coordinate and bounds checking:
+ * - isPointInRect: Check if point is within rectangle bounds
+ * - isXInRect: Check if x-coordinate is within horizontal bounds
+ * - isYInRect: Check if y-coordinate is within vertical bounds
+ *
+ * Key features:
+ * - DOMRect boundary checking
+ * - Coordinate validation for UI interactions
+ * - Used for drag-and-drop, hover detection, etc.
+ */
+
+/**
  * Checks if a point (x, y) is inside a DOMRect.
  * @param x - The x-coordinate of the point.
  * @param y - The y-coordinate of the point.

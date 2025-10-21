@@ -1,3 +1,59 @@
+/**
+ * @file useWebSocket.ts
+ * @description Production-ready WebSocket hook with automatic reconnection and statistics
+ * @module client/hooks
+ *
+ * Manages WebSocket connections with enterprise-grade features including auto-reconnect,
+ * message queueing, latency tracking, and connection state management.
+ *
+ * Features:
+ * - **Auto-Reconnection**: Configurable retry attempts with exponential backoff
+ * - **Connection State**: Tracks disconnected | connecting | connected | reconnecting
+ * - **Statistics Tracking**: Message rate, bitrate, latency, counts
+ * - **Ping/Pong**: Periodic latency measurement (5s interval)
+ * - **Request/Response**: Promise-based message sending with 1.5s timeout
+ * - **Message Handler**: Custom async handler for incoming messages
+ * - **Cleanup**: Proper resource disposal on unmount
+ * - **Concurrent Connections**: Queues connect attempts while connecting
+ *
+ * Statistics Provided:
+ * - messageRate: Messages per second
+ * - bitrate: Bits per second
+ * - latency: Round-trip time in milliseconds
+ * - messagesReceived/messagesSent: Total counts
+ * - bytesReceived/bytesSent: Total bandwidth
+ *
+ * Architecture:
+ * - Uses refs for stable WebSocket and handler references
+ * - Message IDs for request/response pairing
+ * - Automatic cleanup of pending responses after timeout
+ * - Supports multiple pending connect promises
+ *
+ * Connection Flow:
+ * 1. Call connect(url) -> returns Promise<boolean>
+ * 2. Creates WebSocket, sets up handlers
+ * 3. On open: resolves promise, starts ping interval
+ * 4. On close: attempts reconnect if autoReconnect enabled
+ * 5. On error: logs error, triggers reconnect logic
+ *
+ * Message Flow:
+ * 1. sendMessage(msg) -> assigns unique _id
+ * 2. Stores response handler in messageReponseRef
+ * 3. Sends JSON over WebSocket
+ * 4. On response with matching _id: resolves promise
+ * 5. After 1.5s timeout: resolves with undefined
+ *
+ * @example
+ * const { connect, sendMessage, connectionState, stats } = useWebSocket(
+ *   true,  // autoReconnect
+ *   1000,  // reconnectInterval
+ *   3      // maxReconnectAttempts
+ * );
+ *
+ * await connect('ws://localhost:8080');
+ * const response = await sendMessage({ type: 'getData', id: 123 });
+ */
+
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import {WSMessage, WSResponseMessage} from "../../utils/sync/wsObject";
 

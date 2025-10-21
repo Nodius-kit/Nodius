@@ -1,3 +1,81 @@
+/**
+ * @file useSocketSync.ts
+ * @description Central synchronization hub for real-time collaborative editing
+ * @module client/hooks
+ *
+ * The heart of Nodius's real-time collaboration system. Manages WebSocket connections,
+ * graph synchronization, HTML rendering, and instruction-based updates for multi-user editing.
+ *
+ * Core Responsibilities:
+ * - **WebSocket Management**: Connects to appropriate server instance via cluster routing
+ * - **Graph Synchronization**: Keeps local graph state in sync with server and other clients
+ * - **HTML Rendering**: Manages multiple HTML render instances per node
+ * - **Instruction System**: Applies incremental updates via InstructionBuilder
+ * - **Conflict Resolution**: Handles concurrent edits from multiple users
+ * - **State Management**: Integrates with ProjectContext for global state
+ *
+ * Connection Modes:
+ * 1. **HTML Class Editor**: Opens HTML component with linked workflow graph
+ * 2. **Node Config Editor**: Opens single node for configuration editing
+ *
+ * Synchronization Flow:
+ * 1. Client requests sync info from HTTP server (/api/sync)
+ * 2. Server routes to appropriate WebSocket instance (self or peer)
+ * 3. Client connects to WebSocket and registers with graph/nodeConfig key
+ * 4. Server sends missing messages since last timestamp (catch-up)
+ * 5. Bidirectional real-time sync begins
+ *
+ * Instruction-Based Updates:
+ * - All changes represented as Instructions (path-based updates)
+ * - updateGraph: Sends instructions to server, applies to local state
+ * - updateHtml: Convenience for updating current edited HTML
+ * - applyGraphInstructions: Applies instructions from server to local graph
+ * - Supports targeted updates with identifier validation
+ *
+ * Batch Operations:
+ * - batchCreateElements: Create multiple nodes/edges atomically
+ * - batchDeleteElements: Delete nodes and connected edges
+ * - Automatic edge cleanup when deleting nodes
+ *
+ * HTML Renderer Management:
+ * - Multiple renderers per node (keyed by ID)
+ * - Auto-updates renderers when node data changes
+ * - Supports custom render paths (pathOfRender)
+ * - Cleanup on node deletion or component unmount
+ *
+ * GPU Motor Integration:
+ * - WebGpuMotor renders the visual graph
+ * - Auto-fits to "root" node on open
+ * - Disables interaction for node config editing
+ * - Requests redraw on graph changes
+ *
+ * Data Type Management:
+ * - Fetches custom DataTypes and Enums from server
+ * - Tracks current entry type connected to "root" node
+ * - Refreshes on graph changes
+ *
+ * State Provided to ProjectContext:
+ * - graph: Current graph with sheets
+ * - editedHtml: Currently open HTML for editing
+ * - selectedSheetId: Active sheet in multi-sheet graph
+ * - currentEntryDataType: DataType for node entry editing
+ * - dataTypes / enumTypes: Available custom types
+ * - isSynchronized: Connection state
+ * - openHtmlClass / openNodeConfig: Connection functions
+ * - updateGraph / updateHtml: Update functions
+ * - batchCreateElements / batchDeleteElements: Batch operations
+ * - generateUniqueId: Server-side ID generation
+ * - HTML renderer functions
+ *
+ * @example
+ * const { gpuMotor, activeWindow, resetState } = useSocketSync();
+ *
+ * // In ProjectContext consumer:
+ * await Project.state.openHtmlClass(htmlClass);
+ * await Project.state.updateHtml(instruction);
+ * await Project.state.batchCreateElements(nodes, edges);
+ */
+
 import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
 import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";

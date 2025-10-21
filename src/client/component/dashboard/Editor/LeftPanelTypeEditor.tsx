@@ -1,3 +1,27 @@
+/**
+ * @file LeftPanelTypeEditor.tsx
+ * @description Custom data type definition and management editor
+ * @module dashboard/Editor
+ *
+ * Allows users to create and manage custom data types for their project:
+ * - Define new data types with multiple fields
+ * - Edit existing type definitions
+ * - Delete unused types
+ * - Search and filter types by name
+ * - Configure field types (string, number, boolean, object, array, enum, etc.)
+ *
+ * Features:
+ * - Inline type editing with live validation
+ * - Support for complex nested types (objects, arrays)
+ * - Reference to other custom types and enums
+ * - Field-level configuration (required, default values)
+ * - Type usage tracking (prevents deletion of types in use)
+ * - Import/export type definitions
+ *
+ * Types defined here can be used in entry types, node configurations,
+ * and throughout the workflow system for type-safe data handling.
+ */
+
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass} from "../../../../utils/dataType/dataType";
 import {Binary, FileUp, ListTree, Plus, Search, Trash2, X, Info, AlertCircle} from "lucide-react";

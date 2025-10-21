@@ -1,3 +1,26 @@
+/**
+ * @file LeftPanelComponentEditor.tsx
+ * @description Component library panel for drag-and-drop HTML component building
+ * @module dashboard/Editor
+ *
+ * Provides a searchable library of reusable HTML components that can be:
+ * - Dragged onto the canvas to add to the current HTML structure
+ * - Organized by category (Most Used, Layout, etc.)
+ * - Filtered by search query
+ * - Collapsed/expanded by category
+ *
+ * Features:
+ * - Drag-and-drop component insertion
+ * - Live search filtering across all categories
+ * - Category collapse/expand state management
+ * - Visual feedback during drag operations
+ * - Icon-based component representation
+ * - Theme-aware styling
+ *
+ * The drag-and-drop system uses native HTML5 drag events and integrates with
+ * the instruction-based synchronization system for undo/redo support.
+ */
+
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import * as Icons from "lucide-react";
 import {ChevronDown, ChevronUp, CloudAlert, Search, Box, Info} from "lucide-react";

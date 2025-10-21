@@ -1,3 +1,24 @@
+/**
+ * @file clusterManager.ts
+ * @description Distributed cluster management using ZeroMQ for inter-node communication
+ * @module server/cluster
+ *
+ * Manages a distributed cluster of Nodius server instances:
+ * - ClusterManager: Coordinates multiple server nodes
+ * - ZeroMQ integration: Pub/Sub and Router/Dealer patterns
+ * - Node discovery: Automatic peer discovery via database
+ * - Instance management: Tracks which node manages which instances
+ * - Message routing: Broadcast and direct messaging between nodes
+ *
+ * Key features:
+ * - Pub/Sub for broadcasts (graph updates, state changes)
+ * - Router/Dealer for direct node-to-node communication
+ * - Heartbeat system for node health monitoring
+ * - Automatic failover when nodes go offline
+ * - Database-backed cluster state persistence
+ * - Pending response tracking with timeout handling
+ */
+
 import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/arangoUtils";
 import {Dealer, Publisher, Router, Subscriber} from "zeromq";
 import { randomUUID } from 'crypto';

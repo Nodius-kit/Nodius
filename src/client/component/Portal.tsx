@@ -1,3 +1,23 @@
+/**
+ * @file Portal.tsx
+ * @description React Portal component for rendering outside the DOM hierarchy
+ * @module component
+ *
+ * Provides portal rendering functionality inspired by MUI:
+ * - Portal: Render children into a different DOM node
+ * - Container resolution: Support for element or function containers
+ * - SSR compatibility: Graceful fallback for server-side rendering
+ * - Lifecycle callbacks: onRendered hook after portal attachment
+ *
+ * Key features:
+ * - ReactDOM.createPortal integration
+ * - Configurable target container (default: document.body)
+ * - disablePortal option for inline rendering
+ * - SSR-safe implementation
+ * - Cleanup on unmount
+ * - className and style forwarding
+ */
+
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 

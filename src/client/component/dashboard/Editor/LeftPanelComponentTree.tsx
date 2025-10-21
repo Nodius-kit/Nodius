@@ -1,3 +1,27 @@
+/**
+ * @file LeftPanelComponentTree.tsx
+ * @description Hierarchical tree view of HTML component structure
+ * @module dashboard/Editor
+ *
+ * Displays the current HTML document structure as a collapsible tree:
+ * - Visual hierarchy showing parent-child relationships
+ * - Expand/collapse nodes to navigate deep structures
+ * - Select components to edit their properties
+ * - Add/delete components directly from the tree
+ * - Drag-and-drop to reorder or reparent components
+ *
+ * Features:
+ * - Flattened rendering for performance (no nested recursion)
+ * - Virtualized list for large component trees
+ * - Visual indicators for component types (block, text, list, etc.)
+ * - Context-aware add buttons (only show valid insertion points)
+ * - Inline component addition via drag-and-drop from library
+ * - Real-time synchronization with canvas changes
+ *
+ * The tree uses a flat array representation with depth tracking for efficient
+ * rendering while maintaining the visual hierarchy.
+ */
+
 import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import React, {CSSProperties, Fragment, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";

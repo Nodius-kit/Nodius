@@ -1,3 +1,25 @@
+/**
+ * @file HtmlRender.ts
+ * @description Core HTML rendering engine for dynamic component rendering and event management
+ * @module process/html
+ *
+ * Provides the main rendering engine for HTML workflows:
+ * - HtmlRender: Main class for rendering and managing HTML components
+ * - Event system: DOM events, workflow events, and building mode events
+ * - Storage management: Per-element storage and global state
+ * - Building mode: Interactive editor with hover/select functionality
+ * - Dynamic rendering: Reactive updates based on data changes
+ *
+ * Key features:
+ * - Efficient DOM diffing and updates
+ * - Dynamic CSS block application
+ * - Event listener management with cleanup
+ * - Proxy-based global storage for reactive state
+ * - Multi-language support
+ * - Debug overlay for development
+ * - Async function execution for event handlers
+ */
+
 import {CSSProperties} from "react";
 import {HtmlObject, HTMLWorkflowEventType, HtmlBase} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";

@@ -1,3 +1,21 @@
+/**
+ * @file ProjectLoader.tsx
+ * @description Full-screen animated loading overlay with SVG wave animation
+ * @module animate
+ *
+ * Provides a loading screen for project initialization:
+ * - ProjectLoader: Full-screen overlay with animated SVG
+ * - Wave animation: Infinite stroke-dashoffset animation
+ * - HtmlRender integration: Uses HtmlRender for SVG rendering
+ * - High z-index: Ensures loader appears above all content
+ *
+ * Key features:
+ * - Animated SVG wave using stroke-dasharray technique
+ * - Uses primary theme color for brand consistency
+ * - Cleanup on unmount via HtmlRender.dispose()
+ * - Always hidden (in={false}) - controlled externally via ProjectContext
+ * - Full viewport coverage with centered content
+ */
 
 import {Fade} from "./Fade";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
@@ -5,6 +23,7 @@ import {memo, useCallback, useContext, useEffect, useRef} from "react";
 import {HtmlObject} from "../../../utils/html/htmlType";
 import {HtmlRender} from "../../../process/html/HtmlRender";
 
+// Animated SVG wave for loading indicator
 const object:HtmlObject = {
     tag: "div",
     css: {},
@@ -37,6 +56,10 @@ export const ProjectLoader = memo(() => {
 
     const renderSvg = useRef<HtmlRender>(undefined);
 
+    /**
+     * Sets up SVG renderer when container mounts
+     * Cleans up renderer on unmount
+     */
     const setContainer = useCallback((node: HTMLDivElement | null) => {
         if (node && !renderSvg.current) {
             renderSvg.current = new HtmlRender(node);

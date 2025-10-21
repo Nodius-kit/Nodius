@@ -1,3 +1,26 @@
+/**
+ * @file LeftPanelEntryTypeSelectRecursiveFieldEditor.tsx
+ * @description Recursive JSON field editor for configuring node entry types
+ * @module dashboard/Editor
+ *
+ * Renders a dynamic form for editing complex, nested data structures used in node entry types.
+ * This component recursively handles:
+ * - Primitive types: string, number, boolean, color, enum
+ * - Complex types: nested objects (DataTypeClass)
+ * - Arrays: both primitive arrays and object arrays
+ * - Validation: real-time type validation with visual feedback
+ * - Collapse/expand: for nested object structures
+ *
+ * Key Features:
+ * - **Type-Aware Rendering**: Different UI widgets based on field type (checkbox for bool, color picker for color, dropdown for enum, etc.)
+ * - **Recursive Nesting**: Handles arbitrary depth of nested objects using recursive component calls
+ * - **Array Management**: Add/remove items from arrays with dedicated controls
+ * - **Validation Feedback**: Red border and error messages for invalid values
+ * - **Auto-expand**: First 2 depth levels auto-expand for better UX
+ *
+ * The component works closely with the DataTypeClass system to understand the structure
+ * of custom user-defined types and render appropriate editors for each field.
+ */
 
 import {memo, useContext, useState} from "react";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
@@ -7,8 +30,6 @@ import {Collapse} from "../../animate/Collapse";
 import {ChevronDown, ChevronUp, Trash2} from "lucide-react";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {allDataTypes, DataTypeClass, DataTypeConfig, EnumClass} from "../../../../utils/dataType/dataType";
-
-// Recursive JSON Editor Component for Entry Type Fields
 interface LeftPanelEntryTypeSelectRecursiveFieldEditorProps {
     field: DataTypeConfig;
     value: any;
@@ -28,9 +49,16 @@ export const LeftPanelEntryTypeSelectRecursiveFieldEditor = memo(({
                                    }: LeftPanelEntryTypeSelectRecursiveFieldEditorProps) => {
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
-    const [isExpanded, setIsExpanded] = useState<boolean>(depth < 2); // Auto-expand first 2 levels
+    // Auto-expand first 2 depth levels for better initial visibility
+    const [isExpanded, setIsExpanded] = useState<boolean>(depth < 2);
 
-    // Validation function
+    /**
+     * Validates a value against its type definition
+     * Uses the type checking system from allDataTypes (dataType.ts)
+     * @param val - The value to validate
+     * @param typeId - The type identifier (e.g., "string", "int", "bool", "enum")
+     * @returns true if valid, false otherwise
+     */
     const validateValue = (val: any, typeId: string): boolean => {
         if (val === null || val === undefined || val === "") return false;
 
@@ -52,13 +80,17 @@ export const LeftPanelEntryTypeSelectRecursiveFieldEditor = memo(({
     };
 
     // Check if this field's type is a DataType (recursive case)
+    // When typeId === "dataType", the field contains a nested object structure
     const isNestedDataType = field.typeId === "dataType";
-    // dataTypeClasses is DataTypeClass[], used for finding nested data types
+
+    // Find the nested DataType definition by its _key (stored in field.defaultValue)
+    // This allows us to recursively render the nested object's fields
     const nestedDataType = isNestedDataType && dataTypeClasses
         ? dataTypeClasses.find(dt => dt._key === field.defaultValue)
         : undefined;
 
-    // Check if current value is valid
+    // Validate the current value for primitive types only
+    // Nested objects are always considered valid structurally
     const isValid = !isNestedDataType && value !== null && value !== undefined && value !== ""
         ? validateValue(value, field.typeId)
         : true;
@@ -110,10 +142,15 @@ export const LeftPanelEntryTypeSelectRecursiveFieldEditor = memo(({
     `);
 
 
-    // For arrays, handle multiple values
+    // Handle array fields - extract values if this field is configured as an array
     const isArray = field.isArray;
     const arrayValues = isArray && Array.isArray(value) ? value : (isArray ? [] : null);
 
+    /**
+     * Updates a value in the field
+     * For arrays: updates the value at the specified index
+     * For single values: replaces the entire value
+     */
     const handleValueChange = (newValue: any, index?: number) => {
         if (isArray && index !== undefined) {
             const newArray = [...(arrayValues || [])];
@@ -138,13 +175,19 @@ export const LeftPanelEntryTypeSelectRecursiveFieldEditor = memo(({
         }
     };
 
+    /**
+     * Renders the appropriate input widget based on the field's primitive type
+     * Supports: bool (checkbox), enum (dropdown), int/db (number input), color (color picker + text), string (text input)
+     * @param currentValue - The current value to display
+     * @param index - Optional array index if this is part of an array
+     */
     const renderPrimitiveInput = (currentValue: any, index?: number) => {
-        // Validate the current value
+        // Validate the current value for visual feedback
         const itemIsValid = currentValue !== null && currentValue !== undefined && currentValue !== ""
             ? validateValue(currentValue, field.typeId)
             : true;
 
-        // Boolean type - use checkbox
+        // Boolean type - use checkbox for true/false values
         if (field.typeId === "bool") {
             return (
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -293,11 +336,18 @@ export const LeftPanelEntryTypeSelectRecursiveFieldEditor = memo(({
         );
     };
 
+    /**
+     * Recursively renders fields for a nested object type
+     * This function calls itself for each field in the nested DataTypeClass
+     * @param currentValue - The current object value
+     * @param index - Optional array index if this nested object is part of an array
+     */
     const renderNestedObject = (currentValue: any, index?: number) => {
         if (!nestedDataType) return null;
 
         return (
             <div className="nested-fields">
+                {/* Recursively render each field of the nested type */}
                 {nestedDataType.types.map((nestedField, i) => (
                     <LeftPanelEntryTypeSelectRecursiveFieldEditor
                         key={i}

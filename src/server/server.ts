@@ -1,3 +1,24 @@
+/**
+ * @file server.ts
+ * @description Main server entry point with HTTP, WebSocket, and cluster setup
+ * @module server
+ *
+ * Initializes and configures the complete server stack:
+ * - HTTP server: Express-like API with middleware
+ * - ArangoDB: Database connection and configuration
+ * - WebSocket: Real-time collaboration server
+ * - ClusterManager: Distributed node coordination
+ * - Request handlers: Workflow, category, builder, data type, sync, node config
+ *
+ * Key features:
+ * - Command line argument parsing for configuration
+ * - CORS and rate limiting middleware
+ * - Error handling middleware
+ * - Development mode with Vite integration
+ * - Cluster communication via ZeroMQ
+ * - Global database instance export
+ */
+
 import {cors, HttpServer, logger, NextFunction, rateLimit, Response, Request} from "./http/HttpServer";
 import { spawn } from "child_process";
 import {parseArgs} from "./utils/env";

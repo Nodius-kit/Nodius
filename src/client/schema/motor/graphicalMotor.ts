@@ -1,5 +1,30 @@
+/**
+ * @file graphicalMotor.ts
+ * @description GraphicalMotor interface definition - Contract for all rendering engines
+ * @module motor
+ *
+ * This file defines the interface that all graph rendering motors must implement,
+ * allowing for swappable rendering backends (WebGPU, Canvas2D, WebGL, HTML, etc.)
+ *
+ * Key interfaces:
+ * - GraphicalMotor: Main interface for rendering motors
+ * - MotorScene: Graph data structure (nodes and edges)
+ * - ViewTransform: Camera transform (scale, translate)
+ * - MotorEventMap: Event system for user interactions
+ * - GraphicalMotorOptions: Configuration options for motor initialization
+ *
+ * This abstraction enables:
+ * - Rendering backend flexibility (can swap WebGPU for Canvas2D without changing app code)
+ * - Consistent API across different rendering technologies
+ * - Testing with mock motors
+ * - Platform-specific optimizations while maintaining same interface
+ */
+
 import {Edge, Node} from "../../../utils/graph/graphType";
 
+/**
+ * Scene data structure containing nodes and edges to be rendered
+ */
 export interface MotorScene {
 	nodes: Map<string, Node<any>>;
 	edges: Map<string, Edge[]>;

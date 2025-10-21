@@ -1,3 +1,22 @@
+/**
+ * @file DashboardNodeConfigurations.tsx
+ * @description Node configurations dashboard for managing custom node types
+ * @module dashboard
+ *
+ * Dashboard component for managing node type configurations:
+ * - DashboardNodeConfigurations: Display and manage custom node type definitions
+ * - Search functionality: Filter node configs by display name
+ * - Category integration: Organize node configs with CategoryManager
+ * - CRUD operations: Create, edit (open), and delete node configurations
+ *
+ * Key features:
+ * - Card-based grid layout with responsive design
+ * - Default node config template with basic styling
+ * - Integration with ProjectContext for opening node configs
+ * - Category-based filtering and organization
+ * - Empty state with helpful messaging
+ */
+
 import {memo, useCallback, useContext, useRef, useState} from "react";
 import {NodeTypeConfig} from "../../../utils/graph/graphType";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
@@ -29,13 +48,13 @@ export const DashboardNodeConfigurations = memo(({
     const [showCategoryManager, setShowCategoryManager] = useState<boolean>(false);
     const [showCategoryFilter, setShowCategoryFilter] = useState<boolean>(false);
 
-    // Abort controllers
+    // Abort controllers for cancelling in-flight requests
     const abortControllers = useRef<{
         deleteNodeConfig?: AbortController;
         createNodeConfig?: AbortController;
     }>({});
 
-    // Filtered data
+    // Filter node configs by search term and selected category
     const filteredNodeConfigs = nodeConfigs.filter(item =>
         item.displayName.toLowerCase().includes(searchNodeConfig.toLowerCase()) &&
         (selectedCategory === null || item.category === selectedCategory)
@@ -242,7 +261,10 @@ export const DashboardNodeConfigurations = memo(({
         }
     `);
 
-    // Node Config handlers
+    /**
+     * Creates a new node configuration with default template
+     * Includes default container, border styling, and node metadata
+     */
     const handleCreateNodeConfig = useCallback(async () => {
         const displayName = prompt("Enter Node Configuration display name:");
         if (!displayName) return;
@@ -252,6 +274,7 @@ export const DashboardNodeConfigurations = memo(({
         }
         abortControllers.current.createNodeConfig = new AbortController();
 
+        // Create default node configuration with basic structure
         const nodeConfig: Omit<NodeTypeConfig, "_key"> = {
             description: "",
             lastUpdatedTime: Date.now(),
@@ -326,6 +349,10 @@ export const DashboardNodeConfigurations = memo(({
         }
     }, [selectedCategory, onRefresh]);
 
+    /**
+     * Opens a node configuration in the editor
+     * Delegates to ProjectContext.openNodeConfig for actual opening logic
+     */
     const handleOpenNodeConfig = useCallback(async (nodeConfig: NodeTypeConfig) => {
         if (!Project.state.openNodeConfig) return;
         const action = await Project.state.openNodeConfig(nodeConfig);
@@ -334,6 +361,10 @@ export const DashboardNodeConfigurations = memo(({
         }
     }, [Project.state.openNodeConfig]);
 
+    /**
+     * Deletes a node configuration with confirmation
+     * Refreshes the node config list after successful deletion
+     */
     const handleDeleteNodeConfig = useCallback(async (nodeConfigKey: string) => {
         if (!confirm("Are you sure you want to delete this node config?")) return;
 

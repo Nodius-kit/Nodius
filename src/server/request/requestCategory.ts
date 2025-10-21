@@ -1,3 +1,35 @@
+/**
+ * @file requestCategory.ts
+ * @description REST API endpoints for category management across different resource types
+ * @module server/request
+ *
+ * Provides CRUD operations for categories used to organize workflows, nodes, and other resources.
+ * Categories are workspace-scoped and type-specific (e.g., workflow categories vs builder categories).
+ *
+ * Endpoints:
+ * - POST /api/category/list: List all categories for a workspace and type
+ * - POST /api/category/create: Create a new category
+ * - POST /api/category/rename: Rename an existing category
+ * - POST /api/category/delete: Delete a category
+ *
+ * Features:
+ * - **Multi-Type Support**: Categories can be for workflows, builders, etc. (via type field)
+ * - **Workspace Isolation**: Each workspace has its own set of categories
+ * - **Uniqueness Validation**: Prevents duplicate category names within same workspace/type
+ * - **Safe Updates**: Validates existence before rename/delete operations
+ * - **Security**: All user inputs are sanitized with escapeHTML
+ *
+ * Database Schema:
+ * - Collection: nodius_category
+ * - Fields: _key, workspace, type, category (name)
+ * - Uniqueness constraint: workspace + type + category
+ *
+ * Use Cases:
+ * - Organizing workflows into projects or modules
+ * - Grouping builder components by function
+ * - Categorizing node types for better discoverability
+ */
+
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {DocumentCollection} from "arangojs/collections";
 import {createUniqueToken, ensureCollection} from "../utils/arangoUtils";

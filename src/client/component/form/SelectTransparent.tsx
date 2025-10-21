@@ -1,3 +1,31 @@
+/**
+ * @file SelectTransparent.tsx
+ * @description Transparent inline select dropdown that blends into content
+ * @module component/form
+ *
+ * A minimalist select dropdown designed to appear as plain text until user interaction.
+ * Mirrors the behavior of InputTransparent but for dropdown selections.
+ *
+ * Behavior:
+ * - **Default State**: Appears as regular text, no visible select styling
+ * - **Hover State**: Subtle background and border appear to indicate interactivity
+ * - **Focus State**: Full select mode with visible styling
+ * - **Browser Arrow Removed**: Uses appearance: none for cross-browser consistency
+ *
+ * Features:
+ * - Controlled component (value/setValue props)
+ * - Options array with optional disabled items
+ * - Placeholder support
+ * - Inherits font styling from parent
+ * - Theme-aware background for dropdown menu
+ *
+ * Common Use Cases:
+ * - Inline category selection
+ * - Status dropdowns in tables
+ * - Seamless form fields
+ * - Dashboard select controls
+ */
+
 import React, { useState, memo } from 'react';
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 

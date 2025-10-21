@@ -1,3 +1,25 @@
+/**
+ * @file Card.tsx
+ * @description Versatile card container component with multiple variants and states
+ * @module component/form
+ *
+ * A highly customizable card component designed for displaying information in a structured,
+ * visually appealing container. Supports:
+ * - **Multiple Variants**: default, info, warning, error, success (with theme-aware colors)
+ * - **Elevation Levels**: 1-4 shadows for depth perception
+ * - **Interactive States**: Clickable, hoverable, closable
+ * - **Rich Content**: Title, description, icon, action buttons, custom children
+ * - **Theming**: Full dark/light theme support with automatic color adaptation
+ * - **Accessibility**: Proper ARIA labels and keyboard support
+ *
+ * Common Use Cases:
+ * - Alert/notification cards
+ * - Information panels
+ * - Interactive tiles
+ * - Status displays
+ * - Dashboard widgets
+ */
+
 import {CSSProperties, JSX, memo, useContext, useState} from "react";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 
@@ -45,8 +67,13 @@ export const Card = memo(({
     const [isHovered, setIsHovered] = useState<boolean>(false);
     const [isClosed, setIsClosed] = useState<boolean>(false);
 
+    // Don't render if card has been closed
     if (isClosed) return null;
 
+    /**
+     * Returns the appropriate icon for the card variant
+     * Uses default emoji icons if no custom icon is provided
+     */
     const getDefaultIcon = () => {
         if (!showIcon || icon !== undefined) return icon;
 
@@ -64,6 +91,11 @@ export const Card = memo(({
         }
     };
 
+    /**
+     * Returns theme-aware colors for the card based on its variant
+     * Each variant has a distinct color scheme with primary, light, dark, background,
+     * border, and icon background colors that adapt to dark/light theme
+     */
     const getVariantColors = () => {
         const isDark = Theme.state.theme === "dark";
 

@@ -1,3 +1,52 @@
+/**
+ * @file requestWorkFlow.ts
+ * @description REST API endpoints for workflow/graph management and HTML class integration
+ * @module server/request
+ *
+ * Manages visual workflows (graphs) and their associated HTML classes. Workflows are
+ * node-based diagrams where each node represents an operation or data transformation.
+ * HTML classes can have linked workflows for dynamic behavior.
+ *
+ * Endpoints:
+ * - POST /api/graph/get: Retrieve graphs or HTML classes with optional graph building
+ * - POST /api/graph/create: Create new HTML class with linked graph
+ * - POST /api/graph/delete: Delete graph and/or HTML class with cascade
+ *
+ * Features:
+ * - **Dual Retrieval Modes**: Get HTML classes or standalone graphs
+ * - **Pagination Support**: List with offset/length for large datasets
+ * - **Graph Building**: Optional expansion of graph with nodes and edges
+ * - **Sheet Support**: Multi-sheet graphs (multiple canvases per workflow)
+ * - **Cascade Deletion**: Deleting HTML class also removes linked graph, nodes, edges
+ * - **Linked Architecture**: HTML classes reference graphs, graphs reference HTML node
+ * - **Versioning**: Tracks creation/update timestamps and version numbers
+ * - **Security**: All inputs sanitized with escapeHTML
+ *
+ * Database Collections:
+ * - nodius_graphs: Graph metadata (name, category, sheets list)
+ * - nodius_nodes: Individual workflow nodes
+ * - nodius_edges: Connections between nodes
+ * - nodius_html_class: HTML templates with optional linked workflows
+ *
+ * Graph Structure:
+ * - Graph contains metadata + sheetsList (map of sheet IDs to names)
+ * - When built, _sheets is populated with nodes and edges per sheet
+ * - cleanNode/cleanEdge remove internal metadata before sending to client
+ * - onlyFirstSheet option limits building to main sheet for performance
+ *
+ * HTML-Graph Relationship:
+ * - HTML class has graphKeyLinked pointing to graph _key
+ * - Graph has htmlKeyLinked pointing back to HTML class _key
+ * - Graph has htmlNodeKey pointing to the node containing HTML object data
+ * - Bidirectional relationship allows navigation both ways
+ *
+ * Use Cases:
+ * - Creating interactive HTML components with workflow logic
+ * - Building standalone automation workflows
+ * - Managing reusable HTML templates
+ * - Paginated browsing of user's workflows and components
+ */
+
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {DocumentCollection, EdgeCollection} from "arangojs/collections";
 import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/arangoUtils";

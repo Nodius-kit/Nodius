@@ -1,3 +1,43 @@
+/**
+ * @file requestDataType.ts
+ * @description REST API endpoints for custom data type and enum management
+ * @module server/request
+ *
+ * Provides CRUD operations for user-defined data types and enums used throughout the Nodius platform.
+ * These types define the structure of data that flows through workflows and nodes.
+ *
+ * Endpoints - Data Types:
+ * - POST /api/type/list: List all custom data types for a workspace
+ * - POST /api/type/create: Create a new data type definition
+ * - POST /api/type/update: Update an existing data type
+ * - POST /api/type/delete: Delete a data type
+ *
+ * Endpoints - Enums:
+ * - POST /api/enum/list: List all enums for a workspace
+ * - POST /api/enum/create: Create a new enum
+ * - POST /api/enum/update: Update an existing enum
+ * - POST /api/enum/delete: Delete an enum
+ *
+ * Features:
+ * - **Custom Types**: Users can define complex object structures with typed fields
+ * - **Enums**: Define sets of allowed string values
+ * - **Workspace Isolation**: Types are scoped to workspaces
+ * - **Uniqueness Validation**: Type/enum names must be unique within workspace
+ * - **Validation**: Checks for required fields and minimum name length
+ * - **Safe Updates**: Uses replace operation to fully update documents
+ * - **Security**: Sanitizes all inputs and uses safeArangoObject to prevent injection
+ *
+ * Database Collections:
+ * - nodius_data_type: Stores DataTypeClass objects
+ * - nodius_enum: Stores EnumClass objects
+ *
+ * Use Cases:
+ * - Defining API response structures
+ * - Creating typed node inputs/outputs
+ * - Setting up form field types
+ * - Configuring dropdown options with enums
+ */
+
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {DocumentCollection} from "arangojs/collections";
 import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/arangoUtils";

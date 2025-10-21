@@ -1,3 +1,25 @@
+/**
+ * @file nodeUtils.ts
+ * @description Utility functions for graph node and edge manipulation
+ * @module graph
+ *
+ * Provides utilities for working with graph data structures:
+ * - flatEdgeMap: Flatten edge map to array
+ * - nodeArrayToMap: Convert node array to key-indexed map
+ * - edgeArrayToMap: Group edges by source/target for efficient lookup
+ * - findFirstNodeByType: Search for node by type across sheets
+ * - findFirstNodeWithId: Locate node by ID
+ * - findNodeConnected: Get all nodes connected to a given node
+ * - duplicateNodeConfig: Create deep copy of node configuration
+ *
+ * Key features:
+ * - Efficient edge grouping by source-{id} and target-{id} keys
+ * - Multi-sheet graph traversal
+ * - Directional connection queries (in, out, both)
+ * - Deep cloning for node config duplication
+ * - Type-safe generic node data handling
+ */
+
 import {Edge, Graph, Node, NodeType, NodeTypeConfig} from "./graphType";
 import {deepCopy} from "../objectUtils";
 
@@ -56,9 +78,11 @@ export const findFirstNodeWithId = <T = any>(graph:Graph, id:string):Node<T>|und
     return undefined;
 }
 
+/**
+ * Returns all nodes connected to the given node
+ * Filters by connection direction: in (incoming), out (outgoing), or both
+ */
 export const findNodeConnected = (graph:Graph, node:Node<any>, type: "in" | "out" | "both" = "both") : Node<any>[] => {
-    // return all node connected to "node", reading the handles in "nodes", filtering the connected point type by "type"
-
     // Find the sheet containing this node
     const sheet = graph.sheets[node.sheet];
     if (!sheet) return [];

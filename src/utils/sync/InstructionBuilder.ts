@@ -1,3 +1,24 @@
+/**
+ * @file InstructionBuilder.ts
+ * @description Instruction-based state modification system for real-time synchronization
+ * @module sync
+ *
+ * Provides a fluent API for building atomic state modification instructions:
+ * - InstructionBuilder: Fluent builder for creating modification instructions
+ * - OpType enum: 19 operation types (SET, REM, ARR_ADD, etc.)
+ * - Instruction interface: Compact JSON structure for operations
+ * - Validation and execution: Safe instruction application with error handling
+ *
+ * Key features:
+ * - Minimal JSON payload using short keys (o, p, v, i, etc.)
+ * - Path-based operations for nested object modification
+ * - Array operations: add, insert, remove, move, pop, shift, unshift
+ * - String operations: replace, append, insert, remove
+ * - Object operations: set, remove, merge, move
+ * - Deep cloning support for instruction reuse
+ * - Type-safe value retrieval with generics
+ */
+
 // Operation types enum (using short codes for minimal JSON)
 import {deepCopy} from "../objectUtils";
 import {GraphInstructions} from "./wsObject";

@@ -1,3 +1,28 @@
+/**
+ * @file RightPanelCssEditor.tsx
+ * @description CSS block editor for HTML component styling
+ * @module dashboard/Editor
+ *
+ * Provides a visual CSS editor for styling HTML components with multiple CSS blocks.
+ * Each block contains:
+ * - A CSS selector (e.g., "&", "& .child", "&:hover")
+ * - Multiple CSS rules (key-value pairs like "color: red", "padding: 10px")
+ *
+ * Key Features:
+ * - **Multiple CSS Blocks**: Each component can have multiple CSS blocks with different selectors
+ * - **Inline Editing**: Direct editing of selectors, property names, and values using EditableDiv
+ * - **Autocomplete**: Intelligent suggestions for CSS properties and values from useDynamicCssListing
+ * - **Color Variables**: Automatically includes theme color variables in autocomplete for color properties
+ * - **Instruction-Based Updates**: All changes go through InstructionBuilder for undo/redo support
+ * - **Collapsible Blocks**: Expand/collapse individual CSS blocks for better organization
+ * - **Add/Remove**: Easily add new blocks and rules, or delete existing ones
+ *
+ * Architecture:
+ * - RightPanelCssEditor: Main component that renders all CSS blocks
+ * - CssBlockEditor: Individual CSS block with selector and rules
+ * - CssRuleEditor: Individual CSS rule (property: value) with autocomplete
+ */
+
 import {memo, useContext, useMemo, useState} from "react";
 import {useDynamicCssListing} from "../../../hooks/useDynamicCssListing";
 import {CSSBlock} from "../../../../utils/html/HtmlCss";
@@ -25,6 +50,11 @@ interface CssBlockEditorProps {
     variableColor: string[];
 }
 
+/**
+ * Renders a single CSS block with a selector and multiple rules
+ * Example: "& .button { color: red; padding: 10px; }"
+ * The selector is editable, and users can add/remove rules
+ */
 const CssBlockEditor = memo(({
                                  block,
                                  index,
@@ -34,6 +64,7 @@ const CssBlockEditor = memo(({
                                  aditionalCss,
                                  variableColor
                              }: CssBlockEditorProps) => {
+    // CSS blocks start expanded for immediate editing
     const [isExpanded, setIsExpanded] = useState(true);
     const Theme = useContext(ThemeContext);
 
@@ -143,18 +174,30 @@ const CssBlockEditor = memo(({
         }
     `);
 
+    /**
+     * Adds a new empty CSS rule to this block
+     * Creates an instruction to add ["", ""] (empty key-value pair) to the rules array
+     */
     const newRule = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(index).key("rules").arrayAdd(["", ""]);
         await onUpdate(newInstruction);
     }
 
+    /**
+     * Updates the CSS selector for this block
+     * Example: changing "&" to "& .child" or "&:hover"
+     */
     const onEditSelector = async (value: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(index).key("selector").set(value);
         await onUpdate(newInstruction);
     }
 
+    /**
+     * Deletes this entire CSS block from the component
+     * Removes the block from the css array at the current index
+     */
     const deleteSelector = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").arrayRemoveIndex(index);
@@ -223,6 +266,11 @@ interface CssRuleEditorProps {
     onUpdate: (instr: InstructionBuilder) => Promise<void>;
 }
 
+/**
+ * Renders a single CSS rule (property: value pair)
+ * Example: "color: red" or "padding: 10px"
+ * Provides autocomplete suggestions for both property names and values
+ */
 const CssRuleEditor = memo(({
                                 blockIndex,
                                 ruleIndex,
@@ -236,14 +284,18 @@ const CssRuleEditor = memo(({
                             }: CssRuleEditorProps) => {
     const Theme = useContext(ThemeContext);
 
+    // Autocomplete suggestions for CSS property names (e.g., "color", "padding", "margin")
     const keyCompletion = useMemo(() => Object.keys(availableCss), [availableCss]);
+
+    // Autocomplete suggestions for CSS values based on the selected property
+    // Special handling: if property accepts colors (marked with "*color*"), include theme color variables
     const valueCompletion = useMemo(() => {
         let valueCompletion = availableCss[keyStr] ?? [];
         const hasColor = valueCompletion.includes("*color*");
         valueCompletion = [
-            ...valueCompletion.filter(c => c !== "*color*"),
-            ...aditionalCss,
-            ...(hasColor ? variableColor : [])
+            ...valueCompletion.filter(c => c !== "*color*"),  // Remove the marker
+            ...aditionalCss,                                   // Add custom values
+            ...(hasColor ? variableColor : [])                 // Add color variables if applicable
         ];
         return valueCompletion;
     }, [availableCss, variableColor])
@@ -270,12 +322,22 @@ const CssRuleEditor = memo(({
         }
     `);
 
+    /**
+     * Updates the CSS property name (left side of the colon)
+     * Example: changing "color" to "background-color"
+     * Rule is stored as [key, value] tuple, so we update index 0
+     */
     const onEditKeyRule = async (newKey: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(blockIndex).key("rules").index(ruleIndex).index(0).set(newKey);
         await onUpdate(newInstruction);
     }
 
+    /**
+     * Updates the CSS property value (right side of the colon)
+     * Example: changing "red" to "#ff0000"
+     * Rule is stored as [key, value] tuple, so we update index 1
+     */
     const onEditValueRule = async (newValue: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(blockIndex).key("rules").index(ruleIndex).index(1).set(newValue);
@@ -302,6 +364,10 @@ const CssRuleEditor = memo(({
 });
 CssRuleEditor.displayName = 'CssRuleEditor';
 
+/**
+ * Main CSS editor component that displays all CSS blocks for a component
+ * Uses useDynamicCssListing to provide intelligent autocomplete suggestions
+ */
 export const RightPanelCssEditor = memo(({
                                              onUpdate,
                                              css
@@ -309,6 +375,7 @@ export const RightPanelCssEditor = memo(({
 
     const Theme = useContext(ThemeContext);
 
+    // Get CSS autocomplete data: property names, values, and theme color variables
     const {
         availableCss,
         aditionalCss,
@@ -347,6 +414,10 @@ export const RightPanelCssEditor = memo(({
         }
     `);
 
+    /**
+     * Creates a new empty CSS block with default selector "&"
+     * The "&" selector refers to the component itself (SCSS-style)
+     */
     const newBlock = async () => {
         const emptyBlock: CSSBlock = {
             selector: "&",

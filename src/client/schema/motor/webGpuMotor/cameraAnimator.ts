@@ -1,5 +1,27 @@
+/**
+ * @file cameraAnimator.ts
+ * @description Camera animation and smooth transitions for the WebGPU graph motor
+ * @module webGpuMotor
+ *
+ * Provides smooth camera animations including:
+ * - smoothTransitionTo: Low-level camera transition with configurable easing
+ * - smoothFitToNode: Fit camera view to a specific node with padding
+ * - smoothFitToArea: Fit camera view to a rectangular area
+ * - reapplyFitIfNeeded: Auto re-fit on canvas resize when interactive is disabled
+ *
+ * The animator tracks the last fit operation and user manual movements to determine
+ * whether to reapply fit operations on canvas resize events.
+ *
+ * @example
+ * const animator = new CameraAnimator(canvas, transform, minZoom, maxZoom, callbacks);
+ * animator.smoothFitToNode(scene, nodeId, { padding: 100, duration: 500 });
+ */
+
 import { ViewTransform, MotorScene } from "../graphicalMotor";
 
+/**
+ * Stores information about the last fit operation for potential re-application
+ */
 interface FitOperation {
 	type: 'node' | 'area';
 	nodeId?: string;

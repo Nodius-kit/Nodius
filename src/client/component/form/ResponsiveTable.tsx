@@ -1,3 +1,39 @@
+/**
+ * @file ResponsiveTable.tsx
+ * @description Advanced table component with virtualization and drag-and-drop row reordering
+ * @module component/form
+ *
+ * A high-performance table component that uses absolute positioning for rows to enable:
+ * - **Virtualization-Ready**: Rows are absolutely positioned for efficient rendering
+ * - **Drag-and-Drop Reordering**: Drag rows by the grip handle to reorder
+ * - **Fixed Row Heights**: Consistent row heights for predictable scrolling
+ * - **Responsive Layout**: Adapts to container size with scroll support
+ * - **Column Width Syncing**: Automatically syncs tbody column widths with thead
+ * - **Smooth Animations**: Transitions for row position changes
+ * - **Theme Support**: Full dark/light theme integration
+ *
+ * Technical Implementation:
+ * - Modifies children React elements to inject positioning and drag functionality
+ * - Uses ResizeObserver via useElementSize to track column widths
+ * - Clones dragged row during drag operation for smooth visual feedback
+ * - Prevents text selection during drag
+ * - Calculates row positions based on fixed rowHeight
+ * - tbody height is set dynamically based on number of rows
+ *
+ * Drag Behavior:
+ * - GripVertical icon appears in first cell when draggable=true
+ * - Mouse down on grip clones row and enters drag mode
+ * - Dragged row follows mouse with z-index layering
+ * - Calls draggeableMoveIndex callback when row crosses index boundaries
+ * - Smooth transition back to final position on mouse up
+ *
+ * Common Use Cases:
+ * - Data tables with reorderable rows
+ * - Task lists
+ * - Priority queues
+ * - Large datasets (combine with virtual scrolling)
+ */
+
 import React, { memo, PropsWithChildren, ReactElement, ReactNode, useContext, useRef, useState, useEffect } from "react";
 import { GripVertical } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";

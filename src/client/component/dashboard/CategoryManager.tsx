@@ -1,3 +1,21 @@
+/**
+ * @file CategoryManager.tsx
+ * @description Category management interface for organizing workflows and node configurations
+ * @module dashboard
+ *
+ * Provides a reusable category management component with:
+ * - CategoryManager: Component for creating, renaming, and deleting categories
+ * - Category filtering: Filter items by category with pill-based UI
+ * - Item count tracking: Shows number of items per category
+ * - Collapsible panels: Manager and filter panels with smooth animations
+ *
+ * Key features:
+ * - Supports both "workflow" and "nodeconfig" category types
+ * - Real-time category operations via REST API
+ * - Confirmation dialogs for destructive actions
+ * - Abort controller management for request cancellation
+ */
+
 import {memo, useCallback, useRef} from "react";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
@@ -40,14 +58,14 @@ export const CategoryManager = memo(({
 }: CategoryManagerProps) => {
     const Theme = useContext(ThemeContext);
 
-    // Abort controllers
+    // Abort controllers for cancelling in-flight requests when new ones are initiated
     const abortControllers = useRef<{
         createCategory?: AbortController;
         deleteCategory?: AbortController;
         renameCategory?: AbortController;
     }>({});
 
-    // Category statistics
+    // Transform category data to include item counts for display
     const categoryStats = categories.map(cat => ({
         _key: cat._key,
         name: cat.category,
@@ -224,7 +242,10 @@ export const CategoryManager = memo(({
         }
     `);
 
-    // Category management handlers
+    /**
+     * Creates a new category via API call
+     * Prompts user for category name and sends request to server
+     */
     const handleCreateCategory = useCallback(async () => {
         const categoryName = prompt("Enter category name:");
         if (!categoryName || categoryName.trim() === "") return;
@@ -262,9 +283,14 @@ export const CategoryManager = memo(({
         }
     }, [type, onRefresh]);
 
+    /**
+     * Deletes a category with confirmation dialog
+     * Warns user if category contains items and clears filter if deleted category was selected
+     */
     const handleDeleteCategory = useCallback(async (categoryKey: string, categoryName: string) => {
         const itemCount = itemCounts[categoryName] || 0;
 
+        // Show different confirmation message based on whether category has items
         if (itemCount > 0) {
             const itemType = type === "workflow" ? "HTML workflow(s)" : "node configuration(s)";
             if (!confirm(`This category contains ${itemCount} ${itemType}. Are you sure you want to delete it? The items will remain but will need to be recategorized.`)) {
@@ -312,6 +338,10 @@ export const CategoryManager = memo(({
         }
     }, [type, itemCounts, selectedCategory, onRefresh, onCategoryChange]);
 
+    /**
+     * Renames an existing category
+     * Validates new name is different from current name before making API call
+     */
     const handleRenameCategory = useCallback(async (categoryKey: string, currentName: string) => {
         const newName = prompt("Enter new category name:", currentName);
         if (!newName || newName.trim() === "" || newName.trim() === currentName) return;

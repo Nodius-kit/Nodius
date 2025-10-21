@@ -1,3 +1,22 @@
+/**
+ * @file MultiFade.tsx
+ * @description Multi-element crossfade animation component for smooth content switching
+ * @module animate
+ *
+ * Provides crossfade transitions between multiple children:
+ * - MultiFade: Manages fade transitions between indexed children
+ * - Two-step transition: Fade out current, then fade in new
+ * - Pointer events control: Disables interaction during transitions
+ * - Selective rendering: Only renders active child in DOM
+ *
+ * Key features:
+ * - Active index-based child selection
+ * - Sequential fade-out then fade-in animation
+ * - unmountOnExit for non-active children
+ * - Custom CSS support via extraCss prop
+ * - Built on top of Fade component for consistent behavior
+ */
+
 import React, {CSSProperties, memo, useEffect, useState} from "react";
 import {Fade} from "./Fade";
 
@@ -20,10 +39,11 @@ export const MultiFade = memo(({
     useEffect(() => {
         if (active === displayedIndex) return;
 
-        // Step 1: fade out current
+        // Two-step crossfade process
+        // Step 1: Fade out current child
         setVisibleIndex(-1);
 
-        // Step 2: after fade-out, switch child and fade-in
+        // Step 2: After fade-out completes, switch to new child and fade in
         const timer = setTimeout(() => {
             setDisplayedIndex(active);
             setVisibleIndex(active);

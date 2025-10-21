@@ -1,3 +1,23 @@
+/**
+ * @file LeftPaneMenu.tsx
+ * @description Left sidebar navigation menu for the schema editor
+ * @module dashboard/Editor
+ *
+ * Vertical icon-based menu for switching between editor panels:
+ * - Component Editor: Edit component properties and structure
+ * - Component Tree: View and navigate component hierarchy
+ * - Type Editor: Define and manage custom data types
+ * - Enum Editor: Create and edit enum values
+ * - Entry Type Select: Choose and configure entry data types
+ *
+ * Features:
+ * - Icon-based navigation with visual feedback
+ * - Active panel highlighting
+ * - Disabled state for unavailable actions
+ * - Theme-aware styling with hover effects
+ * - Auto-calculates menu width based on icon size and padding
+ */
+
 import {JSX, memo, useContext, useEffect, useMemo} from "react";
 import {editingPanel} from "../SchemaEditor";
 import {BetweenHorizontalStart, Binary, Cable, CopyPlus, Frame, List} from "lucide-react";

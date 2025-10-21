@@ -1,3 +1,23 @@
+/**
+ * @file ResizeBar.tsx
+ * @description Interactive resize handle for adjustable panel layouts
+ * @module animate
+ *
+ * Provides draggable resize bars for panel resizing:
+ * - ResizeBar: Draggable divider for horizontal or vertical resizing
+ * - Min/max constraints: Configurable value boundaries
+ * - Glue positioning: Attach to any edge (top, bottom, left, right)
+ * - Lifecycle hooks: beforeResize and afterResize callbacks
+ *
+ * Key features:
+ * - Smooth mouse-based resizing with delta tracking
+ * - Text selection disabled during drag for better UX
+ * - Visual indicator with themed colors
+ * - Optional offset positioning outside parent
+ * - Collapsible with show/hide animation
+ * - Cursor changes based on resize direction
+ */
+
 import React, {CSSProperties, memo, useContext} from "react";
 import {Fade} from "./Fade";
 import {Collapse} from "./Collapse";
@@ -36,10 +56,12 @@ export const ResizeBar = memo(({
 
     const barWidth = 8;
 
+    // Build dynamic styles based on type and position
     const style:CSSProperties = {
         ...aditionnalStyle,
         position:"absolute",
     }
+    // Set dimensions based on vertical/horizontal type
     if(type === "vertical") {
         style.width = barWidth+"px";
         style.height = "100%";
@@ -67,6 +89,10 @@ export const ResizeBar = memo(({
 
 
 
+    /**
+     * Handles mouse down to initiate drag operation
+     * Sets up move and up handlers for tracking resize
+     */
     const mouseDown = (evt:React.MouseEvent) => {
         const startX = evt.clientX;
         const startY = evt.clientY;
@@ -74,6 +100,7 @@ export const ResizeBar = memo(({
 
         beforeResize?.();
 
+        // Track mouse movement to calculate delta and update value
         const mouseMove = (evt:MouseEvent) => {
             const newX = evt.clientX;
             const newY = evt.clientY;
@@ -89,8 +116,8 @@ export const ResizeBar = memo(({
             }
         }
 
+        // Clean up event listeners on mouse release
         const mouseUp = () => {
-            console.log("up");
             window.removeEventListener("mouseout", mouseUp);
             window.removeEventListener("mouseup", mouseUp);
             window.removeEventListener("mousemove", mouseMove);

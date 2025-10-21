@@ -1,3 +1,23 @@
+/**
+ * @file HtmlCss.ts
+ * @description Dynamic CSS management with caching and runtime style injection
+ * @module html
+ *
+ * Provides runtime CSS generation and management:
+ * - CSSBlock: CSS selector and rules structure
+ * - applyCSSBlocks: Apply CSS blocks to DOM elements
+ * - removeCSSBlocks: Clean up dynamically added CSS
+ * - Caching system: Deduplicates identical CSS rules
+ *
+ * Key features:
+ * - Dynamic style sheet creation and management
+ * - Automatic class name generation (css-*)
+ * - Selector parsing with & replacement (SCSS-like syntax)
+ * - CSS caching to prevent duplicate rules
+ * - HTML entity decoding for selectors
+ * - Error handling for invalid CSS rules
+ */
+
 export interface CSSBlock {
     selector: string;
     rules: string[][]; // Each element is [cssProperty, cssValue]

@@ -1,3 +1,23 @@
+/**
+ * @file wsObject.ts
+ * @description WebSocket message type definitions for real-time collaboration
+ * @module sync
+ *
+ * Defines all WebSocket message types for client-server communication:
+ * - WSMessage: Base message type with auto-applied ID
+ * - WSResponseMessage: Response wrapper with status
+ * - Graph operations: Apply instructions, register/disconnect users
+ * - Node config operations: Instruction application for node configs
+ * - Utility operations: Ping, unique ID generation, batch create/delete
+ *
+ * Key message types:
+ * - WSApplyInstructionToGraph: Apply modifications to graph
+ * - WSRegisterUserOnGraph: User session registration
+ * - WSGenerateUniqueId: Request unique identifiers
+ * - WSBatchCreateElements: Bulk node/edge creation
+ * - WSBatchDeleteElements: Bulk node/edge deletion
+ */
+
 import {Instruction} from "./InstructionBuilder";
 import {Node, Edge} from "../graph/graphType";
 

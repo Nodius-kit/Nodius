@@ -1,3 +1,22 @@
+/**
+ * @file Fade.tsx
+ * @description Opacity-based fade in/out animation component
+ * @module animate
+ *
+ * Provides smooth opacity transitions for showing/hiding content:
+ * - Fade: Opacity transition component with enter/exit states
+ * - Lifecycle callbacks: onEntered and onExited
+ * - Configurable timing: Customizable transition duration
+ * - Appearance control: appear prop controls initial transition
+ *
+ * Key features:
+ * - CSS transition-based opacity animation
+ * - transitionend event listening for precise timing
+ * - unmountOnExit support for DOM cleanup
+ * - Ref merging for compatibility with child components
+ * - Status tracking (entering, entered, exiting, exited)
+ */
+
 import { JSX, useLayoutEffect, useEffect, useRef, useState, cloneElement, memo } from "react";
 
 interface FadeProps {
@@ -10,7 +29,10 @@ interface FadeProps {
     onExited?: () => void; // Callback when fade out completes
 }
 
-// Helper to merge refs
+/**
+ * Merges multiple React refs into a single callback ref
+ * Supports both callback refs and ref objects
+ */
 const mergeRefs = <T,>(...refs: any[]) => {
     return (el: T) => {
         refs.forEach(ref => {
@@ -51,7 +73,7 @@ export const Fade = memo(({ children, in: show = false, timeout = 500, appear = 
         if (!el) return;
 
         if (status === 'entering' || status === 'exiting') {
-            // Force reflow to trigger transition
+            // Set initial opacity and force reflow to ensure transition triggers
             el.style.opacity = status === 'entering' ? '0' : '1';
             void el.offsetHeight; // Force reflow
             el.style.opacity = status === 'entering' ? '1' : '0';

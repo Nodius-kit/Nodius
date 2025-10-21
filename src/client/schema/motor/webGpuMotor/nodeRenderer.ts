@@ -1,3 +1,18 @@
+/**
+ * @file nodeRenderer.ts
+ * @description WebGPU renderer for graph nodes (rectangular boxes)
+ * @module webGpuMotor
+ *
+ * Renders nodes as instanced rectangles using WebGPU:
+ * - Uses instance rendering for efficient batch drawing
+ * - Renders nodes as simple quads (6 vertices per instance)
+ * - Maintains node indices map for quick lookups
+ * - Only renders visible nodes (culled by computeVisibility)
+ */
+
+/**
+ * Renders graph nodes as rectangles using WebGPU instancing
+ */
 export class NodeRenderer {
 	private device: GPUDevice;
 	private format: GPUTextureFormat;

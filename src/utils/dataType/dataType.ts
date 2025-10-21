@@ -1,3 +1,31 @@
+/**
+ * @file dataType.ts
+ * @description Data type system for workflow variables and node configurations
+ * @module dataType
+ *
+ * Provides comprehensive type checking and validation:
+ * - DataTypeChecking: Type definition with validation
+ * - allDataTypes: Built-in types (int, str, bool, db, color, etc.)
+ * - DataTypeClass: Database-backed custom types
+ * - EnumClass: Enumeration types with values
+ *
+ * Built-in types:
+ * - int: Integer validation
+ * - str: String (accepts anything)
+ * - bool: Boolean (true/false)
+ * - db: Double/float numbers
+ * - color: Hex, RGB, RGBA, HSL, HSLA, named colors
+ * - ref: References to other types
+ * - enum: Enumeration references
+ *
+ * Key features:
+ * - Regex-based validation
+ * - Default value support
+ * - Async preparation for complex types
+ * - Custom type definitions from database
+ * - Enum integration
+ */
+
 export interface DataTypeChecking {
     id: string,
     name: string,

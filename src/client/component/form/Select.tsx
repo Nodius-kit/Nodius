@@ -1,3 +1,30 @@
+/**
+ * @file Select.tsx
+ * @description Fully-featured dropdown select component with validation and theming
+ * @module component/form
+ *
+ * A comprehensive select (dropdown) component matching the Input component's API and styling:
+ * - **Options Array**: Takes array of {value, label, disabled} objects
+ * - **Visual States**: focus, error, success, disabled with color-coded borders
+ * - **Icons**: Start and end icon support (end icon replaces default arrow)
+ * - **Labels**: Optional labels with required indicator
+ * - **Validation**: Error messages with red highlighting
+ * - **Theming**: Full dark/light theme support with dynamic CSS classes
+ * - **Accessibility**: Proper HTML attributes, ARIA support, ref forwarding
+ * - **Custom Styling**: Removes browser default styling for consistent appearance
+ *
+ * Features:
+ * - Controlled component with internal state synchronization
+ * - Dynamic border colors based on state (focus, error, success)
+ * - Custom dropdown arrow (CSS pseudo-element) that respects theme
+ * - Placeholder option support
+ * - Disabled state with visual feedback
+ * - Individual options can be disabled
+ *
+ * The component uses useDynamicClass for theme-aware styling that updates
+ * automatically when the theme changes.
+ */
+
 import {CSSProperties, JSX, memo, useContext, useEffect, useRef, useState} from "react";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";

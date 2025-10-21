@@ -1,3 +1,24 @@
+/**
+ * @file ThemeContext.tsx
+ * @description Theme configuration context with comprehensive color system
+ * @module hooks/contexts
+ *
+ * Provides theming capabilities with light/dark mode support:
+ * - ThemeContext: React context for theme state and utilities
+ * - Color palette: Primary, secondary, error, warning, info, success colors
+ * - Material-inspired colors: Full color spectrum (50-900 shades)
+ * - Text and background: Theme-aware text and background colors
+ * - Shadow system: Elevation-based shadow definitions
+ * - Utility functions: Color manipulation (opacity, brightness, reverse)
+ *
+ * Key features:
+ * - Dual theme support (light/dark)
+ * - CSS custom properties integration
+ * - Color utility functions (reverseHexColor, changeOpacity, changeBrightness)
+ * - Comprehensive color palette based on Material Design
+ * - Transition timing configurations
+ */
+
 import {ActionType, Dispatch} from "../useCreateReducer";
 import {createContext, memo, useContext, useEffect} from "react";
 

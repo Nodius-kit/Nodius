@@ -1,3 +1,33 @@
+/**
+ * @file LinkedCard.tsx
+ * @description Floating card component that positions itself relative to a reference element
+ * @module component/form
+ *
+ * Creates a floating card (tooltip, popover, dropdown) that automatically positions itself
+ * relative to a reference element. Features advanced positioning logic with:
+ * - **Automatic Positioning**: Calculates optimal placement (top, bottom, left, right)
+ * - **Viewport Boundary Detection**: Prevents overflow by adjusting position dynamically
+ * - **Scroll Tracking**: Maintains position during scroll events (including nested scrolling)
+ * - **Resize Handling**: Updates position when window or reference element resizes
+ * - **DOM Mutation Tracking**: Responds to layout changes that might affect positioning
+ * - **Fade Animation**: Smooth entry/exit transitions using Fade component
+ * - **Portal Rendering**: Renders outside parent DOM hierarchy to avoid clipping
+ * - **Background Overlay**: Optional semi-transparent backdrop with click-to-close
+ *
+ * Positioning System:
+ * - Uses useLinkedPosition hook for position calculation
+ * - Monitors scroll, resize, and DOM mutations for real-time updates
+ * - Adjusts position to keep card within viewport boundaries
+ * - Supports 4 placement directions with customizable offset
+ *
+ * Common Use Cases:
+ * - Tooltips with rich content
+ * - Context menus
+ * - Dropdown panels
+ * - Popovers
+ * - Autocomplete suggestions
+ */
+
 import {memo, PropsWithChildren, useMemo, useState, useEffect, useRef} from "react";
 import {Fade} from "../animate/Fade";
 import Portal from "../Portal";

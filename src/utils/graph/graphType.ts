@@ -1,3 +1,25 @@
+/**
+ * @file graphType.ts
+ * @description Core type definitions for graph data structures (nodes, edges, graphs)
+ * @module graph
+ *
+ * Comprehensive type system for workflow graph representation:
+ * - Node: Graph node with position, size, handles, and typed data
+ * - Edge: Connections between nodes with source/target handles
+ * - Graph: Complete graph with sheets, nodes, and edges
+ * - NodeTypeConfig: Configuration for custom node types
+ * - Handle system: Directional connection points (T, D, R, L, 0)
+ *
+ * Key features:
+ * - Multi-sheet graph support
+ * - Dynamic node sizing
+ * - Handle positioning (separate or fixed)
+ * - Type-safe node data with generics
+ * - ArangoDB integration (cleanNode, cleanEdge functions)
+ * - Node type configuration with HTML content and borders
+ * - Category-based organization
+ */
+
 import {pickKeys} from "../objectUtils";
 import {HTMLDomEvent, HtmlObject} from "../html/htmlType";
 import {MotorEventMap} from "../../client/schema/motor/graphicalMotor";

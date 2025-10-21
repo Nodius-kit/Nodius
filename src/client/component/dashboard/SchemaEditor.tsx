@@ -1,3 +1,23 @@
+/**
+ * @file SchemaEditor.tsx
+ * @description Visual schema editor with multi-panel interface for editing HTML workflows and node configs
+ * @module dashboard
+ *
+ * Main visual editor component providing comprehensive editing capabilities:
+ * - SchemaEditor: Multi-panel editor with left/right sidebars and center canvas
+ * - Panel system: Component editor, hierarchy tree, type editor, enum editor, entry data selector
+ * - Resizable panels: Dynamic width adjustment for left and right panels
+ * - WebGPU integration: Forwards ref to WebGpuMotor for graph visualization
+ *
+ * Key features:
+ * - MultiFade animation for smooth panel transitions
+ * - Collapsible panels with animated show/hide
+ * - Component library fetching and categorization
+ * - Dynamic panel width constraints (min/max values)
+ * - Integration with ProjectContext for active workflow state
+ * - ResizeBar components for user-controlled panel sizing
+ */
+
 import {forwardRef, memo, useContext, useEffect, useRef, useState} from "react";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../utils/html/htmlType";
 import {LeftPaneMenu} from "./Editor/LeftPaneMenu";
@@ -37,7 +57,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
 
     const Theme = useContext(ThemeContext);
 
-
+    // Fetch available components on mount
     useEffect(() => {
         retrieveComponentList();
     }, []);
@@ -46,6 +66,11 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
         Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined
     >(undefined);
     const retrieveComponentListAbortController = useRef<AbortController>(undefined);
+
+    /**
+     * Fetches and categorizes available HTML builder components
+     * Groups components by category for organized display in the component panel
+     */
     const retrieveComponentList = async () => {
         if(retrieveComponentListAbortController.current) {
             retrieveComponentListAbortController.current.abort();
@@ -65,6 +90,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
 
         if(response.status === 200) {
             const json = await response.json() as HtmlBuilderComponent[];
+            // Group components by category for organized display
             const components = json.reduce((acc, component) => {
                 if (!acc[component.category]) {
                     acc[component.category] = [];
@@ -78,17 +104,21 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
         }
     }
 
+    // Track previous editing state to auto-open component panel when workflow is opened
     const noEditingPrevious = useRef<boolean>(true);
     useEffect(() => {
+        // Auto-open component editor when a workflow is opened
         if(noEditingPrevious.current && Project.state.editedHtml) {
             noEditingPrevious.current = false;
             setEditingPanel("component");
         } else if(!noEditingPrevious.current && !Project.state.editedHtml) {
+            // Close panel when workflow is closed
             noEditingPrevious.current = true;
             setEditingPanel("");
         }
     }, [Project.state.editedHtml]);
 
+    // Map editing panel to MultiFade index for smooth transitions
     const activeFade = editingPanel === "component" ? 0 : (
         editingPanel === "hierarchy" ? 1 : (
             editingPanel === "type" ? 2 : (

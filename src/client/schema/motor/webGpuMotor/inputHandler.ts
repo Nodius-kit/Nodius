@@ -1,7 +1,27 @@
+/**
+ * @file inputHandler.ts
+ * @description Mouse and keyboard input handling for the WebGPU graph motor
+ * @module webGpuMotor
+ *
+ * Handles user input for camera control:
+ * - Mouse drag panning (left mouse button)
+ * - Mouse wheel zooming (with zoom centered on cursor position)
+ * - Keyboard arrow key navigation (continuous movement with key repeat)
+ * - Input enable/disable state management
+ *
+ * Zooming uses exponential scaling for smooth zoom feel and maintains
+ * the world position under the cursor during zoom operations.
+ *
+ * Arrow key navigation uses intervals for smooth continuous movement.
+ */
+
 import { ViewTransform } from "../graphicalMotor";
 import { documentHaveActiveElement } from "../../../../utils/objectUtils";
 import { KeyState } from "./types";
 
+/**
+ * Manages mouse and keyboard input for camera control
+ */
 export class InputHandler {
 	private canvas: HTMLCanvasElement;
 	private transform: ViewTransform;

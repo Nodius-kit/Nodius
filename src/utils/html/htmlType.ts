@@ -1,3 +1,23 @@
+/**
+ * @file htmlType.ts
+ * @description Type definitions for HTML object structures and workflow classes
+ * @module html
+ *
+ * Comprehensive type system for HTML component definitions:
+ * - HtmlObject types: HtmlDiv, HtmlText, HtmlList, HtmlInner, HtmlArray
+ * - HtmlClass: Complete workflow class with metadata
+ * - Events: DOM events and workflow events
+ * - Builder components: Categorized HTML builder component definitions
+ *
+ * Key features:
+ * - Hierarchical HTML object structure with identifiers
+ * - CSS block integration via CSSBlock type
+ * - Event handling (DOM and workflow events)
+ * - Attribute and delimiter support
+ * - Category-based builder component organization
+ * - Workspace and permission management
+ */
+
 import {CSSProperties} from "react";
 import {CSSBlock} from "./HtmlCss";
 

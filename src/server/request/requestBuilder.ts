@@ -1,3 +1,33 @@
+/**
+ * @file requestBuilder.ts
+ * @description REST API endpoints for HTML builder component management
+ * @module server/request
+ *
+ * Handles requests for retrieving HTML builder components used in the visual HTML editor.
+ * These components are draggable UI elements that users can add to their pages.
+ *
+ * Endpoints:
+ * - POST /api/builder/components: Get all builder components for a workspace
+ *
+ * Features:
+ * - **Component Library**: Retrieves user-defined components from ArangoDB
+ * - **Built-in Components**: Adds default components (Container, Text, Column, Row)
+ * - **Workspace Filtering**: Returns only components for the specified workspace
+ * - **HTML Class Merging**: Joins component metadata with actual HTML object from nodius_html_class
+ * - **Security**: Uses escapeHTML to prevent injection attacks
+ *
+ * Component Structure:
+ * - Each component has metadata (_key, category, icon, workspace)
+ * - Linked to an HTML class object via htmlKeyLinked
+ * - HTML object contains the actual DOM structure, CSS, and content
+ *
+ * Built-in Components:
+ * - Container: Flexbox block with red outline for visibility
+ * - Text: Paragraph element with placeholder text
+ * - Column: Flex column layout
+ * - Row: Flex row layout
+ */
+
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {DocumentCollection} from "arangojs/collections";
 import {ensureCollection} from "../utils/arangoUtils";

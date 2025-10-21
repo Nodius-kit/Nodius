@@ -1,3 +1,22 @@
+/**
+ * @file DashboardWorkFlow.tsx
+ * @description Main workflow dashboard orchestrating HTML workflows and node configurations
+ * @module dashboard
+ *
+ * Root dashboard component that manages and displays both workflow types:
+ * - DashboardWorkFlow: Container component coordinating HTML and node config dashboards
+ * - Data fetching: Loads categories, workflows, and node configs from API
+ * - State management: Maintains separate category filters for each section
+ * - Lifecycle management: Handles loading state and abort controllers cleanup
+ *
+ * Key features:
+ * - Parallel data loading on mount for better performance
+ * - Separate category state for HTML workflows and node configurations
+ * - Centralized refresh handlers passed to child components
+ * - Responsive layout with max-width constraint
+ * - Loading state with fallback UI
+ */
+
 import {memo, useCallback, useContext, useEffect, useRef, useState} from "react";
 import {HtmlClass} from "../../../utils/html/htmlType";
 import {Graph, NodeTypeConfig} from "../../../utils/graph/graphType";
@@ -19,7 +38,7 @@ interface HtmlClassWithGraph {
 export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
     const Theme = useContext(ThemeContext);
 
-    // State management - separate categories for HTML and NodeConfig
+    // Separate category state for HTML workflows and node configurations
     const [categoriesHtml, setCategoriesHtml] = useState<CategoryData[]>([]);
     const [categoriesNodeConfig, setCategoriesNodeConfig] = useState<CategoryData[]>([]);
     const [selectedCategoryHtml, setSelectedCategoryHtml] = useState<string | null>(null);
@@ -30,7 +49,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
 
     const [loading, setLoading] = useState<boolean>(true);
 
-    // Abort controllers
+    // Abort controllers for cancelling in-flight requests on unmount
     const abortControllers = useRef<{
         categoriesHtml?: AbortController;
         categoriesNodeConfig?: AbortController;
@@ -62,7 +81,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         }
     `);
 
-    // Data fetching functions
+    /**
+     * Fetches categories for HTML workflows from the API
+     */
     const fetchCategoriesHtml = useCallback(async () => {
         if (abortControllers.current.categoriesHtml) {
             abortControllers.current.categoriesHtml.abort();
@@ -93,6 +114,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         }
     }, []);
 
+    /**
+     * Fetches categories for node configurations from the API
+     */
     const fetchCategoriesNodeConfig = useCallback(async () => {
         if (abortControllers.current.categoriesNodeConfig) {
             abortControllers.current.categoriesNodeConfig.abort();
@@ -124,6 +148,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         }
     }, []);
 
+    /**
+     * Fetches all HTML class workflows from the API
+     */
     const fetchHtmlClasses = useCallback(async () => {
         if (abortControllers.current.htmlClasses) {
             abortControllers.current.htmlClasses.abort();
@@ -158,6 +185,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         }
     }, []);
 
+    /**
+     * Fetches all node configurations from the API
+     */
     const fetchNodeConfigs = useCallback(async () => {
         if (abortControllers.current.nodeConfigs) {
             abortControllers.current.nodeConfigs.abort();
@@ -187,7 +217,9 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         }
     }, []);
 
-    // Load all data
+    /**
+     * Loads all data in parallel on component mount
+     */
     const loadData = useCallback(async () => {
         setLoading(true);
         await Promise.all([
@@ -199,15 +231,22 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         setLoading(false);
     }, [fetchCategoriesHtml, fetchCategoriesNodeConfig, fetchHtmlClasses, fetchNodeConfigs]);
 
-    // Refresh functions for child components
+    /**
+     * Refreshes HTML workflows and their categories
+     * Called after create/delete operations
+     */
     const refreshHtmlClasses = useCallback(async () => {
         await fetchHtmlClasses();
-        await fetchCategoriesHtml(); // Refresh categories as well in case new ones were created
+        await fetchCategoriesHtml();
     }, [fetchHtmlClasses, fetchCategoriesHtml]);
 
+    /**
+     * Refreshes node configurations and their categories
+     * Called after create/delete operations
+     */
     const refreshNodeConfigs = useCallback(async () => {
         await fetchNodeConfigs();
-        await fetchCategoriesNodeConfig(); // Refresh categories as well in case new ones were created
+        await fetchCategoriesNodeConfig();
     }, [fetchNodeConfigs, fetchCategoriesNodeConfig]);
 
     useEffect(() => {

@@ -1,6 +1,21 @@
+/**
+ * @file handleRenderer.ts
+ * @description WebGPU renderer for node handles (connection points)
+ * @module webGpuMotor
+ *
+ * Renders handles as circular connection points on nodes:
+ * - Renders handles as instanced circles with anti-aliasing
+ * - Uses fragment shader for smooth circular edges
+ * - Handles are positioned based on node size and handle configuration
+ * - Supports handles on all sides (T, D, L, R) and center (0)
+ */
+
 import { handleSide } from "../../../../utils/graph/graphType";
 import { getHandlePosition } from "./handleUtils";
 
+/**
+ * Renders node handles (connection points) as circles using WebGPU
+ */
 export class HandleRenderer {
 	private device: GPUDevice;
 	private format: GPUTextureFormat;

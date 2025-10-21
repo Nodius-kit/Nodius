@@ -1,3 +1,45 @@
+/**
+ * @file useDynamicCssListing.ts
+ * @description Comprehensive CSS autocomplete data for the visual CSS editor
+ * @module client/hooks
+ *
+ * Provides structured autocomplete suggestions for CSS properties and values used in the
+ * RightPanelCssEditor component. Includes theme-aware color variables and common CSS values.
+ *
+ * Features:
+ * - **Comprehensive Coverage**: 50+ CSS properties with value suggestions
+ * - **Theme Integration**: Auto-includes theme color CSS variables
+ * - **Native Colors**: All 140+ named CSS colors
+ * - **Common Values**: Frequently used values (auto, inherit, initial, etc.)
+ * - **Special Markers**: "*color*" marker for properties accepting colors
+ * - **Kebab-Case Conversion**: Properties converted from camelCase to kebab-case
+ *
+ * Data Structure:
+ * - availableCss: Map of CSS properties to their possible values
+ * - variableColor: Theme color variables + native CSS colors
+ * - aditionalCss: Common global values (auto, inherit, etc.)
+ *
+ * Covered CSS Categories:
+ * - Layout: display, position, flex, grid
+ * - Sizing: width, height, min/max variants
+ * - Spacing: padding, margin, gap
+ * - Border: border properties, radius
+ * - Background: background properties
+ * - Typography: font, text properties
+ * - Effects: opacity, shadow, filter, transform
+ * - Interaction: cursor, overflow, z-index
+ *
+ * Special Features:
+ * - "*color*" marker: Signals that theme colors should be suggested
+ * - Template values (e.g., "*px", "*%"): Indicate units to use
+ * - var(--*): Variable reference template
+ *
+ * @example
+ * const { availableCss, variableColor } = useDynamicCssListing();
+ * // availableCss['display'] = ['flex', 'grid', 'block', ...]
+ * // variableColor = ['var(--nodius-primary-main)', 'red', 'blue', ...]
+ */
+
 import {CSSProperties, useContext, useMemo} from "react";
 import {ThemeContext} from "./contexts/ThemeContext";
 

@@ -1,3 +1,23 @@
+/**
+ * @file objectUtils.ts
+ * @description Object manipulation utilities for deep operations
+ * @module utils
+ *
+ * Provides utilities for deep object operations:
+ * - deepCopy: Create deep clone of objects using structuredClone
+ * - deepEqual: Deep equality comparison with path exclusion
+ * - pickKeys: Type-safe key selection from objects
+ * - travelObject: Recursive object traversal with callbacks
+ * - Text selection utilities: Enable/disable text selection
+ *
+ * Key features:
+ * - structuredClone for efficient deep copying
+ * - Configurable path exclusion in equality checks
+ * - Type-safe object key picking
+ * - Recursive traversal with early exit
+ * - DOM text selection control
+ */
+
 import { ReactElement } from "react";
 
 export function deepCopy<T>(obj: T): T {

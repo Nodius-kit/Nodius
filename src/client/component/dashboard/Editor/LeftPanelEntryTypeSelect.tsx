@@ -1,3 +1,26 @@
+/**
+ * @file LeftPanelEntryTypeSelect.tsx
+ * @description Entry type configuration panel for graph nodes
+ * @module dashboard/Editor
+ *
+ * Allows configuration of entry data types for graph nodes:
+ * - Select entry type for nodes that process data
+ * - Configure input/output data structures
+ * - Map node handles to data fields
+ * - Define data transformations and validations
+ *
+ * Features:
+ * - Visual field mapping interface
+ * - Recursive field editor for nested structures
+ * - Type compatibility validation
+ * - Default value configuration
+ * - Required field marking
+ * - Connection point (handle) assignment
+ *
+ * Entry types define what data nodes accept and produce, enabling
+ * type-safe data flow through the workflow graph.
+ */
+
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import {allDataTypes, DataTypeClass, DataTypeConfig, EnumClass} from "../../../../utils/dataType/dataType";
 import {Cable, ChevronDown, ChevronUp, Search, Info, FileText, AlertCircle, Check, Edit3, Trash2} from "lucide-react";

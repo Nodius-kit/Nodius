@@ -1,3 +1,45 @@
+/**
+ * @file requestNodeConfig.ts
+ * @description REST API endpoints for visual workflow node configuration management
+ * @module server/request
+ *
+ * Manages configuration for custom node types in the visual workflow editor.
+ * Each node config defines the behavior, inputs, outputs, and appearance of a node type.
+ *
+ * Endpoints:
+ * - POST /api/nodeconfig/list: List all node configs for a workspace (optionally filtered by category)
+ * - POST /api/nodeconfig/get: Get a specific node config by key
+ * - POST /api/nodeconfig/create: Create a new node type configuration
+ * - POST /api/nodeconfig/update: Update an existing node config
+ * - POST /api/nodeconfig/delete: Delete a node config
+ *
+ * Features:
+ * - **Node Type Definitions**: Configure inputs, outputs, entry types, and execution logic
+ * - **Workspace Scoping**: Node configs are isolated per workspace
+ * - **Category Organization**: Nodes can be grouped into categories
+ * - **Uniqueness Validation**: displayName must be unique within workspace
+ * - **Timestamps**: Tracks creation and last update times
+ * - **Conflict Prevention**: Prevents duplicate names during create/rename
+ * - **Security**: All inputs sanitized with escapeHTML
+ *
+ * Node Config Structure:
+ * - displayName: Human-readable name shown in UI
+ * - category: Organization category
+ * - node: Base node structure with type, inputs, outputs
+ * - entryType: Configuration for data entry when node is selected
+ * - workspace: Workspace identifier
+ * - _key: Unique identifier (also used as node.type)
+ *
+ * Database Collection:
+ * - nodius_node_config: Stores NodeTypeConfig objects
+ *
+ * Use Cases:
+ * - Creating custom API call nodes
+ * - Defining data transformation nodes
+ * - Building workflow control flow nodes (if/else, loops)
+ * - Configuring integration nodes for external services
+ */
+
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {DocumentCollection} from "arangojs/collections";
 import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/arangoUtils";

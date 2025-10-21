@@ -1,3 +1,35 @@
+/**
+ * @file index.ts
+ * @description Main WebGPU Motor class - High-performance graph rendering engine
+ * @module webGpuMotor
+ *
+ * WebGpuMotor is a modular graph visualization engine built on WebGPU.
+ * It implements the GraphicalMotor interface and coordinates multiple specialized renderers:
+ *
+ * Architecture:
+ * - NodeRenderer: Renders rectangular nodes using instanced quads
+ * - EdgeRenderer: Renders connections with straight or curved bezier paths
+ * - HandleRenderer: Renders circular connection points on nodes
+ * - BackgroundRenderer: Renders dotted or solid backgrounds
+ * - InputHandler: Manages mouse/keyboard input for panning and zooming
+ * - CameraAnimator: Provides smooth camera transitions and fit operations
+ *
+ * Features:
+ * - Hardware-accelerated WebGPU rendering with MSAA antialiasing
+ * - Efficient visibility culling (only renders visible elements)
+ * - Dirty flag rendering (only re-renders when needed)
+ * - Real-time event system (zoom, pan, click events)
+ * - Smooth camera animations with configurable easing
+ * - Auto re-fit on canvas resize (when interactive is disabled)
+ * - Multi-DPI support with device pixel ratio handling
+ *
+ * @example
+ * const motor = new WebGpuMotor();
+ * await motor.init(container, canvas, { minZoom: 0.5, maxZoom: 3 });
+ * motor.setScene({ nodes: nodesMap, edges: edgesMap });
+ * motor.smoothFitToNode(nodeId, { padding: 100 });
+ */
+
 import {
 	MotorScene,
 	GraphicalMotorOptions,
@@ -16,6 +48,10 @@ import { InputHandler } from "./inputHandler";
 import { CameraAnimator } from "./cameraAnimator";
 import { getHandlePosition } from "./handleUtils";
 
+/**
+ * WebGPU-based graph rendering motor with modular architecture
+ * Implements the GraphicalMotor interface for rendering node-edge graphs
+ */
 export class WebGpuMotor implements GraphicalMotor {
 	private device: GPUDevice | null = null;
 	private context: GPUCanvasContext | null = null;

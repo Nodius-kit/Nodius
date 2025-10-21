@@ -1,3 +1,22 @@
+/**
+ * @file DashboardHtmlWorkflow.tsx
+ * @description HTML workflow dashboard with category filtering and management
+ * @module dashboard
+ *
+ * Main dashboard component for managing HTML component workflows:
+ * - DashboardHtmlWorkflow: Display and manage HTML class workflows
+ * - Search functionality: Filter workflows by name
+ * - Category integration: Filter by category with CategoryManager component
+ * - CRUD operations: Create, edit (open), and delete HTML workflows
+ *
+ * Key features:
+ * - Grid layout with responsive cards
+ * - Empty state with call-to-action
+ * - Abort controller management for concurrent requests
+ * - Integration with ProjectContext for opening workflows
+ * - Category-based filtering and organization
+ */
+
 import {memo, useCallback, useContext, useRef, useState} from "react";
 import {HtmlClass} from "../../../utils/html/htmlType";
 import {Graph} from "../../../utils/graph/graphType";
@@ -35,13 +54,13 @@ export const DashboardHtmlWorkflow = memo(({
     const [showCategoryManager, setShowCategoryManager] = useState<boolean>(false);
     const [showCategoryFilter, setShowCategoryFilter] = useState<boolean>(false);
 
-    // Abort controllers
+    // Abort controllers for cancelling in-flight requests
     const abortControllers = useRef<{
         deleteHtml?: AbortController;
         createHtml?: AbortController;
     }>({});
 
-    // Filtered data
+    // Filter workflows by search term and selected category
     const filteredHtmlClasses = htmlClasses.filter(item =>
         item.html.name.toLowerCase().includes(searchHtml.toLowerCase()) &&
         (selectedCategory === null || item.html.category === selectedCategory)
@@ -248,7 +267,10 @@ export const DashboardHtmlWorkflow = memo(({
         }
     `);
 
-    // HTML Class handlers
+    /**
+     * Creates a new HTML workflow with default structure
+     * Creates a basic container div with full width/height as starting point
+     */
     const handleCreateHtmlClass = useCallback(async () => {
         const name = prompt("Enter HTML Class name:");
         if (!name) return;
@@ -301,6 +323,10 @@ export const DashboardHtmlWorkflow = memo(({
         }
     }, [selectedCategory, onRefresh]);
 
+    /**
+     * Opens an HTML workflow in the editor
+     * Delegates to ProjectContext.openHtmlClass for actual opening logic
+     */
     const handleOpenHtmlClass = useCallback(async (html: HtmlClass, graph: Graph) => {
         if (!Project.state.openHtmlClass) return;
         const action = await Project.state.openHtmlClass(html, graph);
@@ -309,6 +335,10 @@ export const DashboardHtmlWorkflow = memo(({
         }
     }, [Project.state.openHtmlClass]);
 
+    /**
+     * Deletes an HTML workflow with confirmation
+     * Refreshes the workflow list after successful deletion
+     */
     const handleDeleteHtmlClass = useCallback(async (htmlKey: string) => {
         if (!confirm("Are you sure you want to delete this HTML class?")) return;
 

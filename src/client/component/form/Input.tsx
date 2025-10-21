@@ -1,3 +1,29 @@
+/**
+ * @file Input.tsx
+ * @description Fully-featured text input component with validation and theming
+ * @module component/form
+ *
+ * A comprehensive input component that provides:
+ * - **Multiple Input Types**: text, number, password, email, tel, url, search
+ * - **Visual States**: focus, error, success, disabled with color-coded borders
+ * - **Icons**: Start and end icon support for enhanced UX
+ * - **Labels**: Optional labels with required indicator
+ * - **Validation**: Error messages with red highlighting
+ * - **Theming**: Full dark/light theme support with dynamic CSS classes
+ * - **Accessibility**: Proper HTML attributes, ARIA support, ref forwarding
+ *
+ * Features:
+ * - Controlled component with internal state synchronization
+ * - Dynamic border colors based on state (focus, error, success)
+ * - Icon containers with proper alignment
+ * - Max length enforcement
+ * - Autocomplete support
+ * - Disabled state with visual feedback
+ *
+ * The component uses useDynamicClass for theme-aware styling that updates
+ * automatically when the theme changes.
+ */
+
 import {CSSProperties, JSX, memo, useContext, useEffect, useRef, useState} from "react";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
@@ -54,6 +80,7 @@ export const Input = memo(({
     const inputRef = useRef<HTMLInputElement>(null);
     const Theme = useContext(ThemeContext);
 
+    // Sync internal value with prop value changes (controlled component)
     useEffect(() => {
         setInternalValue(value);
     }, [value]);

@@ -1,3 +1,25 @@
+/**
+ * @file RightPanelComponentEditor.tsx
+ * @description Right panel for editing selected HTML component properties
+ * @module dashboard/Editor
+ *
+ * Displays and allows editing of the currently selected HTML component:
+ * - CSS style editor (via RightPanelCssEditor)
+ * - Hover preview highlighting
+ * - Component selection management
+ * - Real-time style updates with visual feedback
+ *
+ * Features:
+ * - Live component selection from canvas
+ * - Hover state management for preview
+ * - Integration with CSS editor panel
+ * - Component identifier tracking
+ * - Synchronized updates with canvas rendering
+ *
+ * This panel works in conjunction with the left panels to provide a complete
+ * component editing experience.
+ */
+
 import {CSSProperties, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";

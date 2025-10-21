@@ -1,5 +1,22 @@
+/**
+ * @file backgroundRenderer.ts
+ * @description WebGPU background renderer for the graph canvas
+ * @module webGpuMotor
+ *
+ * Renders the canvas background with support for:
+ * - Dotted grid pattern (with world-space dots that zoom with camera)
+ * - Solid color background
+ *
+ * Uses a full-screen triangle technique for efficient rendering.
+ * The shader transforms screen coordinates to world coordinates to maintain
+ * grid alignment during pan/zoom operations.
+ */
+
 import { backgroundType } from "../graphicalMotor";
 
+/**
+ * Renders the background of the graph canvas using WebGPU
+ */
 export class BackgroundRenderer {
 	private device: GPUDevice;
 	private format: GPUTextureFormat;
@@ -15,8 +32,12 @@ export class BackgroundRenderer {
 		this.backgroundType = bgType;
 	}
 
+	/**
+	 * Initializes the background renderer with WebGPU pipeline and buffers
+	 * @param bindGroupLayout - The bind group layout for uniforms
+	 */
 	public init(bindGroupLayout: GPUBindGroupLayout): void {
-		// Full-screen triangle for background
+		// Full-screen triangle for background (covers entire viewport with just 3 vertices)
 		const fullScreenVertices = new Float32Array([
 			-1, -1,
 			3, -1,

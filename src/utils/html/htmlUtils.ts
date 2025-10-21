@@ -1,7 +1,30 @@
+/**
+ * @file htmlUtils.ts
+ * @description Utility functions for HTML object traversal and manipulation
+ * @module html
+ *
+ * Provides utilities for working with HtmlObject trees:
+ * - searchElementWithIdentifier: Find element by identifier with path tracking
+ * - travelHtmlObject: Traverse HTML tree with callback
+ * - htmlCanHaveChild: Check if element can accept children
+ * - htmlHaveChild: Check if element currently has children
+ *
+ * Key features:
+ * - Recursive tree traversal for all HtmlObject types
+ * - InstructionBuilder integration for operation tracking
+ * - Array identifier handling (with "-" suffix support)
+ * - Deep copy for instruction preservation
+ * - Support for block, list, array, text, and html types
+ */
+
 import {HtmlObject} from "./htmlType";
 import {InstructionBuilder} from "../sync/InstructionBuilder";
 import {deepCopy} from "../objectUtils";
 
+/**
+ * Searches for an HTML element by identifier in the object tree
+ * Optionally builds an instruction path to the found element
+ */
 export const searchElementWithIdentifier = (identifier:string, object:HtmlObject, instruction?:InstructionBuilder):HtmlObject|undefined => {
     const _identifier = identifier.includes("-") ? identifier.split("-")[0] : identifier; // remove array identifier addon
     if(object.identifier === _identifier) {
@@ -51,6 +74,10 @@ export const searchElementWithIdentifier = (identifier:string, object:HtmlObject
     return undefined;
 }
 
+/**
+ * Traverses HTML object tree, calling callback for each node
+ * Returns false if callback returns false, stopping traversal
+ */
 export const travelHtmlObject = (object:HtmlObject, callback:(object:HtmlObject) => boolean) : boolean => {
     if(!callback(object)) {
         return false;

@@ -1,3 +1,20 @@
+/**
+ * @file main.tsx
+ * @description Application entry point and root component setup
+ * @module client
+ *
+ * Initializes the React application with context providers:
+ * - Main: Root component with ThemeContext and ProjectContext
+ * - Global styles: Theme CSS and Roboto font imports
+ * - Toast notifications: React hot toast integration
+ * - Context initialization: Sets up theme and project state
+ *
+ * Key features:
+ * - useCreateReducer for state management
+ * - Nested context providers for global state
+ * - React 18 createRoot API
+ * - Error boundary ready
+ */
 
 import "./public/css/theme.css"
 import "@fontsource/roboto";

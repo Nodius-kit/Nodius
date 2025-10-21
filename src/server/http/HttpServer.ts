@@ -1,3 +1,25 @@
+/**
+ * @file HttpServer.ts
+ * @description Lightweight HTTP server with Express-like middleware support
+ * @module server/http
+ *
+ * Custom HTTP server implementation with middleware and routing:
+ * - HttpServer: Main server class with route management
+ * - Middleware: CORS, logging, rate limiting, static file serving
+ * - Routing: Path matching with parameter extraction
+ * - File upload: Multipart form data parsing
+ * - JSON/text body parsing
+ *
+ * Key features:
+ * - Express-like API (use, get, post, put, delete, etc.)
+ * - Built-in middleware (cors, logger, rateLimit, staticFiles)
+ * - Parameter extraction from routes (/api/:id)
+ * - Query string parsing
+ * - File uploads with size limits
+ * - Error handling middleware
+ * - HTTPS support
+ */
+
 import * as http from 'http';
 import * as https from 'https';
 import * as fs from 'fs';

@@ -1,3 +1,23 @@
+/**
+ * @file EditableDiv.tsx
+ * @description Contenteditable div with autocomplete and selection preservation
+ * @module component
+ *
+ * Provides an editable div component with advanced features:
+ * - EditableDiv: Contenteditable with autocomplete support
+ * - Selection preservation: Maintains cursor position during updates
+ * - Auto-completion: Suggests completions based on input
+ * - Numeric prefix handling: Extracts leading numbers for special logic
+ *
+ * Key features:
+ * - Tab completion with visual preview
+ * - Arrow up/down for numeric increment/decrement
+ * - Focus state management
+ * - Debounced onChange callbacks
+ * - Minimal length threshold for completions
+ * - Blur on Enter key
+ */
+
 import React, {CSSProperties, memo, useEffect, useRef, useState} from 'react';
 
 interface EditableDivProps {
