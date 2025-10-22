@@ -104,7 +104,7 @@ export class WebGpuMotor implements GraphicalMotor {
 			alphaMode: "premultiplied",
 		});
 
-		this.minZoom = options?.minZoom ?? 0.5;
+		this.minZoom = options?.minZoom ?? 0.2;
 		this.maxZoom = options?.maxZoom ?? 3;
 
 		this.dpr = options?.devicePixelRatio ?? window.devicePixelRatio ?? 1;
@@ -169,7 +169,8 @@ export class WebGpuMotor implements GraphicalMotor {
 				onDirty: () => this.dirty = true,
 				onPan: (transform) => this.emit("pan", transform),
 				onZoom: (transform) => this.emit("zoom", transform),
-				onUserMove: () => this.cameraAnimator?.setUserHasMovedManually(true)
+				onUserMove: () => this.cameraAnimator?.setUserHasMovedManually(true),
+				onConstrainTransform: () => this.cameraAnimator?.enforceLockedAreaConstraints()
 			}
 		);
 		this.inputHandler.setupMouseEvents();
@@ -586,5 +587,18 @@ export class WebGpuMotor implements GraphicalMotor {
 		onComplete?: () => void;
 	}): void {
 		this.cameraAnimator?.smoothFitToArea(bounds, options);
+	}
+
+	public lockCameraToArea(bounds: {
+		minX: number;
+		minY: number;
+		maxX: number;
+		maxY: number;
+	}): void {
+		this.cameraAnimator?.lockCameraToArea(bounds);
+	}
+
+	public removeCameraAreaLock(): void {
+		this.cameraAnimator?.removeCameraAreaLock();
 	}
 }

@@ -77,7 +77,13 @@
  */
 
 import {useCallback, useContext, useEffect, useMemo, useRef, useState} from "react";
-import {ActionContext, htmlRenderContext, ProjectContext, UpdateHtmlOption} from "./contexts/ProjectContext";
+import {
+    ActionContext, DisabledNodeInteractionType, EditedHtmlType,
+    EditedNodeTypeConfig,
+    htmlRenderContext,
+    ProjectContext,
+    UpdateHtmlOption
+} from "./contexts/ProjectContext";
 import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
 import {Edge, Graph, Node, NodeTypeConfig, NodeTypeEntryType} from "../../utils/graph/graphType";
@@ -99,7 +105,7 @@ import {
     Instruction,
 } from "../../utils/sync/InstructionBuilder";
 import {
-    GraphInstructions,
+    GraphInstructions, nodeConfigInstructions,
     WSApplyInstructionToGraph, WSApplyInstructionToNodeConfig,
     WSBatchCreateElements,
     WSBatchDeleteElements,
@@ -112,6 +118,7 @@ import {deepCopy} from "../../utils/objectUtils";
 import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
 
+export type OpenHtmlEditorFct = (nodeId:string,htmlRender:htmlRenderContext, onClose?: () => void) => void;
 export const useSocketSync = () => {
 
     const Project = useContext(ProjectContext);
@@ -177,6 +184,45 @@ export const useSocketSync = () => {
             value: getHtmlRenderer,
         });
     }, []);
+
+    const openHtmlEditor:OpenHtmlEditorFct = useCallback((nodeId:string,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
+        if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId || !htmlRenderer) return;
+        if(! Array.isArray(htmlRenderer.pathOfRender) ) {
+            console.error("Can't edit html that is not stored in a node");
+            return;
+        }
+        Project.dispatch({
+            field: "onCloseEditor",
+            value: onClose,
+        });
+        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+
+        let object = node as any;
+        for (const path of htmlRenderer.pathOfRender) {
+            object = object[path];
+        }
+
+        if(node && object) {
+            const newEditedHtml:EditedHtmlType = {
+                targetType: "node",
+                target: node,
+                html: object,
+                htmlRender: htmlRenderer.htmlMotor,
+                pathOfRender: htmlRenderer.pathOfRender,
+
+            }
+            Project.dispatch({
+                field: "editedHtml",
+                value: newEditedHtml
+            });
+        }
+    }, [Project.state.graph, Project.state.selectedSheetId]);
+    useEffect(() => {
+        Project.dispatch({
+            field: "openHtmlEditor",
+            value: openHtmlEditor,
+        })
+    }, [openHtmlEditor]);
     /* ----------------------------------------------------------------------------------------------------------- */
 
     /* ---------------------------- REQUEST A SERVER CONNECTION BASED ON GRAPH UNIQUE KEY ------------------------- */
@@ -349,6 +395,10 @@ export const useSocketSync = () => {
         }
 
 
+        Project.dispatch({
+            field: "disabledNodeInteraction",
+            value: {}
+        });
         Project.dispatch(({
             field: "selectedSheetId",
             value: selectedSheetId,
@@ -554,14 +604,37 @@ export const useSocketSync = () => {
             value: graph as Graph
         });
 
+        Project.dispatch({
+            field: "editedNodeConfig",
+            value: {
+                node: baseNode,
+                config: nodeConfig
+            } as EditedNodeTypeConfig
+        });
+
+        const disabled:DisabledNodeInteractionType = {};
+        disabled[baseNode._key] = {};
+        disabled[baseNode._key].moving = true;
+
+        Project.dispatch({
+            field: "disabledNodeInteraction",
+            value: disabled
+        });
+
         gpuMotor.current.setScene({
             nodes: graph.sheets[selectedSheetId].nodeMap,
             edges: graph.sheets[selectedSheetId].edgeMap
         });
 
-        gpuMotor.current.enableInteractive(false);
+        const padding = 100;
+        gpuMotor.current.lockCameraToArea({
+            minX: baseNode.posX - padding,
+            minY: baseNode.posY - padding,
+            maxX: baseNode.posX + baseNode.size.width + padding,
+            maxY: baseNode.posY + baseNode.size.height + padding,
+        })
         gpuMotor.current.smoothFitToNode(baseNode._key, {
-            padding: 100
+            padding: padding
         });
 
         setActiveWindow(1);
@@ -743,23 +816,24 @@ export const useSocketSync = () => {
                     nodeAlreadyCheck.push(instruction.nodeId);
 
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
-                    if(Project.state.editedHtml && instruction.nodeId === Project.state.editedHtml.node._key) {
+                    if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && instruction.nodeId === Project.state.editedHtml.target._key) {
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
                         let objectHtml: any = newNode;
                         Project.state.editedHtml.pathOfRender.forEach((path) => {
                             objectHtml = objectHtml[path];
                         });
-                        Project.state.editedHtml.html.object = objectHtml;
-                        Project.state.editedHtml.node = newNode;
+                        Project.state.editedHtml.html = objectHtml;
+                        Project.state.editedHtml.target = newNode;
                         Project.dispatch({
                             field: "editedHtml",
                             value: {...Project.state.editedHtml}
                         });
                         if(!instruction.noRedraw) {
-                            await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html.object);
+                            await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                         }
 
-                    } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
+                    }
+                    if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
                         const renderers = htmlRenderer.current[instruction.nodeId];
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
                         for(const [key, renderer] of Object.entries(renderers)) {
@@ -844,31 +918,136 @@ export const useSocketSync = () => {
             field: "updateGraph",
             value: updateGraph
         });
-    }, [updateGraph])
+    }, [updateGraph]);
 
-    const updateHtml = useCallback(async (instructionHtml:Instruction, options?:UpdateHtmlOption): Promise<ActionContext> => {
-        if(!Project.state.editedHtml) return {
-            timeTaken: 0,
-            reason: "No current edited HTML",
-            status: false,
-        };
+    const applyNodeConfigInstructions= useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+        if(!Project.state.editedNodeConfig) return;
+        let nodeConfig = deepCopy(Project.state.editedNodeConfig.config);
 
-        const instruction = deepCopy(instructionHtml);
+        let redrawGraph = false;
+        for(const instruction of instructions) {
+            const newNodeConfig = applyInstruction(nodeConfig, instruction.i, (objectBeingApplied) => {
+                const currentGraphInstrution = instruction;
+                if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+                    const object:HtmlObject = objectBeingApplied;
+                    if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
+                        console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
+                        return false;
+                    }
+                    return true;
+                }
+                return true;
+            });
+            if(newNodeConfig.success) {
+                nodeConfig = newNodeConfig.value;
+            }else {
+                return newNodeConfig.error ?? "Unknown error"
+            }
 
-        if(instruction.p) {
-            instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
+            if(!instruction.noRedraw) {
+                redrawGraph = true;
+            }
         }
 
-        return await updateGraph([
-            {
-                i: instruction,
-                nodeId: Project.state.editedHtml.node._key,
-                applyUniqIdentifier: "identifier",
-                targetedIdentifier: options?.targetedIdentifier,
-                noRedraw: options?.noRedraw
+
+
+        if(redrawGraph) {
+            gpuMotor.current!.requestRedraw();
+        }
+
+    }, [Project.state.editedNodeConfig, Project.state.editedHtml]);
+
+    const updateNodeConfig = useCallback(async (instructions:Array<nodeConfigInstructions>): Promise<ActionContext> => {
+        const start = Date.now();
+        const message:WSMessage<WSApplyInstructionToNodeConfig> = {
+            type: "applyInstructionToNodeConfig",
+            instructions: instructions
+        }
+        const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToNodeConfig>;
+
+        if(response && response._response) {
+            if(response._response.status) {
+                const output = await applyNodeConfigInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
+                if(output) {
+                    return {
+                        reason: output,
+                        timeTaken: Date.now() - start,
+                        status: false
+                    }
+                } else {
+                    return {
+                        timeTaken: Date.now() - start,
+                        status: true
+                    }
+                }
+            } else {
+                console.error("Unknow server error while sending WS message:", message," | server output:",response);
+                return {
+                    timeTaken: Date.now() - start,
+                    reason: "Unknow server error while sending WS message:"+JSON.stringify(message)+" | server output:"+JSON.stringify(response),
+                    status: false,
+                }
             }
-        ]);
-    }, [Project.state.editedHtml, sendMessage, Project.state.selectedSheetId, Project.state.graph, updateGraph]);
+        } else {
+            console.error("Unknow client error while sending WS message:", message);
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Unknow client error while sending WS message:"+ JSON.stringify(message),
+                status: false,
+            }
+        }
+
+
+
+    }, [Project.state.editedNodeConfig]);
+    useEffect(() => {
+        Project.dispatch({
+            field: "updateNodeConfig",
+            value: updateNodeConfig
+        })
+    }, [updateNodeConfig])
+
+    const updateHtml = useCallback(async (instructionHtml:Instruction, options?:UpdateHtmlOption): Promise<ActionContext> => {
+        const instruction = deepCopy(instructionHtml);
+
+        if(
+            Project.state.editedNodeConfig && Project.state.editedHtml?.targetType === "NodeTypeConfig"
+        ) {
+            if (instruction.p) {
+                instruction.p = ["content", ...instruction.p];
+            }
+
+            return await updateNodeConfig([
+                {
+                    i: instruction,
+                    applyUniqIdentifier: "identifier",
+                    targetedIdentifier: options?.targetedIdentifier,
+                    noRedraw: options?.noRedraw,
+                }
+            ]);
+        } else if(Project.state.editedHtml?.targetType === "node") {
+
+            if (instruction.p) {
+                instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
+            }
+
+            return await updateGraph([
+                {
+                    i: instruction,
+                    nodeId: Project.state.editedHtml.target._key,
+                    applyUniqIdentifier: "identifier",
+                    targetedIdentifier: options?.targetedIdentifier,
+                    noRedraw: options?.noRedraw
+                }
+            ]);
+        } else {
+            return {
+                timeTaken: 0,
+                reason: "No current edited HTML",
+                status: false,
+            };
+        }
+    }, [Project.state.editedHtml, sendMessage, Project.state.selectedSheetId, Project.state.graph, updateGraph, updateNodeConfig]);
 
     useEffect(() => {
         Project.dispatch({

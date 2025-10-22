@@ -34,8 +34,9 @@ import {
 import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
 import {HtmlRender, HtmlRenderOption} from "../../../process/html/HtmlRender";
 import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
-import {GraphInstructions, WSMessage} from "../../../utils/sync/wsObject";
+import {GraphInstructions, nodeConfigInstructions, WSMessage} from "../../../utils/sync/wsObject";
 import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
+import {OpenHtmlEditorFct} from "../useSocketSync";
 
 export interface ProjectContextProps {
     state: ProjectContextType;
@@ -44,7 +45,22 @@ export interface ProjectContextProps {
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 
-export type EditedHtmlType = {node:Node<any>, html:HtmlClass, htmlRender:HtmlRender, pathOfRender:string[]}|undefined
+export type EditedHtmlType =
+    | {
+    targetType: "node";
+    target: Node<any>;
+    html: HtmlObject;
+    htmlRender: HtmlRender;
+    pathOfRender: string[];
+}
+    | {
+    targetType: "NodeTypeConfig";
+    target: NodeTypeConfig;
+    html: HtmlObject;
+    htmlRender: HtmlRender;
+    pathOfRender: string[];
+}
+    | undefined;
 export type EditedNodeTypeConfig = {node:Node<any>, config:NodeTypeConfig}|undefined;
 
 export interface ActionContext {
@@ -63,6 +79,10 @@ export interface htmlRenderContext {
     nodeId:string,
 }
 
+export type DisabledNodeInteractionType = Record<string, Partial<{
+    moving: boolean,
+}>>;
+
 export interface ProjectContextType {
     loader: {
         active: boolean;
@@ -73,12 +93,15 @@ export interface ProjectContextType {
     //html?:HtmlClass,
     editedHtml?: EditedHtmlType,
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
+    onCloseEditor?:() => void,
+    openHtmlEditor?:OpenHtmlEditorFct,
 
     editedNodeConfig?: EditedNodeTypeConfig,
     openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
 
     updateHtml?:(instruction:Instruction, options?:UpdateHtmlOption) => Promise<ActionContext>,
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
+    updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 
     initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>,
     getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,
@@ -100,6 +123,8 @@ export interface ProjectContextType {
 
     caughtUpMessage?: WSMessage<any>[] // used to caught up missing message while connecting
 
+    disabledNodeInteraction: DisabledNodeInteractionType
+
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     loader: {
@@ -110,5 +135,6 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     nodeTypeConfig: {
         "html": NodeTypeHtmlConfig,
         "entryType": NodeTypeEntryTypeConfig
-    }
+    },
+    disabledNodeInteraction: {}
 }

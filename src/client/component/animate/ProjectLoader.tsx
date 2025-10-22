@@ -26,7 +26,8 @@ import {HtmlRender} from "../../../process/html/HtmlRender";
 // Animated SVG wave for loading indicator
 const object:HtmlObject = {
     tag: "div",
-    css: {},
+    name:"loader",
+    css: [],
     identifier: "0",
     type: "html",
     content: `

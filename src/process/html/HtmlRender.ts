@@ -46,7 +46,7 @@ export interface HtmlRenderOption {
     buildingMode?: boolean,
     language?: string,
     noFirstRender?: boolean,
-};
+}
 
 
 export type AsyncFunctionConstructor = new (...args: string[]) => (...args: any[]) => Promise<any>;

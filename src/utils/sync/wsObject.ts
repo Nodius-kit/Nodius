@@ -56,7 +56,7 @@ export interface GraphInstructions {
     noRedraw?: boolean, // don't trigger a re render
     animatePos?:boolean, // animate pos change
 
-    // don't apply instruction to the graph after sending it to the server, should be only used when working on non logic data (like node position)
+    // don't apply instruction to the graph after sending it to the server, should be only used when working on non logic data rapidly (like node position or size)
     dontApplyToMySelf?:boolean
 }
 
@@ -66,6 +66,9 @@ export interface nodeConfigInstructions {
     targetedIdentifier?:string, // security check
     noRedraw?: boolean,
     animatePos?:boolean,
+
+    // don't apply instruction to the graph after sending it to the server, should be only used when working on non logic data rapidly (like node position or size)
+    dontApplyToMySelf?:boolean
 }
 
 export interface WSRegisterUserOnGraph {

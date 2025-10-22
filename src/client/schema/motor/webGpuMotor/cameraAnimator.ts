@@ -33,6 +33,16 @@ interface FitOperation {
 	};
 }
 
+/**
+ * Stores the locked area bounds that the camera cannot escape
+ */
+interface LockedArea {
+	minX: number;
+	minY: number;
+	maxX: number;
+	maxY: number;
+}
+
 export class CameraAnimator {
 	private canvas: HTMLCanvasElement;
 	private transform: ViewTransform;
@@ -42,6 +52,7 @@ export class CameraAnimator {
 	private lastFitOperation: FitOperation | null = null;
 	private userHasMovedManually: boolean = false;
 	private interactiveEnabled: boolean = true;
+	private lockedArea: LockedArea | null = null;
 	private onDirty: () => void;
 	private onPan: (transform: ViewTransform) => void;
 	private onZoom: (transform: ViewTransform) => void;
@@ -74,6 +85,7 @@ export class CameraAnimator {
 		this.userHasMovedManually = moved;
 	}
 
+
 	public smoothTransitionTo(options: {
 		x: number;
 		y: number;
@@ -102,7 +114,19 @@ export class CameraAnimator {
 		const startTranslateY = this.transform.translateY;
 
 		// Store target values, clamped to valid zoom range
-		const targetScale = Math.max(this.minZoom, Math.min(this.maxZoom, options.zoom));
+		let targetScale = Math.max(this.minZoom, Math.min(this.maxZoom, options.zoom));
+
+		// Apply locked area constraints to target zoom if area is locked
+		if (this.lockedArea) {
+			const area = this.lockedArea;
+			const areaWidth = area.maxX - area.minX;
+			const areaHeight = area.maxY - area.minY;
+			const minZoomX = this.canvas.width / areaWidth;
+			const minZoomY = this.canvas.height / areaHeight;
+			const minAllowedZoom = Math.min(minZoomX, minZoomY);
+			const clampedMinZoom = Math.max(this.minZoom, minAllowedZoom);
+			targetScale = Math.max(clampedMinZoom, targetScale);
+		}
 
 		// Calculate what the translate values should be to center on the target point
 		// Use the clamped targetScale instead of options.zoom for accurate positioning
@@ -120,6 +144,11 @@ export class CameraAnimator {
 			this.transform.scale = startScale + (targetScale - startScale) * easedProgress;
 			this.transform.translateX = startTranslateX + (targetTranslateX - startTranslateX) * easedProgress;
 			this.transform.translateY = startTranslateY + (targetTranslateY - startTranslateY) * easedProgress;
+
+			// Enforce locked area constraints during animation
+			if (this.lockedArea) {
+				this.enforceLockedAreaConstraints();
+			}
 
 			this.onDirty();
 
@@ -237,6 +266,11 @@ export class CameraAnimator {
 	}
 
 	public reapplyFitIfNeeded(scene: MotorScene | undefined): void {
+		// Handle locked area resize adjustments
+		if (this.lockedArea && !this.interactiveEnabled) {
+			this.enforceLockedAreaConstraints();
+		}
+
 		// Check if all conditions are met to re-apply the fit
 		if (!this.interactiveEnabled &&
 			this.lastFitOperation &&
@@ -274,5 +308,98 @@ export class CameraAnimator {
 				this.userHasMovedManually = savedUserMoved;
 			}
 		}
+	}
+
+	/**
+	 * Lock the camera to a specific area. The camera cannot zoom out beyond
+	 * this area or pan outside of it, but can zoom in and move within it.
+	 *
+	 * When interactive is disabled, the camera will automatically adjust
+	 * to maintain the locked area constraints when the screen is resized.
+	 *
+	 * @param bounds - The area boundaries in world coordinates
+	 */
+	public lockCameraToArea(bounds: {
+		minX: number;
+		minY: number;
+		maxX: number;
+		maxY: number;
+	}): void {
+		this.lockedArea = { ...bounds };
+		// Immediately apply constraints
+		this.enforceLockedAreaConstraints();
+	}
+
+	/**
+	 * Remove the camera area lock, allowing free movement and zoom again.
+	 */
+	public removeCameraAreaLock(): void {
+		this.lockedArea = null;
+	}
+
+	/**
+	 * Enforce the locked area constraints on the current camera position.
+	 * This ensures the camera cannot see outside the locked area.
+	 */
+	public enforceLockedAreaConstraints(): void {
+		if (!this.lockedArea) return;
+
+		const area = this.lockedArea;
+		const areaWidth = area.maxX - area.minX;
+		const areaHeight = area.maxY - area.minY;
+
+		const canvasWidth = this.canvas.width;
+		const canvasHeight = this.canvas.height;
+
+		// Calculate the minimum zoom level where the entire area fits in the view
+		const minZoomX = canvasWidth / areaWidth;
+		const minZoomY = canvasHeight / areaHeight;
+		const minAllowedZoom = Math.min(minZoomX, minZoomY);
+
+		// Clamp zoom to not zoom out beyond showing the entire area
+		const clampedMinZoom = Math.max(this.minZoom, minAllowedZoom);
+		if (this.transform.scale < clampedMinZoom) {
+			this.transform.scale = clampedMinZoom;
+		}
+
+		// Calculate the visible world bounds at current zoom
+		const visibleWorldWidth = canvasWidth / this.transform.scale;
+		const visibleWorldHeight = canvasHeight / this.transform.scale;
+
+		// Calculate the camera center in world coordinates
+		const cameraCenterX = (canvasWidth / 2 - this.transform.translateX) / this.transform.scale;
+		const cameraCenterY = (canvasHeight / 2 - this.transform.translateY) / this.transform.scale;
+
+		// Calculate allowed center bounds (ensuring view stays within area)
+		const minCenterX = area.minX + visibleWorldWidth / 2;
+		const maxCenterX = area.maxX - visibleWorldWidth / 2;
+		const minCenterY = area.minY + visibleWorldHeight / 2;
+		const maxCenterY = area.maxY - visibleWorldHeight / 2;
+
+		// Clamp camera center
+		let clampedCenterX = cameraCenterX;
+		let clampedCenterY = cameraCenterY;
+
+		// If the visible area is larger than the locked area in X, center it
+		if (visibleWorldWidth >= areaWidth) {
+			clampedCenterX = (area.minX + area.maxX) / 2;
+		} else {
+			clampedCenterX = Math.max(minCenterX, Math.min(maxCenterX, cameraCenterX));
+		}
+
+		// If the visible area is larger than the locked area in Y, center it
+		if (visibleWorldHeight >= areaHeight) {
+			clampedCenterY = (area.minY + area.maxY) / 2;
+		} else {
+			clampedCenterY = Math.max(minCenterY, Math.min(maxCenterY, cameraCenterY));
+		}
+
+		// Convert back to translate values
+		this.transform.translateX = canvasWidth / 2 - clampedCenterX * this.transform.scale;
+		this.transform.translateY = canvasHeight / 2 - clampedCenterY * this.transform.scale;
+
+		this.onDirty();
+		this.onZoom(this.transform);
+		this.onPan(this.transform);
 	}
 }

@@ -27,20 +27,17 @@ import {Node} from "../../utils/graph/graphType";
 import {disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
 import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
 import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
-import {OpenHtmlEditorFct} from "../App";
 import {InstructionBuilder} from "../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../utils/sync/wsObject";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
     onCanvasClick: (evt:React.MouseEvent) => void,
-    openHtmlEditor: OpenHtmlEditorFct,
     onNodeEnter?: (node: Node<any>) => void,
     onNodeLeave?: (node: Node<any>|undefined, nodeId:string) => void,
 }
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
-    openHtmlEditor,
     onNodeEnter,
     onNodeLeave,
     onCanvasClick
@@ -215,7 +212,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     const currentNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(node!._key);
                     if(!currentNode) return;
 
-                    if(!gpuMotor.current!.isInteractive()) {
+                    if(!gpuMotor.current!.isInteractive() || Project.state.disabledNodeInteraction[node._key]?.moving) {
                         return;
                     }
 
@@ -242,30 +239,62 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     gpuMotor.current!.enableInteractive(false);
 
                     let animationFrame:number|undefined;
+                    let saveInProgress = false;
+                    let pendingSave: { node: Node<any>, oldPosX: number, oldPosY: number } | null = null;
 
                     disableTextSelection();
 
-                    const saveNodePosition = (currentNode:Node<any>) => {
-                        const insts:Array<GraphInstructions> = [];
-                        const instructionsX = new InstructionBuilder();
-                        const instructionsY = new InstructionBuilder();
-                        instructionsX.key("posX").set(currentNode.posX);
-                        instructionsY.key("posY").set(currentNode.posY);
+                    const saveNodePosition = async (currentNode:Node<any>) => {
+                        const oldPosX = currentNode.posX;
+                        const oldPosY = currentNode.posY;
 
-                        insts.push({
-                            i: instructionsX.instruction,
-                            nodeId: currentNode._key,
-                            animatePos: true,
-                            dontApplyToMySelf: true,
-                        },
-                        {
-                            i: instructionsY.instruction,
-                            nodeId: currentNode._key,
-                            animatePos: true,
-                            dontApplyToMySelf: true,
-                        });
-                        Project.state.updateGraph!(insts);
-                        lastSaveTime = Date.now();
+                        // If a save is already in progress, queue this one (replacing any existing pending save)
+                        if (saveInProgress) {
+                            pendingSave = { node: currentNode, oldPosX, oldPosY };
+                            return;
+                        }
+
+                        saveInProgress = true;
+
+
+                            const insts:Array<GraphInstructions> = [];
+                            const instructionsX = new InstructionBuilder();
+                            const instructionsY = new InstructionBuilder();
+                            instructionsX.key("posX").set(currentNode.posX);
+                            instructionsY.key("posY").set(currentNode.posY);
+
+                            insts.push({
+                                i: instructionsX.instruction,
+                                nodeId: currentNode._key,
+                                animatePos: true,
+                                dontApplyToMySelf: true,
+                            },
+                            {
+                                i: instructionsY.instruction,
+                                nodeId: currentNode._key,
+                                animatePos: true,
+                                dontApplyToMySelf: true,
+                            });
+                            const output = await Project.state.updateGraph!(insts);
+                            if(!output.status) {
+                                // If save failed, restore old position
+                                currentNode.posX = oldPosX;
+                                currentNode.posY = oldPosY;
+                                gpuMotor.current!.requestRedraw();
+                                requestUpdateOverlay();
+                                console.error("Failed to save node position:", output.reason);
+                            }
+                            lastSaveTime = Date.now();
+
+                            saveInProgress = false;
+
+                            // If there's a pending save, process it now
+                            if (pendingSave) {
+                                const { node } = pendingSave;
+                                pendingSave = null;
+                                saveNodePosition(node);
+                            }
+
                     }
 
                     const mouseMove = (evt:MouseEvent) => {
@@ -382,7 +411,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                                         event,
                                         gpuMotor.current,
                                         currentNode,
-                                        openHtmlEditor,
+                                        Project.state.openHtmlEditor,
                                         Project.state.getHtmlRenderer,
                                         Project.state.initiateNewHtmlRenderer,
                                         Project.state.getHtmlAllRenderer,
@@ -622,7 +651,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     }, [
         gpuMotor.current,
-        openHtmlEditor,
+        Project.state.openHtmlEditor,
         onNodeEnter,
         onNodeLeave,
         Project.state.nodeTypeConfig,
@@ -633,6 +662,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.currentEntryDataType,
         Project.state.enumTypes,
         Project.state.dataTypes,
+        Project.state.disabledNodeInteraction
     ]);
 
     const onDoubleClick = () => {

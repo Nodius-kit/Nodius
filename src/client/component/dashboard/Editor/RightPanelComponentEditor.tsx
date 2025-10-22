@@ -60,7 +60,7 @@ export const RightPanelComponentEditor = memo(({
     const currentCss:EditableCss|undefined = useMemo(() => {
         if(selectedIdentifier && Project.state.editedHtml) {
             const instruction = new InstructionBuilder();
-            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html.object, instruction);
+            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
             if(object) {
                 return {
                     css:object.css ?? [],

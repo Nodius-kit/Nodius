@@ -172,7 +172,7 @@ export const LeftPanelComponentEditor = memo(({
             const currentIdentifier = hoverElement?.getAttribute("data-identifier");
 
             let instruction = new InstructionBuilder();
-            let object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, editedHtmlRef.current.html.object, instruction) : undefined;
+            let object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, editedHtmlRef.current.html, instruction) : undefined;
 
             const removeLastInstruction = async (noRedraw?:boolean) => {
                 if (lastInstruction) {
@@ -186,8 +186,8 @@ export const LeftPanelComponentEditor = memo(({
                         noRedraw: noRedraw
                     });
 
-                    const newHtmlObject = deepCopy(editedHtmlRef.current!.html.object);
-                    if(applyInstruction(deepCopy(editedHtmlRef.current!.html.object), lastInstruction.instruction)) {
+                    const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
+                    if(applyInstruction(deepCopy(editedHtmlRef.current!.html), lastInstruction.instruction)) {
                         instruction = new InstructionBuilder();
                         object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, newHtmlObject, instruction) : undefined;
                     }

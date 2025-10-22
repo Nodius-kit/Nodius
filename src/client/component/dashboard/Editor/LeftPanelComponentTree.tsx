@@ -122,7 +122,7 @@ export const LeftPaneComponentTree = memo(({
         if(!showComponentCard) return false;
 
         let instruction = new InstructionBuilder();
-        let object = searchElementWithIdentifier(showComponentCard.identifier, Project.state.editedHtml.html.object, instruction);
+        let object = searchElementWithIdentifier(showComponentCard.identifier, Project.state.editedHtml.html, instruction);
 
         let output:ActionContext|undefined = undefined;
         if(object) {
@@ -157,7 +157,7 @@ export const LeftPaneComponentTree = memo(({
             }
         };
         if (Project.state.editedHtml) {
-            traverse(Project.state.editedHtml.html.object, undefined);
+            traverse(Project.state.editedHtml.html, undefined);
         }
         return nodes.filter((node) => !node.isHidden); // Only visible nodes
     }, [Project.state.editedHtml, hidedIdentifier]);
@@ -399,10 +399,10 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                 }
 
                 const instructionTo = new InstructionBuilder(); // get path of the destinated object
-                let objectTo = searchElementWithIdentifier(identifier, Project.state.editedHtml.html.object, instructionTo);
+                let objectTo = searchElementWithIdentifier(identifier, Project.state.editedHtml.html, instructionTo);
 
                 const instructionFrom = new InstructionBuilder(); // get path of the current object
-                let objectFrom = searchElementWithIdentifier(object.identifier, Project.state.editedHtml.html.object, instructionFrom);
+                let objectFrom = searchElementWithIdentifier(object.identifier, Project.state.editedHtml.html, instructionFrom);
 
                 let output:ActionContext|undefined = undefined;
 

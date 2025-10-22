@@ -32,7 +32,6 @@ import {documentHaveActiveElement} from "../utils/objectUtils";
 import {getInverseInstruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 
-export type OpenHtmlEditorFct = (nodeId:string,htmlRender:htmlRenderContext, onClose?: () => void) => void;
 
 export const App = () => {
 
@@ -45,45 +44,15 @@ export const App = () => {
         resetState
     } = useSocketSync();
 
-
-    const onCloseEditor = useRef<() => void>(undefined);
-    const openHtmlEditor:OpenHtmlEditorFct = useCallback((nodeId:string,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
-        if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId || !htmlRenderer) return;
-        if(! Array.isArray(htmlRenderer.pathOfRender)) {
-            console.error("Can't edit html that is not stored in a node");
-            return;
-        }
-        onCloseEditor.current = onClose;
-        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
-
-        let object = node as any;
-        for(const path of htmlRenderer.pathOfRender) {
-            object = object[path];
-        }
-
-        if(node && node.type === "html" && object) {
-            const newEditedHtml:EditedHtmlType = {
-                node: node,
-                html: object,
-                htmlRender: htmlRenderer.htmlMotor,
-                pathOfRender: htmlRenderer.pathOfRender,
-            }
-            Project.dispatch({
-                field: "editedHtml",
-                value: newEditedHtml
-            });
-        }
-    }, [Project.state.graph, Project.state.selectedSheetId]);
-
     const onNodeLeave = useCallback((node:Node<any>|undefined, nodeId:string) => {
         if(!Project.state.graph || !Project.state.selectedSheetId) return;
         if(node) {
-            if (node._key === Project.state.editedHtml?.node._key) {
+            if (Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && node._key === Project.state.editedHtml?.target._key) {
                 Project.dispatch({
                     field: "editedHtml",
                     value: undefined
                 });
-                onCloseEditor.current?.();
+                Project.state.onCloseEditor?.();
             }
 
             const nodeConfig = Project.state.nodeTypeConfig[node.type];
@@ -101,15 +70,22 @@ export const App = () => {
             }
         } else {
             // node deleted
-            if(Project.state.editedHtml?.node._key === nodeId) {
+            if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && nodeId === Project.state.editedHtml?.target._key) {
                 Project.dispatch({
                     field: "editedHtml",
                     value: undefined
                 });
-                onCloseEditor.current?.();
+                Project.state.onCloseEditor?.();
             }
         }
-    }, [Project.state.editedHtml, Project.state.getHtmlRenderer, Project.state.graph, Project.state.selectedSheetId]);
+    }, [
+        Project.state.editedHtml,
+        Project.state.getHtmlRenderer,
+        Project.state.graph,
+        Project.state.selectedSheetId,
+        Project.state.openHtmlEditor,
+        Project.state.onCloseEditor
+    ]);
 
     const onNodeEnter = useCallback((node:Node<any>) => {
         const nodeEnterEvent = new CustomEvent("nodeEnter", {
@@ -128,9 +104,9 @@ export const App = () => {
                 field: "editedHtml",
                 value: undefined
             });
-            onCloseEditor.current?.();
+            Project.state.onCloseEditor?.();
         }
-    }, [Project.state.editedHtml]);
+    }, [Project.state.editedHtml, Project.state.onCloseEditor]);
 
     const onCanvasClick = useCallback(() => {
         if(Project.state.editedHtml) {
@@ -163,19 +139,19 @@ export const App = () => {
                     if(copiedObject && selectedObject) {
 
                         const instruction = new InstructionBuilder();
-                        let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.html.object, instruction);
+                        let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.html, instruction);
                         if(pathToSelected) {
                             if(selectedObject.type === "block" && selectedObject.content === undefined) {
                                 instruction.key("content").set(copiedObject);
 
-                                const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html.object, instruction.instruction);
+                                const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html, instruction.instruction);
                                 // used later for CTRL + Z / CTRL + Y
 
                                 await Project.state.updateHtml(instruction.instruction);
                             } else if(selectedObject.type === "list"){
                                 instruction.key("content").arrayAdd(copiedObject);
 
-                                const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html.object, instruction.instruction);
+                                const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html, instruction.instruction);
                                 // used later for CTRL + Z / CTRL + Y
 
                                 await Project.state.updateHtml(instruction.instruction);
@@ -189,10 +165,10 @@ export const App = () => {
                     const selectedObject = Project.state.editedHtml.htmlRender.getSelectedObject();
                     if (selectedObject && selectedObject.identifier !== "root") {
                         const instruction = new InstructionBuilder();
-                        let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.html.object, instruction);
+                        let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.html, instruction);
                         if (pathToSelected) {
                             instruction.remove();
-                            const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html.object, instruction.instruction);
+                            const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html, instruction.instruction);
                             // used later for CTRL + Z / CTRL + Y
 
                             await Project.state.updateHtml(instruction.instruction);
@@ -218,7 +194,6 @@ export const App = () => {
             <SchemaDisplay
                 ref={gpuMotor}
                 onExitCanvas={onExitCanvas}
-                openHtmlEditor={openHtmlEditor}
                 onNodeLeave={onNodeLeave}
                 onNodeEnter={onNodeEnter}
                 onCanvasClick={onCanvasClick}

@@ -36,6 +36,7 @@ export class InputHandler {
 	private onPan: (transform: ViewTransform) => void;
 	private onZoom: (transform: ViewTransform) => void;
 	private onUserMove: () => void;
+	private onConstrainTransform?: () => void;
 
 	constructor(
 		canvas: HTMLCanvasElement,
@@ -48,6 +49,7 @@ export class InputHandler {
 			onPan: (transform: ViewTransform) => void;
 			onZoom: (transform: ViewTransform) => void;
 			onUserMove: () => void;
+			onConstrainTransform?: () => void;
 		}
 	) {
 		this.canvas = canvas;
@@ -59,6 +61,7 @@ export class InputHandler {
 		this.onPan = callbacks.onPan;
 		this.onZoom = callbacks.onZoom;
 		this.onUserMove = callbacks.onUserMove;
+		this.onConstrainTransform = callbacks.onConstrainTransform;
 	}
 
 	public setInteractiveEnabled(enabled: boolean): void {
@@ -88,6 +91,7 @@ export class InputHandler {
 				this.transform.translateY += dy;
 				this.lastMouseX = e.clientX;
 				this.lastMouseY = e.clientY;
+				this.onConstrainTransform?.();
 				this.onDirty();
 				this.onPan(this.transform);
 			}
@@ -115,6 +119,7 @@ export class InputHandler {
 			this.transform.translateX = mouseX - wx * newScale;
 			this.transform.translateY = mouseY - wy * newScale;
 			this.transform.scale = newScale;
+			this.onConstrainTransform?.();
 			this.onUserMove();
 			this.onDirty();
 			this.onZoom(this.transform);

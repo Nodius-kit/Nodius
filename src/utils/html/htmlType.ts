@@ -80,6 +80,7 @@ export interface HtmlInner extends HtmlBase {
     type: "html",
     content: string,
 }
+
 export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray;
 export interface HtmlClass {
     htmlNodeKey: string;

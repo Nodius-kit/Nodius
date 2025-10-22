@@ -39,6 +39,7 @@ interface iconActionListType {
         onClick: () => void;
         selected: boolean;
         disabled: boolean;
+        hided?:boolean;
     }>
 }
 
@@ -123,7 +124,8 @@ export const LeftPaneMenu = memo((
                         setEditingPanel(editingPanel === "entryData" ? "" : "entryData");
                     },
                     selected: editingPanel === "entryData",
-                    disabled: false
+                    disabled: false,
+                    hided: Project.state.editedNodeConfig != undefined
                 },
                 {
                     icon: <Binary width={iconSize} height={iconSize}/>,
@@ -143,7 +145,7 @@ export const LeftPaneMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml]);
+    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>
@@ -157,7 +159,7 @@ export const LeftPaneMenu = memo((
                         {category.actions.map((action, i2) => (
                             <div
                                 key={i2}
-                                style={{padding: (iconGap/2)+"px"}}
+                                style={{padding: (iconGap/2)+"px", display: action.hided ? "none" : "initial"}}
                                 className={`${iconButtonClass} ${action.selected ? "selected" : ""} ${action.disabled ? "disabled" : ""}`}
                                 onClick={action.disabled ? undefined : action.onClick}
                             >
