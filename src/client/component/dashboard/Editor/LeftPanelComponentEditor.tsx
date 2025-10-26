@@ -148,10 +148,15 @@ export const LeftPanelComponentEditor = memo(({
 
         animationId = requestAnimationFrame(whileSwingAnimation);
 
-        let lastObjectHover:HtmlObject|undefined;
-        let lastInstruction:InstructionBuilder|undefined;
+        let lastTemporaryElement:{object:HtmlObject, instruction:Instruction}|undefined;
+
+        let moveWorking = false; // avoiding overlap
 
         const mouseMove = async (event: MouseEvent) => {
+            if(!Project.state.graph || !Project.state.selectedSheetId) {
+                return;
+            }
+
             if(!haveMoved) {
                 document.body.appendChild(overlayContainer);
                 haveMoved = true;
@@ -164,129 +169,132 @@ export const LeftPanelComponentEditor = memo(({
 
             velocityXAdd += velocityX;
 
+            if(!editedHtmlRef.current) {
+                return;
+            }
+            if(moveWorking) return;
+            moveWorking = true;
+
             const hoverElements = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
             const hoverElement = hoverElements.find((el) => el.getAttribute("data-identifier") != undefined);
 
-            if (!editedHtmlRef.current) return;
-
-            const currentIdentifier = hoverElement?.getAttribute("data-identifier");
-
-            let instruction = new InstructionBuilder();
-            let object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, editedHtmlRef.current.html, instruction) : undefined;
-
-            const removeLastInstruction = async (noRedraw?:boolean) => {
-                if (lastInstruction) {
-                    if(lastInstruction.instruction.o === OpType.ARR_INS) {
-                        lastInstruction.instruction.o = OpType.ARR_REM_IDX;
+            const removeInstruction =  (baseInstruction: Instruction) : Instruction =>  {
+                    const instruction = new InstructionBuilder();
+                    instruction.instruction = deepCopy(baseInstruction);
+                    if(instruction.instruction.o === OpType.ARR_INS) {
+                        instruction.instruction.o = OpType.ARR_REM_IDX;
                     } else {
-                        lastInstruction.remove();
+                        instruction.remove();
                     }
-                    lastInstruction.instruction.v = undefined;
-                    await updateHtmlRef.current!(lastInstruction.instruction, {
-                        noRedraw: noRedraw
-                    });
-
-                    const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
-                    if(applyInstruction(deepCopy(editedHtmlRef.current!.html), lastInstruction.instruction)) {
-                        instruction = new InstructionBuilder();
-                        object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, newHtmlObject, instruction) : undefined;
-                    }
-
-                    lastInstruction = undefined;
-                    lastObjectHover = undefined;
-                }
+                    instruction.instruction.v = undefined;
+                    return instruction.instruction;
             };
 
-
-            if (!object) {
-                await removeLastInstruction();
-                return;
-            }
-            if(object.temporary) {
-                return;
+            const removeLastElement = async () => {
+                const instruction = removeInstruction(lastTemporaryElement!.instruction);
+                const result = await updateHtmlRef.current!(instruction);
+                lastTemporaryElement = undefined;
             }
 
-            const isNewHover = !lastObjectHover || lastObjectHover !== object;
-            if (lastObjectHover && lastObjectHover.identifier !== object.identifier) {
-                await removeLastInstruction();
-            }
+            if(hoverElement) {
+                if(!lastTemporaryElement || (hoverElement.getAttribute("data-identifier") != undefined && hoverElement.getAttribute("data-identifier") !== lastTemporaryElement.object.identifier)) {
 
-            if (!isNewHover) return;
+                    if(hoverElement.getAttribute("temporary") == "true") {
+                        moveWorking = false;
+                        return;
+                    }
 
-            let shouldAdd = false;
+                    if(lastTemporaryElement) {
+                        await removeLastElement();
+                    }
+                    const instruction = new InstructionBuilder();
+                    const object = searchElementWithIdentifier(hoverElement.getAttribute("data-identifier")!, editedHtmlRef.current!.html, instruction);
 
+                    if(object) {
 
-            if (object.type === "block") {
-                if (!object.content) {
-                    instruction.key("content").set(deepCopy(newObject));
-                    shouldAdd = true;
-                }
-            } else if (object.type === "list") {
-                const direction = getComputedStyle(hoverElement!).flexDirection as "row" | "column";
-                instruction.key("content");
+                        let shouldAdd = false;
 
-                if (object.content.length === 0) {
-                    instruction.arrayInsertAtIndex(0,deepCopy(newObject));
-                    shouldAdd = true;
-                } else if(object.content) {
-                    let insertAt = 0.5;
-                    const indexOfTemporary = object.content.findIndex((obj) => obj.temporary);
-                    const posX = event.clientX;
-                    const posY = event.clientY;
-
-                    for (let i = 0; i < hoverElement!.children.length; i++) {
-                        if (i === indexOfTemporary) continue;
-
-                        const child = hoverElement!.children[i];
-                        const bounds = child.getBoundingClientRect();
-                        if (direction === "row") {
-                            if (posX > bounds.x && posX < bounds.x + bounds.width) {
-                                if (posX > bounds.x + (bounds.width / 2)) {  // Assumed fix for likely typo in original code
-                                    insertAt += 0.5;
-                                } else {
-                                    insertAt -= 0.5;
-                                }
-                            } else if (posX < bounds.x) {
-                                insertAt -= 0.5;
-                                break;
-                            } else {
-                                insertAt += 1;
+                        if (object.type === "block") {
+                            if (!object.content) {
+                                instruction.key("content").set(deepCopy(newObject));
+                                shouldAdd = true;
                             }
-                        } else {
-                            if (posY > bounds.y && posY < bounds.y + bounds.height) {
-                                if (posY > bounds.y + (bounds.height / 2)) {  // Assumed fix for likely typo in original code
-                                    insertAt += 0.5;
-                                } else {
-                                    insertAt -= 0.5;
+                        }else if (object.type === "list") {
+                            const direction = getComputedStyle(hoverElement!).flexDirection as "row" | "column";
+                            instruction.key("content");
+
+                            if (object.content.length === 0) {
+                                instruction.arrayInsertAtIndex(0,deepCopy(newObject));
+                                shouldAdd = true;
+                            } else if(object.content) {
+                                let insertAt = 0.5;
+                                const indexOfTemporary = object.content.findIndex((obj) => obj.temporary);
+                                const posX = event.clientX;
+                                const posY = event.clientY;
+
+                                for (let i = 0; i < hoverElement!.children.length; i++) {
+                                    if (i === indexOfTemporary) continue;
+
+                                    const child = hoverElement!.children[i];
+                                    const bounds = child.getBoundingClientRect();
+                                    if (direction === "row") {
+                                        if (posX > bounds.x && posX < bounds.x + bounds.width) {
+                                            if (posX > bounds.x + (bounds.width / 2)) {  // Assumed fix for likely typo in original code
+                                                insertAt += 0.5;
+                                            } else {
+                                                insertAt -= 0.5;
+                                            }
+                                        } else if (posX < bounds.x) {
+                                            insertAt -= 0.5;
+                                            break;
+                                        } else {
+                                            insertAt += 1;
+                                        }
+                                    } else {
+                                        if (posY > bounds.y && posY < bounds.y + bounds.height) {
+                                            if (posY > bounds.y + (bounds.height / 2)) {  // Assumed fix for likely typo in original code
+                                                insertAt += 0.5;
+                                            } else {
+                                                insertAt -= 0.5;
+                                            }
+                                        } else if (posY < bounds.y) {
+                                            insertAt -= 0.5;
+                                            break;
+                                        } else {
+                                            insertAt += 1;
+                                        }
+                                    }
                                 }
-                            } else if (posY < bounds.y) {
-                                insertAt -= 0.5;
-                                break;
-                            } else {
-                                insertAt += 1;
+
+                                insertAt = Math.floor(insertAt);
+                                if(indexOfTemporary != insertAt) {
+                                    if(indexOfTemporary != -1) {
+                                        await removeLastElement();
+                                    }
+                                    instruction.arrayInsertAtIndex(insertAt, deepCopy(newObject));
+                                    shouldAdd = true;
+                                }
+                            }
+                        }
+                        if(shouldAdd) {
+                            const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction, {
+                                targetedIdentifier: object.identifier
+                            });
+                            lastTemporaryElement = {
+                                object: object,
+                                instruction: instruction.instruction
                             }
                         }
                     }
 
-                    insertAt = Math.floor(insertAt);
-                    if(indexOfTemporary != insertAt) {
-                        if(indexOfTemporary != -1) {
-                            await removeLastInstruction();
-                        }
-                        instruction.arrayInsertAtIndex(insertAt, deepCopy(newObject));
-                        shouldAdd = true;
-                    }
                 }
+            } else if(lastTemporaryElement) {
+                await removeLastElement();
             }
 
-            if (shouldAdd) {
-                const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction, {
-                    targetedIdentifier: object.identifier
-                });
-                lastObjectHover = object;
-                lastInstruction = instruction.clone();
-            }
+            moveWorking = false;
         };
+
 
         const mouseOut = async (evt:MouseEvent) => {
             overlayContainer.remove();
@@ -295,7 +303,20 @@ export const LeftPanelComponentEditor = memo(({
             window.removeEventListener("mousemove", mouseMove);
             cancelAnimationFrame(animationId);
             enableTextSelection();
-            if(lastInstruction) {
+            if(lastTemporaryElement) {
+                const instruction = new InstructionBuilder();
+                instruction.instruction = deepCopy(lastTemporaryElement.instruction);
+                instruction.instruction.v = undefined;
+
+                if(instruction.instruction.o === OpType.ARR_INS) {
+                    instruction.index(lastTemporaryElement.instruction.i!).key("temporary").remove();
+                } else {
+                    instruction.key("temporary").remove();
+                }
+                const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction);
+            }
+
+            /*if(lastInstruction) {
                 lastInstruction.instruction.v = undefined;
                 if(lastInstruction.instruction.o === OpType.ARR_INS) {
                     lastInstruction.index(lastInstruction.instruction.i!).key("temporary").remove();
@@ -303,8 +324,8 @@ export const LeftPanelComponentEditor = memo(({
                     lastInstruction.key("temporary").remove();
                 }
                 const output:ActionContext|undefined = await updateHtmlRef.current!(lastInstruction.instruction);
-                //lastInstruction = undefined;
-            }
+
+            }*/
             if(!haveMoved) {
                 if(!(onPickup?.(component) ?? true)) {
                     return;

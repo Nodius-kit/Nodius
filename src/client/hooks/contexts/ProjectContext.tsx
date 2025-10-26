@@ -99,7 +99,7 @@ export interface ProjectContextType {
     editedNodeConfig?: EditedNodeTypeConfig,
     openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
 
-    updateHtml?:(instruction:Instruction, options?:UpdateHtmlOption) => Promise<ActionContext>,
+    updateHtml?:(instruction:Instruction|Instruction[], options?:UpdateHtmlOption) => Promise<ActionContext>,
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
     updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 

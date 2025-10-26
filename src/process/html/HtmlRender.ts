@@ -440,7 +440,7 @@ export class HtmlRender {
 
         if (newObject.type === "text") {
             const newText = await this.parseContent(newObject.content[this.language], storage);
-            const oldText = await this.parseContent(oldObject.content[this.language], storage);
+            const oldText = await this.parseContent((oldObject.content as any)[this.language], storage);
 
             // Three-way merge for text content:
             // Only update if content definition changed OR not externally modified
@@ -460,7 +460,7 @@ export class HtmlRender {
             return;
         } else if (newObject.type === "html") {
             const newHtml = await this.parseContent(newObject.content, storage);
-            const oldHtml = await this.parseContent(oldObject.content, storage);
+            const oldHtml = await this.parseContent(oldObject.content as string, storage);
 
             // Three-way merge for HTML content:
             // Only update if content definition changed OR not externally modified
@@ -648,7 +648,7 @@ export class HtmlRender {
             }
             return [];
         } else if (object.type === "list") {
-            return object.content.map(c => ({ obj: c, extra: extraVar }));
+            return (object.content ?? []).map(c => ({ obj: c, extra: extraVar }));
         } else if (object.type === "array") {
             const codeNumberOfContent = object.content.numberOfContent.trim().startsWith("return") ? object.content.numberOfContent : "return " + object.content.numberOfContent;
             const length = await this.callFunction(codeNumberOfContent, env);
@@ -838,7 +838,7 @@ export class HtmlRender {
     private addDebugListeners(storage: ObjectStorage) {
         if (!this.buildingMode) return;
 
-        //storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
+        storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
 
         // this interaction is only available for entry component, so the parent should be null or having delimiter=true
         const parentIdentifier = storage.element.parentElement?.getAttribute("data-identifier");
@@ -898,7 +898,7 @@ export class HtmlRender {
 
         const onEnter = (evt: Event) => {
             evt.stopPropagation();
-            if(storage.object.identifier !== this.selectedObjectIdentifier) {
+            if(storage.object.identifier !== this.selectedObjectIdentifier && !storage.object.temporary) {
                 const events = this.buildingInteractEventMap.get("hover") ?? [];
                 if(this.hoverObjectIdentifier) {
                     const hoverStorage = this.objectStorage.get(this.hoverObjectIdentifier);
@@ -935,6 +935,7 @@ export class HtmlRender {
         };
         const onClick = (evt: Event) => {
             evt.stopPropagation();
+            if(storage.object.temporary) return;
             this.clearBuildingOverlay();
             this.selectedObjectIdentifier = storage.object.identifier;
             const overlay = createOverlay('var(--nodius-secondary-main)');

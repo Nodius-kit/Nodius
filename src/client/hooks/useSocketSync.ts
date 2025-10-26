@@ -1014,39 +1014,61 @@ export const useSocketSync = () => {
         })
     }, [updateNodeConfig])
 
-    const updateHtml = useCallback(async (instructionHtml:Instruction, options?:UpdateHtmlOption): Promise<ActionContext> => {
-        const instruction = deepCopy(instructionHtml);
+    const updateHtml = useCallback(async (instructionHtml:Instruction|Instruction[], options?:UpdateHtmlOption): Promise<ActionContext> => {
+        const instructions = deepCopy(instructionHtml);
 
         if(
             Project.state.editedNodeConfig && Project.state.editedHtml?.targetType === "NodeTypeConfig"
         ) {
-            if (instruction.p) {
-                instruction.p = ["content", ...instruction.p];
+            if(Array.isArray(instructions)) {
+
+                for(const instruction of instructions) {
+                    if (instruction.p) {
+                        instruction.p = ["content", ...instruction.p];
+                    }
+                }
+            } else {
+                if (instructions.p) {
+                    instructions.p = ["content", ...instructions.p];
+                }
             }
 
-            return await updateNodeConfig([
-                {
-                    i: instruction,
-                    applyUniqIdentifier: "identifier",
-                    targetedIdentifier: options?.targetedIdentifier,
-                    noRedraw: options?.noRedraw,
-                }
-            ]);
+            return await updateNodeConfig(
+                (Array.isArray(instructions) ? instructions : [instructions] ).map((instruction) => (
+                    {
+                        i: instruction,
+                        applyUniqIdentifier: "identifier",
+                        targetedIdentifier: options?.targetedIdentifier,
+                        noRedraw: options?.noRedraw,
+                    }
+                ))
+            );
         } else if(Project.state.editedHtml?.targetType === "node") {
 
-            if (instruction.p) {
-                instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
+            if(Array.isArray(instructions)) {
+
+                for(const instruction of instructions) {
+                    if (instruction.p) {
+                        instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
+                    }
+                }
+            } else {
+                if (instructions.p) {
+                    instructions.p = [...Project.state.editedHtml.pathOfRender, ...instructions.p];
+                }
             }
 
-            return await updateGraph([
-                {
-                    i: instruction,
-                    nodeId: Project.state.editedHtml.target._key,
-                    applyUniqIdentifier: "identifier",
-                    targetedIdentifier: options?.targetedIdentifier,
-                    noRedraw: options?.noRedraw
-                }
-            ]);
+            return await updateGraph(
+                (Array.isArray(instructions) ? instructions : [instructions] ).map((instruction) => (
+                    {
+                        i: instruction,
+                        nodeId: Project.state.editedHtml!.target._key,
+                        applyUniqIdentifier: "identifier",
+                        targetedIdentifier: options?.targetedIdentifier,
+                        noRedraw: options?.noRedraw
+                    }
+                ))
+            );
         } else {
             return {
                 timeTaken: 0,

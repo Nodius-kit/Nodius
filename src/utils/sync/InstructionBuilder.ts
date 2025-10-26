@@ -808,13 +808,16 @@ export function validateInstruction(instruction: Instruction | string): Result<b
                 break;
 
             case OpType.ARR_INS:
-            case OpType.ARR_REM_IDX:
             case OpType.STR_INS:
                 if (inst.i == null || inst.v === undefined) {
                     return { success: false, error: 'Missing index or value for operation' };
                 }
                 break;
-
+            case OpType.ARR_REM_IDX:
+                if(inst.i == null) {
+                    return { success: false, error: 'Missing index for operation' };
+                }
+                break;
             case OpType.STR_REM:
             case OpType.STR_REP_AT:
                 if (inst.i == null || inst.l == null) {
