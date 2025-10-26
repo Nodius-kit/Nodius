@@ -10,15 +10,51 @@
  * - Collapsed/expanded by category
  *
  * Features:
- * - Drag-and-drop component insertion
+ * - Drag-and-drop component insertion with smart positioning
  * - Live search filtering across all categories
  * - Category collapse/expand state management
- * - Visual feedback during drag operations
+ * - Visual feedback during drag operations with swing animation
  * - Icon-based component representation
  * - Theme-aware styling
  *
- * The drag-and-drop system uses native HTML5 drag events and integrates with
- * the instruction-based synchronization system for undo/redo support.
+ * Drag-and-Drop System:
+ * ----------------------
+ * The drag system handles insertion into two container types:
+ *
+ * 1. BLOCK containers (type: "block"):
+ *    - Can only contain one child element
+ *    - Component is inserted if block is empty
+ *    - Uses direct content assignment (instruction.key("content").set())
+ *
+ * 2. LIST containers (type: "list"):
+ *    - Can contain multiple children in row or column layout
+ *    - Smart positioning based on cursor location relative to existing children
+ *    - Uses array insertion with calculated index (instruction.arrayInsertAtIndex())
+ *    - Supports both horizontal (row) and vertical (column) flex directions
+ *
+ * Temporary Element System:
+ * -------------------------
+ * During drag, a temporary copy of the component is inserted at the target position:
+ * - All objects in the dragged component are marked with `temporary: true`
+ * - The temporary flag prevents user interaction during drag
+ * - HtmlRender sets `[temporary="true"]` attribute on DOM elements
+ * - On drop (mouse up), the temporary flag is removed via instruction
+ * - If drag is cancelled (mouse leave), the temporary element is removed
+ *
+ * Server Synchronization:
+ * ----------------------
+ * - Uses instruction-based updates sent to server via WebSocket
+ * - Awaits server confirmation before processing next position change
+ * - The `moveWorking` flag prevents concurrent instruction processing
+ * - Instructions are sent as single operations (not batched)
+ * - Server validates and broadcasts changes to other connected clients
+ *
+ * Performance Considerations:
+ * --------------------------
+ * - Event listeners attached to window (not individual elements)
+ * - Uses requestAnimationFrame for smooth swing animation
+ * - Refs prevent stale closures during long-lived drag operations
+ * - Smart position calculation only runs when hovering over new target
  */
 
 import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
@@ -56,12 +92,21 @@ export const LeftPanelComponentEditor = memo(({
     const Project = useContext(ProjectContext);
     const Theme = useContext(ThemeContext);
 
-    // may be used in element event, we have to store it in ref for avoiding change while user is dragging component and miss change
+    /**
+     * Store Project state values in refs to avoid stale closures during drag operations
+     *
+     * During drag, the mouse event handlers are long-lived closures that capture
+     * the initial state values. If Project.state changes during drag, the handlers
+     * would still reference old values. Using refs ensures we always access the
+     * latest state without recreating the event handlers.
+     */
     const editedHtmlRef = useRef<EditedHtmlType>(Project.state.editedHtml);
-    const updateHtmlRef = useRef<(instructions:Instruction, options?:UpdateHtmlOption) => Promise<ActionContext> | undefined>(Project.state.updateHtml);
+    const updateHtmlRef = useRef<(instructions: Instruction, options?: UpdateHtmlOption) => Promise<ActionContext> | undefined>(Project.state.updateHtml);
+
     useEffect(() => {
         editedHtmlRef.current = Project.state.editedHtml;
     }, [Project.state.editedHtml]);
+
     useEffect(() => {
         updateHtmlRef.current = Project.state.updateHtml;
     }, [Project.state.updateHtml]);
@@ -89,32 +134,48 @@ export const LeftPanelComponentEditor = memo(({
         ) as Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>>;
     }, [components, componentSearch]);
 
-    const onMouseDown = (event:React.MouseEvent, component:HtmlBuilderComponent) => {
-
+    /**
+     * Handles mouse down event to initiate drag and drop of a component
+     *
+     * This creates a visual overlay that follows the cursor and handles the logic for:
+     * - Detecting drop targets (blocks and lists)
+     * - Smart positioning within lists based on cursor position
+     * - Temporary component insertion during drag
+     * - Final placement with temporary flag removal on drop
+     *
+     * @param event - React mouse event from the component card
+     * @param component - The HtmlBuilderComponent being dragged
+     */
+    const onMouseDown = (event: React.MouseEvent, component: HtmlBuilderComponent) => {
         let haveMoved = false;
 
-        const container = document.querySelector("[data-builder-component='"+component.object.name+"']") as HTMLElement;
-        if(!container) return;
+        // Get the component card element to clone its appearance
+        const container = document.querySelector("[data-builder-component='" + component.object.name + "']") as HTMLElement;
+        if (!container) return;
         const containerSize = container.getBoundingClientRect();
 
+        // Deep copy the component and mark all nested objects as temporary
+        // The temporary flag prevents interaction and helps identify placeholder elements
         const newObject = deepCopy(component.object);
         travelHtmlObject(newObject, (obj) => {
             obj.temporary = true;
             return true;
         });
 
+        // Create visual overlay that follows the cursor during drag
         const overlayContainer = document.createElement("div");
         overlayContainer.style.position = "absolute";
-        overlayContainer.style.left = (event.clientX-(containerSize.width/2))+"px";
-        overlayContainer.style.top = (event.clientY+3)+"px";
-        overlayContainer.style.width = containerSize.width+"px";
-        overlayContainer.style.height = containerSize.height+"px";
+        overlayContainer.style.left = (event.clientX - (containerSize.width / 2)) + "px";
+        overlayContainer.style.top = (event.clientY + 3) + "px";
+        overlayContainer.style.width = containerSize.width + "px";
+        overlayContainer.style.height = containerSize.height + "px";
         overlayContainer.style.zIndex = "10000000";
         overlayContainer.style.display = "flex";
         overlayContainer.style.flexDirection = "column";
         overlayContainer.style.justifyContent = "center";
         overlayContainer.style.alignItems = "center";
 
+        // Copy visual styling from the original component card
         const toCopyStyle = getComputedStyle(container);
         overlayContainer.style.border = toCopyStyle.border;
         overlayContainer.style.borderRadius = toCopyStyle.borderRadius;
@@ -123,152 +184,226 @@ export const LeftPanelComponentEditor = memo(({
         overlayContainer.style.backgroundColor = "var(--nodius-background-default)";
         overlayContainer.innerHTML = container.innerHTML;
 
-
+        // Prevent text selection during drag
         disableTextSelection();
 
+        // Variables for swing animation effect
         let lastX = event.clientX;
         let velocityX = 0;
         let velocityXAdd = 0;
         let rotationAngle = 0;
         let animationId = 0;
+
+        /**
+         * Animation loop for the swinging rotation effect
+         * Gradually dampens the rotation angle based on horizontal velocity
+         */
         const whileSwingAnimation = () => {
-            let diff = 1;
-            if(velocityXAdd > diff) {
-                velocityXAdd -= diff;
-            } else if(velocityXAdd < -diff) {
-                velocityXAdd += diff;
+            const dampening = 1;
+            if (velocityXAdd > dampening) {
+                velocityXAdd -= dampening;
+            } else if (velocityXAdd < -dampening) {
+                velocityXAdd += dampening;
             } else {
                 velocityXAdd = 0;
             }
+            // Clamp rotation between -45 and 45 degrees
             velocityXAdd = Math.max(-45, Math.min(45, velocityXAdd));
-            rotationAngle = Math.max(-45, Math.min(45, velocityXAdd*0.4));
+            rotationAngle = Math.max(-45, Math.min(45, velocityXAdd * 0.4));
             overlayContainer.style.transform = `rotate(${rotationAngle}deg)`;
             animationId = requestAnimationFrame(whileSwingAnimation);
-        }
+        };
 
         animationId = requestAnimationFrame(whileSwingAnimation);
 
-        let lastTemporaryElement:{object:HtmlObject, instruction:Instruction}|undefined;
+        /**
+         * Tracks the last temporary element that was inserted during drag
+         * Contains both the target object and the instruction used to insert it
+         */
+        let lastTemporaryElement: { object: HtmlObject; instruction: Instruction } | undefined;
 
-        let moveWorking = false; // avoiding overlap
+        /**
+         * Prevents overlapping execution of mouse move logic
+         * Ensures we wait for server response before processing next position
+         */
+        let moveWorking = false;
 
+        /**
+         * Mouse move handler during drag operation
+         * Updates overlay position, detects drop targets, and manages temporary element placement
+         */
         const mouseMove = async (event: MouseEvent) => {
-            if(!Project.state.graph || !Project.state.selectedSheetId) {
+            // Safety checks
+            if (!Project.state.graph || !Project.state.selectedSheetId) {
                 return;
             }
 
-            if(!haveMoved) {
+            // Append overlay to body on first movement
+            if (!haveMoved) {
                 document.body.appendChild(overlayContainer);
                 haveMoved = true;
             }
+
+            // Update overlay position to follow cursor
             overlayContainer.style.left = `${event.clientX - (containerSize.width / 2)}px`;
             overlayContainer.style.top = `${event.clientY + 3}px`;
 
+            // Calculate velocity for swing animation
             velocityX = event.clientX - lastX;
             lastX = event.clientX;
-
             velocityXAdd += velocityX;
 
-            if(!editedHtmlRef.current) {
+            // Check if edited HTML context exists
+            if (!editedHtmlRef.current) {
                 return;
             }
-            if(moveWorking) return;
+
+            // Prevent concurrent execution - wait for server response
+            if (moveWorking) return;
             moveWorking = true;
 
+            // Find HTML element under cursor with data-identifier attribute
             const hoverElements = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
             const hoverElement = hoverElements.find((el) => el.getAttribute("data-identifier") != undefined);
 
-            const removeInstruction =  (baseInstruction: Instruction) : Instruction =>  {
-                    const instruction = new InstructionBuilder();
-                    instruction.instruction = deepCopy(baseInstruction);
-                    if(instruction.instruction.o === OpType.ARR_INS) {
-                        instruction.instruction.o = OpType.ARR_REM_IDX;
-                    } else {
-                        instruction.remove();
-                    }
-                    instruction.instruction.v = undefined;
-                    return instruction.instruction;
+            /**
+             * Converts an insertion instruction to a removal instruction
+             * Handles both array insertions and direct content assignments
+             *
+             * @param baseInstruction - The original insertion instruction
+             * @returns Removal instruction that undoes the insertion
+             */
+            const removeInstruction = (baseInstruction: Instruction): Instruction => {
+                const instruction = new InstructionBuilder();
+                instruction.instruction = deepCopy(baseInstruction);
+
+                if (instruction.instruction.o === OpType.ARR_INS) {
+                    // Convert array insertion to array removal by index
+                    instruction.instruction.o = OpType.ARR_REM_IDX;
+                } else {
+                    // Remove the content property
+                    instruction.remove();
+                }
+                instruction.instruction.v = undefined;
+                return instruction.instruction;
             };
 
+            /**
+             * Removes the last temporary element that was inserted
+             * Sends removal instruction to server and clears tracking
+             */
             const removeLastElement = async () => {
                 const instruction = removeInstruction(lastTemporaryElement!.instruction);
                 const result = await updateHtmlRef.current!(instruction);
                 lastTemporaryElement = undefined;
-            }
+            };
 
-            if(hoverElement) {
-                if(!lastTemporaryElement || (hoverElement.getAttribute("data-identifier") != undefined && hoverElement.getAttribute("data-identifier") !== lastTemporaryElement.object.identifier)) {
+            // Process hover target if element exists
+            if (hoverElement) {
+                // Check if we've moved to a new target element
+                const hoveredIdentifier = hoverElement.getAttribute("data-identifier");
+                const isNewTarget = !lastTemporaryElement ||
+                    (hoveredIdentifier != undefined && hoveredIdentifier !== lastTemporaryElement.object.identifier);
 
-                    if(hoverElement.getAttribute("temporary") == "true") {
+                if (isNewTarget) {
+                    // Skip if hovering over a temporary element (our own placeholder)
+                    if (hoverElement.getAttribute("temporary") === "true") {
                         moveWorking = false;
                         return;
                     }
 
-                    if(lastTemporaryElement) {
+                    // Remove previous temporary element if it exists
+                    if (lastTemporaryElement) {
                         await removeLastElement();
                     }
+
+                    // Build instruction path to the hovered element
                     const instruction = new InstructionBuilder();
-                    const object = searchElementWithIdentifier(hoverElement.getAttribute("data-identifier")!, editedHtmlRef.current!.html, instruction);
+                    const object = searchElementWithIdentifier(hoveredIdentifier!, editedHtmlRef.current!.html, instruction);
 
-                    if(object) {
-
+                    if (object) {
                         let shouldAdd = false;
 
+                        // Handle insertion based on target type
                         if (object.type === "block") {
+                            // Blocks can only contain one child - only add if empty
                             if (!object.content) {
                                 instruction.key("content").set(deepCopy(newObject));
                                 shouldAdd = true;
                             }
-                        }else if (object.type === "list") {
+                        } else if (object.type === "list") {
+                            // Lists can contain multiple children - calculate smart insertion position
                             const direction = getComputedStyle(hoverElement!).flexDirection as "row" | "column";
                             instruction.key("content");
 
                             if (object.content.length === 0) {
-                                instruction.arrayInsertAtIndex(0,deepCopy(newObject));
+                                // Empty list - insert at beginning
+                                instruction.arrayInsertAtIndex(0, deepCopy(newObject));
                                 shouldAdd = true;
-                            } else if(object.content) {
-                                let insertAt = 0.5;
+                            } else if (object.content) {
+                                /**
+                                 * Smart position calculation based on cursor position relative to existing children
+                                 * - For row direction: uses X-axis position
+                                 * - For column direction: uses Y-axis position
+                                 * - Splits each child into left/right (or top/bottom) halves for precise insertion
+                                 */
+                                let insertAt = 0.5; // Start in middle of first element
                                 const indexOfTemporary = object.content.findIndex((obj) => obj.temporary);
                                 const posX = event.clientX;
                                 const posY = event.clientY;
 
+                                // Iterate through visible children to find insertion point
                                 for (let i = 0; i < hoverElement!.children.length; i++) {
+                                    // Skip the temporary element itself
                                     if (i === indexOfTemporary) continue;
 
                                     const child = hoverElement!.children[i];
                                     const bounds = child.getBoundingClientRect();
+
                                     if (direction === "row") {
+                                        // Horizontal list - use X position
                                         if (posX > bounds.x && posX < bounds.x + bounds.width) {
-                                            if (posX > bounds.x + (bounds.width / 2)) {  // Assumed fix for likely typo in original code
-                                                insertAt += 0.5;
+                                            // Cursor is within this child's bounds
+                                            if (posX > bounds.x + (bounds.width / 2)) {
+                                                insertAt += 0.5; // Right half - insert after
                                             } else {
-                                                insertAt -= 0.5;
+                                                insertAt -= 0.5; // Left half - insert before
                                             }
                                         } else if (posX < bounds.x) {
+                                            // Cursor is before this child
                                             insertAt -= 0.5;
                                             break;
                                         } else {
+                                            // Cursor is after this child
                                             insertAt += 1;
                                         }
                                     } else {
+                                        // Vertical list - use Y position
                                         if (posY > bounds.y && posY < bounds.y + bounds.height) {
-                                            if (posY > bounds.y + (bounds.height / 2)) {  // Assumed fix for likely typo in original code
-                                                insertAt += 0.5;
+                                            // Cursor is within this child's bounds
+                                            if (posY > bounds.y + (bounds.height / 2)) {
+                                                insertAt += 0.5; // Bottom half - insert after
                                             } else {
-                                                insertAt -= 0.5;
+                                                insertAt -= 0.5; // Top half - insert before
                                             }
                                         } else if (posY < bounds.y) {
+                                            // Cursor is before this child
                                             insertAt -= 0.5;
                                             break;
                                         } else {
+                                            // Cursor is after this child
                                             insertAt += 1;
                                         }
                                     }
                                 }
 
+                                // Convert to integer index
                                 insertAt = Math.floor(insertAt);
-                                if(indexOfTemporary != insertAt) {
-                                    if(indexOfTemporary != -1) {
+
+                                // Only update if position changed
+                                if (indexOfTemporary !== insertAt) {
+                                    if (indexOfTemporary !== -1) {
+                                        // Remove temporary from old position
                                         await removeLastElement();
                                     }
                                     instruction.arrayInsertAtIndex(insertAt, deepCopy(newObject));
@@ -276,62 +411,74 @@ export const LeftPanelComponentEditor = memo(({
                                 }
                             }
                         }
-                        if(shouldAdd) {
-                            const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction, {
+
+                        // Send insertion instruction to server and track it
+                        if (shouldAdd) {
+                            const output: ActionContext | undefined = await updateHtmlRef.current!(instruction.instruction, {
                                 targetedIdentifier: object.identifier
                             });
                             lastTemporaryElement = {
                                 object: object,
                                 instruction: instruction.instruction
-                            }
+                            };
                         }
                     }
-
                 }
-            } else if(lastTemporaryElement) {
+            } else if (lastTemporaryElement) {
+                // Cursor left all valid drop targets - remove temporary element
                 await removeLastElement();
             }
 
+            // Allow next mouse move to process
             moveWorking = false;
         };
 
 
-        const mouseOut = async (evt:MouseEvent) => {
+        /**
+         * Mouse up/leave handler - finalizes the drop operation
+         * Cleans up event listeners, removes overlay, and converts temporary element to permanent
+         */
+        const mouseOut = async (evt: MouseEvent) => {
+            // Clean up visual overlay
             overlayContainer.remove();
+
+            // Remove event listeners
             window.removeEventListener("mouseleave", mouseOut);
             window.removeEventListener("mouseup", mouseOut);
             window.removeEventListener("mousemove", mouseMove);
+
+            // Stop animation
             cancelAnimationFrame(animationId);
+
+            // Re-enable text selection
             enableTextSelection();
-            if(lastTemporaryElement) {
+
+            // Finalize the drop by removing the temporary flag
+            if (lastTemporaryElement) {
                 const instruction = new InstructionBuilder();
                 instruction.instruction = deepCopy(lastTemporaryElement.instruction);
                 instruction.instruction.v = undefined;
 
-                if(instruction.instruction.o === OpType.ARR_INS) {
+                // Navigate to the temporary property and remove it
+                if (instruction.instruction.o === OpType.ARR_INS) {
+                    // For array insertions, navigate by index then remove temporary property
                     instruction.index(lastTemporaryElement.instruction.i!).key("temporary").remove();
                 } else {
+                    // For direct content assignment, remove temporary property
                     instruction.key("temporary").remove();
                 }
-                const output:ActionContext|undefined = await updateHtmlRef.current!(instruction.instruction);
+
+                // Send final instruction to make the element permanent
+                const output: ActionContext | undefined = await updateHtmlRef.current!(instruction.instruction);
             }
 
-            /*if(lastInstruction) {
-                lastInstruction.instruction.v = undefined;
-                if(lastInstruction.instruction.o === OpType.ARR_INS) {
-                    lastInstruction.index(lastInstruction.instruction.i!).key("temporary").remove();
-                } else {
-                    lastInstruction.key("temporary").remove();
-                }
-                const output:ActionContext|undefined = await updateHtmlRef.current!(lastInstruction.instruction);
-
-            }*/
-            if(!haveMoved) {
-                if(!(onPickup?.(component) ?? true)) {
+            // Invoke optional pickup callback if drag didn't actually move
+            if (!haveMoved) {
+                if (!(onPickup?.(component) ?? true)) {
                     return;
                 }
             }
-        }
+        };
 
         window.addEventListener("mouseleave", mouseOut);
         window.addEventListener("mousemove", mouseMove);
