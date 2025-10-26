@@ -1229,7 +1229,7 @@ export class WebSocketManager {
 
                 // Update existing nodes
                 for (const node of nodesToUpdate) {
-                    await node_collection.update(node._key, node);
+                    await node_collection.replace(node._key, node);
                 }
 
                 // Delete removed nodes
@@ -1246,7 +1246,7 @@ export class WebSocketManager {
                 // Update existing edges
                 for (const edge of edgesToUpdate) {
                     const arangoEdge = edgeToArangoFormat(edge);
-                    await edge_collection.update(edge._key, arangoEdge);
+                    await edge_collection.replace(edge._key, arangoEdge);
                 }
 
                 // Delete removed edges
@@ -1305,7 +1305,7 @@ export class WebSocketManager {
                 };
 
                 // Update the node config in the database
-                await nodeConfig_collection.update(nodeConfigKey, updatedConfig);
+                await nodeConfig_collection.replace(nodeConfigKey, updatedConfig);
 
                 // Update the managed config with the new timestamp
                 managedConfig.config = updatedConfig;
