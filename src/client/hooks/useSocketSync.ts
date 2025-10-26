@@ -423,9 +423,11 @@ export const useSocketSync = () => {
         }*/
 
 
-        gpuMotor.current.setScene({
-            nodes: htmlGraph.sheets[selectedSheetId].nodeMap,
-            edges: htmlGraph.sheets[selectedSheetId].edgeMap
+        requestAnimationFrame(() => {
+            gpuMotor.current!.setScene({
+                nodes: htmlGraph.sheets[selectedSheetId].nodeMap,
+                edges: htmlGraph.sheets[selectedSheetId].edgeMap
+            });
         });
         const rootNode = findFirstNodeWithId(htmlGraph, "root");
         if(rootNode) {
@@ -621,9 +623,11 @@ export const useSocketSync = () => {
             value: disabled
         });
 
-        gpuMotor.current.setScene({
-            nodes: graph.sheets[selectedSheetId].nodeMap,
-            edges: graph.sheets[selectedSheetId].edgeMap
+        requestAnimationFrame(() => {
+            gpuMotor.current!.setScene({
+                nodes: graph.sheets[selectedSheetId].nodeMap,
+                edges: graph.sheets[selectedSheetId].edgeMap
+            });
         });
 
         const padding = 100;
@@ -818,6 +822,7 @@ export const useSocketSync = () => {
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                     if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && instruction.nodeId === Project.state.editedHtml.target._key) {
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+                        console.log("new node", deepCopy(newNode));
                         let objectHtml: any = newNode;
                         Project.state.editedHtml.pathOfRender.forEach((path) => {
                             objectHtml = objectHtml[path];
@@ -832,8 +837,7 @@ export const useSocketSync = () => {
                             await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                         }
 
-                    }
-                    if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
+                    } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
                         const renderers = htmlRenderer.current[instruction.nodeId];
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
                         for(const [key, renderer] of Object.entries(renderers)) {
@@ -875,6 +879,9 @@ export const useSocketSync = () => {
             type: "applyInstructionToGraph",
             instructions: instructions
         }
+
+        console.trace();
+        console.log(message);
 
 
 
@@ -1337,29 +1344,42 @@ export const useSocketSync = () => {
     }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete]);
 
 
-    const workingOnCaughtUp = useRef<boolean>(false);
+    const workingOnCaughtUp = useRef(false);
+
     useEffect(() => {
-        if(!Project.state.caughtUpMessage) return;
-        if(!Project.state.graph || !handleIncomingMessage) return;
+        const { caughtUpMessage, graph } = Project.state;
+        if (!caughtUpMessage || !graph || !handleIncomingMessage) return;
 
-        if(!workingOnCaughtUp.current) {
-            workingOnCaughtUp.current = true;
-            const messages = deepCopy(Project.state.caughtUpMessage);
-            (async () => {
-                console.log("Caught on ",messages.length+" message(s)");
-                for(const message of messages) {
-                    await handleIncomingMessage(message);
-                }
-                workingOnCaughtUp.current = false;
-            })();
-        }
+        if (workingOnCaughtUp.current) return;
+        workingOnCaughtUp.current = true;
 
-        Project.dispatch({
-            field: "caughtUpMessage",
-            value: undefined
-        });
+        const messages = deepCopy(caughtUpMessage);
+        let cancelled = false;
 
+        const processMessages = async () => {
+            await new Promise((r) => requestAnimationFrame(r)); // yield to next frame
+            console.log(`Caught up on ${messages.length} message(s)`, messages);
+
+            for (const message of messages) {
+                if (cancelled) break;
+                await handleIncomingMessage(message);
+            }
+
+            workingOnCaughtUp.current = false;
+        };
+
+        processMessages();
+
+        // clear caughtUpMessage right away
+        Project.dispatch({ field: "caughtUpMessage", value: undefined });
+
+        // Cleanup in case the effect re-runs or unmounts
+        return () => {
+            cancelled = true;
+            workingOnCaughtUp.current = false;
+        };
     }, [Project.state.graph, Project.state.caughtUpMessage, handleIncomingMessage]);
+
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);

@@ -186,7 +186,8 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
     workspace: "root",
     category: "",
     content: {
-        type: "block",
+        type: "html",
+        content: "",
         name: "Container",
         delimiter: true,
         tag: "div",
@@ -264,7 +265,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 
                 // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
                 const render_id = "main"; // unique render id in the node
-                if(getHtmlRenderer(node)?.[render_id]) return;
+                if(getHtmlRenderer(node)?.[render_id]) return; // avoid dupling
             
                 const pathOfRender = ["data"]; // path inside the node where is stored the html
                 const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute

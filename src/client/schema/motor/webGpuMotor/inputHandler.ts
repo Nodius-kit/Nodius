@@ -101,8 +101,8 @@ export class InputHandler {
 			if (!this.interactiveEnabled) return;
 			this.isPanning = false;
 		};
-		this.canvas.addEventListener("mouseup", mouseUp);
-		this.canvas.addEventListener("mouseout", mouseUp);
+		window.addEventListener("mouseup", mouseUp);
+		window.addEventListener("mouseout", mouseUp);
 
 		this.canvas.addEventListener("wheel", (e) => {
 			if (!this.interactiveEnabled) return;

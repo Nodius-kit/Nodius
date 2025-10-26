@@ -20,15 +20,17 @@
  * - Node event handlers for hover/selection
  */
 
-import {memo, useContext, useEffect, useRef, forwardRef, useLayoutEffect} from "react";
+import {memo, useContext, useEffect, useRef, forwardRef, useCallback} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
 import {disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
-import {AsyncFunction, HtmlRender} from "../../process/html/HtmlRender";
 import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
-import {InstructionBuilder} from "../../utils/sync/InstructionBuilder";
-import {GraphInstructions} from "../../utils/sync/wsObject";
+import {NodeAnimationManager} from "./nodeAnimations";
+import {OverlayManager} from "./overlayManager";
+import {NodeEventManager} from "./nodeEventManager";
+import {useNodeDragDrop} from "./hooks/useNodeDragDrop";
+import {useNodeRenderer} from "./hooks/useNodeRenderer";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -36,6 +38,18 @@ interface SchemaDisplayProps {
     onNodeEnter?: (node: Node<any>) => void,
     onNodeLeave?: (node: Node<any>|undefined, nodeId:string) => void,
 }
+
+interface SchemaNodeInfo {
+    node: Node<any>;
+    element: HTMLElement;
+    overElement: HTMLElement;
+    htmlRenderer?: htmlRenderContext;
+    eventManager: NodeEventManager;
+    mouseEnterHandler: () => void;
+    mouseLeaveHandler: () => void;
+    dragHandler: (evt: MouseEvent) => void;
+}
+
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
     onNodeEnter,
@@ -44,37 +58,39 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 }, motorRef) => {
 
     const Project = useContext(ProjectContext);
+    const Theme = useContext(ThemeContext);
 
     const canvasRef = useRef<HTMLCanvasElement|null>(null);
     const containerRef = useRef<HTMLDivElement|null>(null);
+    const nodeDisplayContainer = useRef<HTMLDivElement>(null);
 
     const gpuMotor = useRef<WebGpuMotor>(undefined);
-
-    const Theme = useContext(ThemeContext);
-
     const zIndex = useRef<number>(1);
+    const inSchemaNode = useRef<Map<string, SchemaNodeInfo>>(new Map());
 
-    const updateOverlayFrameId = useRef<number|undefined>(undefined);
-    const animatePosChangeFrameId = useRef<Record<string, {id?:number, lastTime:number, velX:number, velY:number}>>({});
-    const posAnimationDelay = 200;
-    const springStiffness = 100;
-    const damping = 2 * Math.sqrt(springStiffness);
+    // Managers
+    const animationManager = useRef<NodeAnimationManager>(undefined);
+    const overlayManager = useRef<OverlayManager>(undefined);
 
-
-
-
+    // Initialize WebGPU motor
     useEffect(() => {
         if (!containerRef.current || !canvasRef.current) return;
 
         const motor = new WebGpuMotor();
 
-        // assign motor to forwarded ref properly
         if (typeof motorRef === "function") {
             motorRef(motor);
         } else if (motorRef) {
             motorRef.current = motor;
         }
         gpuMotor.current = motor;
+
+        // Initialize managers
+        animationManager.current = new NodeAnimationManager({
+            springStiffness: 100,
+            damping: 2 * Math.sqrt(100)
+        });
+        overlayManager.current = new OverlayManager(motor);
 
         motor
             .init(containerRef.current, canvasRef.current, {
@@ -85,622 +101,375 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 motor.enableInteractive(true);
             });
 
-        // optional: cleanup when unmounting
         return () => {
+            animationManager.current?.stopAllAnimations();
+            overlayManager.current?.dispose();
             if (motorRef && typeof motorRef !== "function") {
                 motorRef.current = null;
             }
         };
     }, [motorRef]);
 
+    // Node renderer hook
+    const nodeRenderer = useNodeRenderer({
+        dependencies: {
+            currentEntryDataType: Project.state.currentEntryDataType,
+            enumTypes: Project.state.enumTypes,
+            dataTypes: Project.state.dataTypes,
+        },
+        getNodeConfig: (nodeType) => Project.state.nodeTypeConfig[nodeType]
+    });
 
+    // Helper functions
+    const getNode = useCallback((nodeKey: string) => {
+        return Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(nodeKey);
+    }, [Project.state.graph, Project.state.selectedSheetId]);
 
-    const inSchemaNode = useRef<{
-        node:Node<any>,
-        element:HTMLElement,
-        overElement:HTMLElement,
-        htmlRenderer?: htmlRenderContext,
-    }[]>([]);
-    const nodeDisplayContainer = useRef<HTMLDivElement>(null);
+    const updateZIndex = useCallback((element: HTMLElement, overlay: HTMLElement, currentZIndex: number) => {
+        const currentZ = overlay.style.zIndex === "" ? 0 : parseInt(overlay.style.zIndex);
+        if (currentZ < zIndex.current) {
+            zIndex.current++;
+            overlay.style.zIndex = element.style.zIndex = zIndex.current + "";
+            return zIndex.current;
+        }
+        return currentZ;
+    }, []);
 
-    // Track previous dependency values to detect changes
-    const previousDependencies = useRef<{
-        currentEntryDataType?: any,
-        enumTypes?: any[],
-        dataTypes?: any[],
-    }>({});
+    const triggerEventOnNode = useCallback((nodeId: string, eventName: string) => {
+        const nodeElement = document.querySelector(`[data-node-key="${nodeId}"]`);
+        if (nodeElement) {
+            const updateEvent = new CustomEvent(eventName, { bubbles: false });
+            nodeElement.dispatchEvent(updateEvent);
+        }
+    }, []);
 
-    useLayoutEffect(() => {
-        if(!gpuMotor.current || !Project.state.graph) return;
+    // Drag and drop hook
+    const { createDragHandler } = useNodeDragDrop({
+        gpuMotor: gpuMotor.current!,
+        getNode: getNode,
+        updateGraph: Project.state.updateGraph!,
+        isNodeInteractionDisabled: (nodeKey) =>
+            Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false,
+        isNodeAnimating: (nodeKey) => {
+            const node = getNode(nodeKey) as any;
+            return node && ("toPosX" in node || "toPosY" in node);
+        },
+        updateZIndex,
+        config: {
+            posAnimationDelay: 200,
+            onUpdate: () => overlayManager.current?.requestUpdate()
+        }
+    });
 
-        const updateOverlays = () => {
-            if(!nodeDisplayContainer.current) return;
-            if(!gpuMotor.current) return;
-            const transform = gpuMotor.current.getTransform();
+    // Node enter handler
+    const nodeEnter = useCallback(async (node: Node<any>) => {
+        if (!Project.state.nodeTypeConfig[node.type]) {
+            console.error("Node type", node.type, "can't be processed");
+            return;
+        }
+        if (!nodeDisplayContainer.current || !gpuMotor.current || !overlayManager.current) return;
+        if (inSchemaNode.current.has(node._key)) return;
 
-            for(let i = 0; i < inSchemaNode.current.length; i++) {
-                inSchemaNode.current[i].overElement.style.zoom = inSchemaNode.current[i].element.style.zoom = transform.scale+"";
-                const rect = gpuMotor.current.getNodeScreenRect(inSchemaNode.current[i].node._key);
-                if(!rect) {
-                    continue;
-                }
-                inSchemaNode.current[i].overElement.style.left = inSchemaNode.current[i].element.style.left = `${rect.x / transform.scale}px`;
-                inSchemaNode.current[i].overElement.style.top = inSchemaNode.current[i].element.style.top = `${rect.y / transform.scale}px`;
-                inSchemaNode.current[i].overElement.style.width = inSchemaNode.current[i].element.style.width = `${rect.width / transform.scale}px`;
-                inSchemaNode.current[i].overElement.style.height = inSchemaNode.current[i].element.style.height = `${rect.height / transform.scale}px`;
+        const nodeHTML = document.createElement('div');
+        nodeHTML.setAttribute("data-node-key", node._key);
+        nodeHTML.style.position = 'absolute';
+        nodeHTML.style.pointerEvents = 'all';
+        nodeHTML.style.backgroundColor = 'var(--nodius-background-paper)';
+
+        const overlay = document.createElement("div");
+        overlay.setAttribute("data-node-overlay-key", node._key);
+        overlay.style.position = 'absolute';
+        overlay.style.pointerEvents = 'none';
+        overlay.style.cursor = "pointer";
+        overlay.style.transition = "outline ease-in-out 0.3s";
+
+        const nodeConfig = Project.state.nodeTypeConfig[node.type];
+
+        overlay.style.borderRadius = nodeConfig.border.radius + "px";
+        nodeHTML.style.borderRadius = nodeConfig.border.radius + "px";
+        overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
+
+        // Mouse enter/leave for border color
+        const mouseEnter = () => {
+            overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.hover.color}`;
+        };
+        const mouseLeave = () => {
+            overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
+        };
+
+        overlay.addEventListener("mouseenter", mouseEnter);
+        nodeHTML.addEventListener("mouseenter", mouseEnter);
+        overlay.addEventListener("mouseleave", mouseLeave);
+        nodeHTML.addEventListener("mouseleave", mouseLeave);
+
+        // Drag handler
+        const dragHandler = createDragHandler(node._key, overlay, nodeHTML);
+        nodeHTML.addEventListener("mousedown", dragHandler);
+
+        // Create event manager
+        const eventManager = new NodeEventManager(nodeHTML, overlay, {
+            gpuMotor: gpuMotor.current,
+            getNode: () => getNode(node._key),
+            openHtmlEditor: Project.state.openHtmlEditor,
+            getHtmlRenderer: Project.state.getHtmlRenderer,
+            initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
+            getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
+            container: nodeHTML,
+            overlayContainer: overlay,
+            triggerEventOnNode
+        });
+
+        // Attach events
+        if (nodeConfig.domEvents) {
+            eventManager.attachEvents(nodeConfig.domEvents);
+        }
+
+        // Handle node updates
+        const handleNodeUpdate = async () => {
+            const updatedNode = getNode(node._key) as (Node<any> & {
+                toPosX?: number;
+                toPosY?: number;
+                toWidth?: number;
+                toHeight?: number;
+            }) | undefined;
+            if (!updatedNode) return;
+
+            const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
+            if (!updatedConfig) return;
+
+            // Update events with latest config
+            if (updatedConfig.domEvents) {
+                eventManager.updateEvents(updatedConfig.domEvents);
+            }
+
+            // Update HTML renderer
+            await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
+
+            // Trigger nodeUpdate event
+            triggerEventOnNode(node._key, "nodeUpdate");
+
+            // Start animation if needed
+            if (
+                (updatedNode.toPosX !== undefined && updatedNode.toPosX !== updatedNode.posX) ||
+                (updatedNode.toPosY !== undefined && updatedNode.toPosY !== updatedNode.posY) ||
+                (updatedNode.toWidth !== undefined) ||
+                (updatedNode.toHeight !== undefined)
+            ) {
+                animationManager.current?.startAnimation(
+                    updatedNode._key,
+                    () => getNode(updatedNode._key) as any,
+                    () => {
+                        gpuMotor.current?.requestRedraw();
+                        overlayManager.current?.requestUpdate();
+                    }
+                );
             }
         };
 
-        const requestUpdateOverlay = () => {
-            if(updateOverlayFrameId.current) cancelAnimationFrame(updateOverlayFrameId.current)
-            updateOverlayFrameId.current = requestAnimationFrame(updateOverlays);
+        nodeHTML.addEventListener("nodeUpdateSystem", handleNodeUpdate);
+
+        // Initialize HTML renderer
+        let htmlRenderer: htmlRenderContext | undefined;
+        if (nodeConfig.content) {
+            htmlRenderer = await Project.state.initiateNewHtmlRenderer!(
+                node,
+                "",
+                nodeHTML,
+                nodeConfig.content,
+                { noFirstRender: true }
+            );
+            if (htmlRenderer) {
+                nodeRenderer.registerRenderer(node._key, htmlRenderer);
+                await htmlRenderer.htmlMotor.render(nodeConfig.content);
+            }
         }
 
-        // Function to update HTML renderer dependencies and re-render
-        const updateHtmlRendererDependencies = async () => {
-            for(let i = 0; i < inSchemaNode.current.length; i++) {
-                const {htmlRenderer, node} = inSchemaNode.current[i];
-                if(htmlRenderer) {
-                    // Update global storage variables
-                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
-                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
-                    htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
-
-                    // Trigger re-render by getting the current content
-                    const nodeConfig = Project.state.nodeTypeConfig[node.type];
-                    if(nodeConfig?.content) {
-                        await htmlRenderer.htmlMotor.render(nodeConfig.content);
-                    }
-                }
-            }
-        };
-
-        // Function to dispatch nodeUpdate event for a specific node
-        const dispatchNodeUpdateEvent = (nodeKey: string) => {
-            const nodeElement = document.querySelector(`[data-node-key="${nodeKey}"]`);
-            if(nodeElement) {
-                const updateEvent = new CustomEvent("nodeUpdate", {
-                    bubbles: false,
-                    detail: { nodeKey }
-                });
-                nodeElement.dispatchEvent(updateEvent);
-            }
-        };
-        const nodeEnter = async (node: Node<any>) => {
-            if(!Project.state.nodeTypeConfig[node.type]) {
-                console.error("Node type", node.type, "can't be processed");
-                return;
-            }
-            if(!nodeDisplayContainer.current) return;
-            if(!gpuMotor.current) return;
-            if(inSchemaNode.current.findIndex((n) => n.node._key === node._key) === -1) {
-                const nodeHTML = document.createElement('div');
-                nodeHTML.setAttribute("data-node-key", node._key);
-                nodeHTML.style.position = 'absolute';
-                nodeHTML.style.pointerEvents = 'all';
-                nodeHTML.style.backgroundColor = 'var(--nodius-background-paper)';
-
-                const overlay = document.createElement("div");
-                overlay.setAttribute("data-node-overlay-key", node._key);
-                overlay.style.position = 'absolute';
-                overlay.style.pointerEvents = 'none';
-                overlay.style.cursor = "pointer";
-                overlay.style.transition = "outline ease-in-out 0.3s";
-
-
-                const nodeConfig = Project.state.nodeTypeConfig[node.type];
-
-                overlay.style.borderRadius = nodeConfig.border.radius+"px";
-                nodeHTML.style.borderRadius = nodeConfig.border.radius+"px";
-                overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
-
-                const mouseEnter = () => {
-                    overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.hover.color}`;
-                }
-                const mouseLeave = () => {
-                    overlay.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
-                }
-
-                overlay.addEventListener("mouseenter",mouseEnter)
-                nodeHTML.addEventListener("mouseenter", mouseEnter);
-                overlay.addEventListener("mouseleave",mouseLeave)
-                nodeHTML.addEventListener("mouseleave", mouseLeave);
-
-
-                const mouseDown = (evt:MouseEvent) => {
-
-                    const currentNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(node!._key);
-                    if(!currentNode) return;
-
-                    if(!gpuMotor.current!.isInteractive() || Project.state.disabledNodeInteraction[node._key]?.moving) {
-                        return;
-                    }
-
-                    if((overlay.style.zIndex == "" ? 0 : parseInt(overlay.style.zIndex)) < zIndex.current) {
-                        zIndex.current++;
-                        overlay.style.zIndex = nodeHTML.style.zIndex = zIndex.current+"";
-                    }
-
-                    if("toPosX" in currentNode || "toPosY" in currentNode) {
-                        return;
-                    }
-
-
-                    let lastSavedX = currentNode.posX;
-                    let lastSavedY = currentNode.posY;
-                    let lastSaveTime = Date.now();
-
-                    let lastX = evt.clientX;
-                    let lastY = evt.clientY;
-
-                    let timeoutSave:NodeJS.Timeout|undefined;
-
-
-                    gpuMotor.current!.enableInteractive(false);
-
-                    let animationFrame:number|undefined;
-                    let saveInProgress = false;
-                    let pendingSave: { node: Node<any>, oldPosX: number, oldPosY: number } | null = null;
-
-                    disableTextSelection();
-
-                    const saveNodePosition = async (currentNode:Node<any>) => {
-                        const oldPosX = currentNode.posX;
-                        const oldPosY = currentNode.posY;
-
-                        // If a save is already in progress, queue this one (replacing any existing pending save)
-                        if (saveInProgress) {
-                            pendingSave = { node: currentNode, oldPosX, oldPosY };
-                            return;
-                        }
-
-                        saveInProgress = true;
-
-
-                            const insts:Array<GraphInstructions> = [];
-                            const instructionsX = new InstructionBuilder();
-                            const instructionsY = new InstructionBuilder();
-                            instructionsX.key("posX").set(currentNode.posX);
-                            instructionsY.key("posY").set(currentNode.posY);
-
-                            insts.push({
-                                i: instructionsX.instruction,
-                                nodeId: currentNode._key,
-                                animatePos: true,
-                                dontApplyToMySelf: true,
-                            },
-                            {
-                                i: instructionsY.instruction,
-                                nodeId: currentNode._key,
-                                animatePos: true,
-                                dontApplyToMySelf: true,
-                            });
-                            const output = await Project.state.updateGraph!(insts);
-                            if(!output.status) {
-                                // If save failed, restore old position
-                                currentNode.posX = oldPosX;
-                                currentNode.posY = oldPosY;
-                                gpuMotor.current!.requestRedraw();
-                                requestUpdateOverlay();
-                                console.error("Failed to save node position:", output.reason);
-                            }
-                            lastSaveTime = Date.now();
-
-                            saveInProgress = false;
-
-                            // If there's a pending save, process it now
-                            if (pendingSave) {
-                                const { node } = pendingSave;
-                                pendingSave = null;
-                                saveNodePosition(node);
-                            }
-
-                    }
-
-                    const mouseMove = (evt:MouseEvent) => {
-                        if(animationFrame) cancelAnimationFrame(animationFrame);
-                        animationFrame = requestAnimationFrame(() => {
-                            if(!Project.state.graph) return;
-                            if(!Project.state.selectedSheetId) return;
-                            if(!node) return;
-
-                            // because each time node is updated, his ref change we have to take it back
-                            const currentNode = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(node!._key);
-                            if(!currentNode) return;
-
-                            const newX = evt.clientX;
-                            const newY = evt.clientY;
-
-                            const deltaX = newX - lastX;
-                            const deltaY = newY - lastY;
-
-
-                            const worldDeltaX = deltaX / (gpuMotor.current!.getTransform().scale);
-                            const worldDeltaY = deltaY / (gpuMotor.current!.getTransform().scale);
-
-                            currentNode.posX += worldDeltaX;
-                            currentNode.posY += worldDeltaY;
-
-                            lastX = newX;
-                            lastY = newY;
-
-                            gpuMotor.current!.requestRedraw();
-
-                            requestUpdateOverlay();
-
-                            if((currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
-                                const now = Date.now();
-                                if (now - lastSaveTime >= posAnimationDelay) {
-                                    saveNodePosition(currentNode);
-                                } else {
-                                    if(timeoutSave) clearTimeout(timeoutSave);
-                                    timeoutSave = setTimeout(() => {saveNodePosition(currentNode);
-                                    }, posAnimationDelay - (now - lastSaveTime));
-                                }
-                            }
-
-                        });
-                    }
-
-                    const mouseUp = (evt:MouseEvent) => {
-                        if(animationFrame) cancelAnimationFrame(animationFrame);
-                        window.removeEventListener("mousemove", mouseMove);
-                        window.removeEventListener("mouseup", mouseUp);
-                        gpuMotor.current!.enableInteractive(true);
-                        enableTextSelection();
-
-                        if(!Project.state.graph) return;
-                        if(!Project.state.selectedSheetId) return;
-                        if(!node) return;
-
-                        // because each time node is updated, his ref change we have to take it back
-                        const currentNode = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(node!._key);
-                        if(!currentNode) return;
-                        saveNodePosition(currentNode);
-                    }
-
-                    window.addEventListener("mouseup", mouseUp);
-                    window.addEventListener("mousemove", mouseMove);
-                }
-
-                nodeHTML.addEventListener("mousedown", mouseDown);
-
-                // Store event listeners for cleanup and reattachment
-                const eventListenerMap = new Map<string, (event: any) => void>();
-
-                const attachDomEvents = (config: typeof nodeConfig) => {
-                    // Reset cursor
-                    nodeHTML.style.cursor = "default";
-
-                    if(config.domEvents) {
-                        config.domEvents!.forEach((domEvent:any) => {
-                            if(domEvent.name === "click" || domEvent.name === "dblclick") {
-                                nodeHTML.style.cursor = "pointer";
-                            }
-
-                            const triggerEventOnNode = (nodeId:string, eventName:string) => {
-                                const nodeElement = document.querySelector(`[data-node-key="${nodeId}"]`);
-                                if(nodeElement) {
-                                    const updateEvent = new CustomEvent(eventName, {
-                                        bubbles: false
-                                    });
-                                    nodeElement.dispatchEvent(updateEvent);
-                                }
-                            }
-
-                            const callEvent = async (event:any) => {
-                                const currentNode = Project.state.graph!.sheets[Project.state.selectedSheetId!]!.nodeMap.get(node._key);
-                                if(!currentNode) return;
-                                const fct = new AsyncFunction(
-                                    ...[
-                                        "event",
-                                        "gpuMotor",
-                                        "node",
-                                        "openHtmlEditor",
-                                        "getHtmlRenderer",
-                                        "initiateNewHtmlRenderer",
-                                        "getHtmlAllRenderer",
-                                        "container",
-                                        "overlayContainer",
-                                        "triggerEventOnNode",
-                                        domEvent.call
-                                    ]
-                                );
-                                await fct(
-                                    ...[
-                                        event,
-                                        gpuMotor.current,
-                                        currentNode,
-                                        Project.state.openHtmlEditor,
-                                        Project.state.getHtmlRenderer,
-                                        Project.state.initiateNewHtmlRenderer,
-                                        Project.state.getHtmlAllRenderer,
-                                        nodeHTML,
-                                        overlay,
-                                        triggerEventOnNode
-                                    ]
-                                );
-                            }
-
-                            eventListenerMap.set(domEvent.name, callEvent);
-
-                            if(domEvent.name === "load") {
-                                callEvent(new Event("load", { bubbles: true }));
-                            } else {
-                                overlay.addEventListener(domEvent.name, callEvent);
-                                nodeHTML.addEventListener(domEvent.name, callEvent);
-                            }
-                        });
-                    }
-                };
-
-                const removeDomEvents = () => {
-                    eventListenerMap.forEach((listener, eventName) => {
-                        overlay.removeEventListener(eventName, listener);
-                        nodeHTML.removeEventListener(eventName, listener);
-                    });
-                    eventListenerMap.clear();
-                };
-
-                // Handle nodeUpdate to refresh event listeners and HTML renderer when node changes
-                const handleNodeUpdate = async () => {
-                    const updatedNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(node._key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
-                    if (!updatedNode) return;
-
-                    const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
-                    if (!updatedConfig) return;
-
-                    // Remove old listeners and attach new ones with updated config
-                    removeDomEvents();
-                    attachDomEvents(updatedConfig);
-
-                    // Update HTML renderer if it exists
-                    const schemaNode = inSchemaNode.current.find(n => n.node._key === node._key);
-                    if(schemaNode?.htmlRenderer) {
-                        // Update global storage variables with latest values
-                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
-                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
-                        schemaNode.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
-
-                        // Re-render with updated config content
-                        if(updatedConfig.content) {
-                            await schemaNode.htmlRenderer.htmlMotor.render(updatedConfig.content);
-                        }
-                    }
-
-                    const nodeElement = document.querySelector(`[data-node-key="${node._key}"]`);
-                    if(nodeElement) {
-                        const updateEvent = new CustomEvent("nodeUpdate", {
-                            bubbles: false
-                        });
-                        nodeElement.dispatchEvent(updateEvent);
-                    }
-
-                    if((updatedNode.toPosX && updatedNode.toPosX != updatedNode.posX) || (updatedNode.toPosY && updatedNode.toPosY != updatedNode.posY)) {
-                        const key = updatedNode._key;
-                        let anim = animatePosChangeFrameId.current[key];
-                        if (anim?.id) {
-                            cancelAnimationFrame(anim.id);
-                        } else {
-                            anim = { lastTime: performance.now(), velX: 0, velY: 0 };
-                        }
-                        animatePosChangeFrameId.current[key] = anim;
-
-                        const animePosTransition = () => {
-                            const currentNode = Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(key) as (Node<any> & {toPosX?:number, toPosY?:number}) | undefined;
-                            if (!currentNode) {
-                                delete animatePosChangeFrameId.current[key];
-                                return;
-                            }
-
-                            const now = performance.now();
-                            const dt = (now - anim.lastTime) / 1000;
-                            anim.lastTime = now;
-
-                            if (currentNode.toPosX !== undefined) {
-                                const deltaX = currentNode.toPosX - currentNode.posX;
-                                const velX = anim.velX;
-                                if (Math.abs(deltaX) < 0.1 && Math.abs(velX) < 0.1) {
-                                    currentNode.posX = currentNode.toPosX;
-                                    delete currentNode.toPosX;
-                                    anim.velX = 0;
-                                } else {
-                                    const forceX = (springStiffness * deltaX) - (damping * velX);
-                                    anim.velX += forceX * dt;
-                                    currentNode.posX += anim.velX * dt;
-                                }
-                            }
-
-                            if (currentNode.toPosY !== undefined) {
-                                const deltaY = currentNode.toPosY - currentNode.posY;
-                                const velY = anim.velY;
-                                if (Math.abs(deltaY) < 0.1 && Math.abs(velY) < 0.1) {
-                                    currentNode.posY = currentNode.toPosY;
-                                    delete currentNode.toPosY;
-                                    anim.velY = 0;
-                                } else {
-                                    const forceY = (springStiffness * deltaY) - (damping * velY);
-                                    anim.velY += forceY * dt;
-                                    currentNode.posY += anim.velY * dt;
-                                }
-                            }
-
-                            gpuMotor.current!.requestRedraw();
-                            requestUpdateOverlay();
-
-                            if (currentNode.toPosX !== undefined || currentNode.toPosY !== undefined) {
-                                anim.id = requestAnimationFrame(animePosTransition);
-                            } else {
-                                delete animatePosChangeFrameId.current[key];
-                            }
-                        };
-
-                        anim.id = requestAnimationFrame(animePosTransition);
-
-                    }
-
-                };
-
-                nodeHTML.addEventListener("nodeUpdateSystem", handleNodeUpdate);
-
-                // Initial attachment
-                attachDomEvents(nodeConfig);
-                let htmlRenderer:htmlRenderContext|undefined;
-                if(nodeConfig.content) {
-                    htmlRenderer = await Project.state.initiateNewHtmlRenderer!(node, "", nodeHTML, nodeConfig.content, {
-                        noFirstRender: true
-                    });
-                    if(htmlRenderer) {
-                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", Project.state.dataTypes);
-                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", Project.state.enumTypes);
-                        htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", Project.state.currentEntryDataType);
-                        await htmlRenderer.htmlMotor.render(nodeConfig.content);
-                    }
-                }
-
-                const transform = gpuMotor.current.getTransform();
-                const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
-
-                overlay.style.zoom = nodeHTML.style.zoom = transform.scale+"";
-                overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
-                overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
-                overlay.style.width = nodeHTML.style.width = `${rect.width / transform.scale}px`;
-                overlay.style.height = nodeHTML.style.height = `${rect.height / transform.scale}px`;
-
-                forwardMouseEvents(nodeHTML, gpuMotor.current.getContainerDraw());
-                forwardMouseEvents(overlay, gpuMotor.current.getContainerDraw());
-
-                nodeDisplayContainer.current.appendChild(nodeHTML);
-                nodeDisplayContainer.current.appendChild(overlay);
-                inSchemaNode.current.push({
-                    node: node,
-                    element: nodeHTML,
-                    overElement: overlay,
-                    htmlRenderer: htmlRenderer
-                });
-            }
-            onNodeEnter?.(node);
-        }
-        const nodeLeave = (node: Node<any>|undefined, nodeId:string) => {
-
-
-            if(!nodeDisplayContainer.current) return;
-
-            onNodeLeave?.(node, nodeId);
-
-            if(node) {
-                const nodeConfig = Project.state.nodeTypeConfig[node.type];
-                if (!nodeConfig || nodeConfig.alwaysRendered) return;
-
-            }
-            const index = inSchemaNode.current.findIndex((n) => n.node._key === nodeId);
-            if (index !== -1) {
-                nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].element);
-                nodeDisplayContainer.current.removeChild(inSchemaNode.current[index].overElement);
-                if (inSchemaNode.current[index].htmlRenderer) {
-                    inSchemaNode.current[index].htmlRenderer.htmlMotor.dispose();
-                }
-                inSchemaNode.current.splice(index, 1);
-            }
-
-        };
-
-        const onReset = () => {
-            if(nodeDisplayContainer.current) {
-                nodeDisplayContainer.current.innerHTML = "";
-            }
-            inSchemaNode.current = [];
-        }
-
-        gpuMotor.current.on("nodeEnter", nodeEnter);
-        gpuMotor.current.on("nodeLeave", nodeLeave);
-        gpuMotor.current.on("pan", requestUpdateOverlay);
-        gpuMotor.current.on("zoom", requestUpdateOverlay);
-        gpuMotor.current.on("reset", onReset);
-
-        // Check if dependencies have changed and trigger updates
-        const depsChanged =
-            previousDependencies.current.currentEntryDataType !== Project.state.currentEntryDataType ||
-            previousDependencies.current.enumTypes !== Project.state.enumTypes ||
-            previousDependencies.current.dataTypes !== Project.state.dataTypes;
-
-        if(depsChanged) {
-            // Update previous dependencies
-            previousDependencies.current = {
-                currentEntryDataType: Project.state.currentEntryDataType,
-                enumTypes: Project.state.enumTypes,
-                dataTypes: Project.state.dataTypes,
-            };
-
-            // Trigger update for all rendered nodes
-            updateHtmlRendererDependencies();
-
-            // Dispatch nodeUpdate event for all nodes to refresh their event handlers
-            inSchemaNode.current.forEach(schemaNode => {
-                dispatchNodeUpdateEvent(schemaNode.node._key);
-            });
-        }
-
-        return () => {
-            if(!gpuMotor.current) return;
-            gpuMotor.current.off("nodeEnter", nodeEnter);
-            gpuMotor.current.off("nodeLeave", nodeLeave);
-            gpuMotor.current.off("pan", requestUpdateOverlay);
-            gpuMotor.current.off("zoom", requestUpdateOverlay);
-            gpuMotor.current.off("reset", onReset);
-        }
+        // Position overlay
+        const transform = gpuMotor.current.getTransform();
+        const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
+
+        overlay.style.zoom = nodeHTML.style.zoom = transform.scale + "";
+        overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
+        overlay.style.top = nodeHTML.style.top = `${rect.y / transform.scale}px`;
+        overlay.style.width = nodeHTML.style.width = `${rect.width / transform.scale}px`;
+        overlay.style.height = nodeHTML.style.height = `${rect.height / transform.scale}px`;
+
+        forwardMouseEvents(nodeHTML, gpuMotor.current.getContainerDraw());
+        forwardMouseEvents(overlay, gpuMotor.current.getContainerDraw());
+
+        nodeDisplayContainer.current.appendChild(nodeHTML);
+        nodeDisplayContainer.current.appendChild(overlay);
+
+        overlayManager.current.addOverlay({
+            nodeKey: node._key,
+            element: nodeHTML,
+            overElement: overlay
+        });
+
+        inSchemaNode.current.set(node._key, {
+            node,
+            element: nodeHTML,
+            overElement: overlay,
+            htmlRenderer,
+            eventManager,
+            mouseEnterHandler: mouseEnter,
+            mouseLeaveHandler: mouseLeave,
+            dragHandler
+        });
+
+        onNodeEnter?.(node);
     }, [
-        gpuMotor.current,
-        Project.state.openHtmlEditor,
-        onNodeEnter,
-        onNodeLeave,
         Project.state.nodeTypeConfig,
+        Project.state.initiateNewHtmlRenderer,
+        Project.state.openHtmlEditor,
+        Project.state.getHtmlRenderer,
+        Project.state.getHtmlAllRenderer,
+        createDragHandler,
+        getNode,
+        nodeRenderer,
+        onNodeEnter,
+        triggerEventOnNode
+    ]);
+
+    // Node leave handler
+    const nodeLeave = useCallback((node: Node<any> | undefined, nodeId: string) => {
+        if (!nodeDisplayContainer.current) return;
+
+        onNodeLeave?.(node, nodeId);
+
+        if (node) {
+            const nodeConfig = Project.state.nodeTypeConfig[node.type];
+            if (!nodeConfig || nodeConfig.alwaysRendered) return;
+        }
+
+        const schemaNode = inSchemaNode.current.get(nodeId);
+        if (schemaNode) {
+            nodeDisplayContainer.current.removeChild(schemaNode.element);
+            nodeDisplayContainer.current.removeChild(schemaNode.overElement);
+            schemaNode.eventManager.dispose();
+            nodeRenderer.unregisterRenderer(nodeId);
+            overlayManager.current?.removeOverlay(nodeId);
+            animationManager.current?.stopAnimation(nodeId);
+            inSchemaNode.current.delete(nodeId);
+        }
+    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer]);
+
+    // Reset handler
+    const onReset = useCallback(() => {
+        if (nodeDisplayContainer.current) {
+            nodeDisplayContainer.current.innerHTML = "";
+        }
+        inSchemaNode.current.forEach(schemaNode => {
+            schemaNode.eventManager.dispose();
+        });
+        inSchemaNode.current.clear();
+        nodeRenderer.clearAllRenderers();
+        overlayManager.current?.clearOverlays();
+        animationManager.current?.stopAllAnimations();
+    }, [nodeRenderer]);
+
+    // Update context for all event managers when dependencies change
+    useEffect(() => {
+        inSchemaNode.current.forEach(schemaNode => {
+            schemaNode.eventManager.updateContext({
+                gpuMotor: gpuMotor.current!,
+                getNode: () => getNode(schemaNode.node._key),
+                openHtmlEditor: Project.state.openHtmlEditor,
+                getHtmlRenderer: Project.state.getHtmlRenderer,
+                initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
+                getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
+                container: schemaNode.element,
+                overlayContainer: schemaNode.overElement,
+                triggerEventOnNode
+            });
+        });
+    }, [
+        Project.state.openHtmlEditor,
         Project.state.getHtmlRenderer,
         Project.state.initiateNewHtmlRenderer,
         Project.state.getHtmlAllRenderer,
-        Project.state.graph,
-        Project.state.currentEntryDataType,
-        Project.state.enumTypes,
-        Project.state.dataTypes,
-        Project.state.disabledNodeInteraction
+        getNode,
+        triggerEventOnNode
     ]);
 
-    const onDoubleClick = () => {
-        onExitCanvas();
-    }
+    // Update drag handlers when createDragHandler changes (e.g., when updateGraph changes)
+    useEffect(() => {
+        inSchemaNode.current.forEach(schemaNode => {
+            // Remove old handler
+            schemaNode.element.removeEventListener("mousedown", schemaNode.dragHandler);
 
-    // Expose a global function to trigger node update for a specific node
-    // This can be used from anywhere in the app to force a node re-render
+            // Create and attach new handler
+            const newDragHandler = createDragHandler(
+                schemaNode.node._key,
+                schemaNode.overElement,
+                schemaNode.element
+            );
+            schemaNode.dragHandler = newDragHandler;
+            schemaNode.element.addEventListener("mousedown", newDragHandler);
+        });
+    }, [createDragHandler]);
+
+    // Attach motor event listeners
+    useEffect(() => {
+        if (!gpuMotor.current || !overlayManager.current) return;
+
+        const motor = gpuMotor.current;
+        const overlay = overlayManager.current;
+
+        motor.on("nodeEnter", nodeEnter);
+        motor.on("nodeLeave", nodeLeave);
+        motor.on("pan", () => overlay.requestUpdate());
+        motor.on("zoom", () => overlay.requestUpdate());
+        motor.on("reset", onReset);
+
+        return () => {
+            motor.off("nodeEnter", nodeEnter);
+            motor.off("nodeLeave", nodeLeave);
+            motor.off("pan", () => overlay.requestUpdate());
+            motor.off("zoom", () => overlay.requestUpdate());
+            motor.off("reset", onReset);
+        };
+    }, [nodeEnter, nodeLeave, onReset]);
+
+    // Global trigger function
     useEffect(() => {
         const triggerNodeUpdate = (nodeKey: string) => {
-            const nodeElement = document.querySelector(`[data-node-key="${nodeKey}"]`);
-            if(nodeElement) {
-                const updateEvent = new CustomEvent("nodeUpdateSystem", {
-                    bubbles: false,
-                    detail: {
-                        nodeId: nodeKey
-                    }
-                });
-                nodeElement.dispatchEvent(updateEvent);
-            }
+            triggerEventOnNode(nodeKey, "nodeUpdateSystem");
         };
 
-        // Attach to window for global access
         (window as any).triggerNodeUpdate = triggerNodeUpdate;
 
         return () => {
             delete (window as any).triggerNodeUpdate;
         };
-    }, []);
+    }, [triggerEventOnNode]);
+
+    const onDoubleClick = () => {
+        onExitCanvas();
+    };
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
-            <canvas ref={canvasRef} style={{filter: `invert(${Theme.state.theme === "dark" ? 1 : 0})`, transition: "all 0.25s ease-in-out"}} onDoubleClick={onDoubleClick} onClick={onCanvasClick}>
-
-            </canvas>
-            <div ref={nodeDisplayContainer} style={{width:"100%", height:"100%", position:"absolute", inset:"0px", pointerEvents:"none", overflow:"hidden"}}>
-
-            </div>
+            <canvas
+                ref={canvasRef}
+                style={{
+                    filter: `invert(${Theme.state.theme === "dark" ? 1 : 0})`,
+                    transition: "all 0.25s ease-in-out"
+                }}
+                onDoubleClick={onDoubleClick}
+                onClick={onCanvasClick}
+            />
+            <div
+                ref={nodeDisplayContainer}
+                style={{
+                    width:"100%",
+                    height:"100%",
+                    position:"absolute",
+                    inset:"0px",
+                    pointerEvents:"none",
+                    overflow:"hidden"
+                }}
+            />
         </div>
-    )
+    );
 }));

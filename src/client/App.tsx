@@ -92,9 +92,11 @@ export const App = () => {
             bubbles: false
         });
         const nodeElement = document.querySelector("[data-node-key='"+node._key+"']");
-        if(nodeElement) {
-            nodeElement.dispatchEvent(nodeEnterEvent);
-        }
+        requestAnimationFrame(() => {
+            if(nodeElement) {
+                nodeElement.dispatchEvent(nodeEnterEvent);
+            }
+        });
     }, []);
 
 
