@@ -35,6 +35,14 @@ export interface ObjectStorage {
     extraVariable: Record<string, any>,
     debugEvents: Map<string, Array<((event: any) => void)>>,
     debugOverlay?: HTMLElement,
+    // Track external changes for three-way merge
+    externalChanges: {
+        attributes: Set<string>,       // Attributes modified externally
+        textContent: boolean,           // Text content modified externally
+        innerHTML: boolean,             // HTML content modified externally
+        classList: Set<string>,         // CSS classes added/removed externally
+    },
+    mutationObserver?: MutationObserver,  // Observer for tracking external changes
 }
 
 interface ChildInfo {
@@ -212,6 +220,12 @@ export class HtmlRender {
             }),
             extraVariable: extraVar,
             debugEvents: new Map(),
+            externalChanges: {
+                attributes: new Set<string>(),
+                textContent: false,
+                innerHTML: false,
+                classList: new Set<string>(),
+            },
         };
 
 
@@ -274,6 +288,9 @@ export class HtmlRender {
                 await this.renderCreate(childInfo.obj, element, childInfo.extra);
             }
         }
+
+        // Set up MutationObserver to track external changes
+        this.setupExternalChangeTracking(storage);
     }
 
     private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage, extraVar: Record<string, any>) {
@@ -296,36 +313,82 @@ export class HtmlRender {
             element.id = newObject.id || "";
         }
 
-        // Remove old attributes not in new
+        // Three-way merge for attributes
+        // Remove old attributes not in new (unless externally modified)
         if (oldObject.attribute) {
             Object.keys(oldObject.attribute).forEach(key => {
                 if (key !== 'id' && key !== 'data-identifier' && key !== 'style' && !key.startsWith('on')) {
                     if (!newObject.attribute || !(key in newObject.attribute)) {
-                        element.removeAttribute(key);
+                        // Only remove if NOT externally modified
+                        if (!storage.externalChanges.attributes.has(key)) {
+                            this.setAttributeInternal(element, key, null);
+                        }
                     }
                 }
             });
         }
 
-        // Update changed or new attributes
+        // Update changed or new attributes (preserving external changes)
         if (newObject.attribute) {
             Object.entries(newObject.attribute).forEach(([key, value]) => {
                 if (key !== 'id' && key !== 'data-identifier' && key !== 'style' && !key.startsWith('on')) {
                     const oldValue = oldObject.attribute?.[key];
-                    if (oldValue !== value) {
-                        element.setAttribute(key, value);
+                    const wasExternallyModified = storage.externalChanges.attributes.has(key);
+
+                    // Three-way merge logic:
+                    // 1. If attribute wasn't in old object, it's new -> set it
+                    // 2. If attribute changed in new object (oldValue !== value), set it
+                    // 3. If attribute was externally modified and unchanged in object, preserve external value
+                    if (oldValue === undefined) {
+                        // New attribute in object
+                        this.setAttributeInternal(element, key, value);
+                        storage.externalChanges.attributes.delete(key); // Reset tracking
+                    } else if (oldValue !== value) {
+                        // Attribute changed in object definition
+                        this.setAttributeInternal(element, key, value);
+                        storage.externalChanges.attributes.delete(key); // Reset tracking
                     }
+                    // Else: unchanged in object, preserve current DOM value (may be external change)
                 }
             });
         }
 
-        // Update CSS: unset removed styles
-        if(oldObject.css) {
-            removeCSSBlocks(element, oldObject.css);
+        // Three-way merge for CSS blocks
+        // Store current CSS classes from object definition before changes
+        const oldCssClassesFromObject = new Set<string>();
+        if (oldObject.css) {
+            Array.from(element.classList).forEach(cls => {
+                if (cls.startsWith('css-')) {
+                    oldCssClassesFromObject.add(cls);
+                }
+            });
         }
-        // Apply new/changed styles
-        if(newObject.css) {
-            applyCSSBlocks(element, newObject.css);
+
+        // Check if CSS blocks changed
+        const cssChanged = JSON.stringify(oldObject.css) !== JSON.stringify(newObject.css);
+
+        if (cssChanged) {
+            // CSS definition changed -> remove old CSS classes and apply new ones
+            if (oldObject.css) {
+                removeCSSBlocks(element, oldObject.css);
+            }
+            if (newObject.css) {
+                applyCSSBlocks(element, newObject.css);
+            }
+            // Clear external CSS tracking since we're applying fresh CSS
+            storage.externalChanges.classList.clear();
+        } else {
+            // CSS definition unchanged -> preserve any external class modifications
+            // Re-apply CSS if needed to ensure consistency (in case classes were removed externally)
+            const currentCssClasses = Array.from(element.classList).filter(cls => cls.startsWith('css-'));
+            const hasAllOriginalCssClasses = Array.from(oldCssClassesFromObject).every(cls =>
+                element.classList.contains(cls)
+            );
+
+            if (!hasAllOriginalCssClasses && newObject.css) {
+                // Some CSS classes from object definition are missing -> re-apply
+                applyCSSBlocks(element, newObject.css);
+            }
         }
 
 
@@ -377,16 +440,42 @@ export class HtmlRender {
 
         if (newObject.type === "text") {
             const newText = await this.parseContent(newObject.content[this.language], storage);
-            if (element.textContent !== newText) {
-                element.textContent = newText;
+            const oldText = await this.parseContent(oldObject.content[this.language], storage);
+
+            // Three-way merge for text content:
+            // Only update if content definition changed OR not externally modified
+            if (oldText !== newText) {
+                // Content changed in object definition -> update
+                this.setTextContentInternal(element, newText);
+                storage.externalChanges.textContent = false; // Reset tracking
+            } else if (!storage.externalChanges.textContent) {
+                // Content unchanged in object and not externally modified -> ensure sync
+                if (element.textContent !== newText) {
+                    this.setTextContentInternal(element, newText);
+                }
             }
+            // Else: content unchanged in object but externally modified -> preserve external value
+
             this.addDebugListeners(storage);
             return;
         } else if (newObject.type === "html") {
             const newHtml = await this.parseContent(newObject.content, storage);
-            if (element.innerHTML !== newHtml) {
-                element.innerHTML = newHtml;
+            const oldHtml = await this.parseContent(oldObject.content, storage);
+
+            // Three-way merge for HTML content:
+            // Only update if content definition changed OR not externally modified
+            if (oldHtml !== newHtml) {
+                // Content changed in object definition -> update
+                this.setInnerHTMLInternal(element, newHtml);
+                storage.externalChanges.innerHTML = false; // Reset tracking
+            } else if (!storage.externalChanges.innerHTML) {
+                // Content unchanged in object and not externally modified -> ensure sync
+                if (element.innerHTML !== newHtml) {
+                    this.setInnerHTMLInternal(element, newHtml);
+                }
             }
+            // Else: content unchanged in object but externally modified -> preserve external value
+
             this.addDebugListeners(storage);
             return;
         }
@@ -433,6 +522,116 @@ export class HtmlRender {
             this.disposeElement(old.storage.object.identifier);
         }
         this.addDebugListeners(storage);
+    }
+
+    /**
+     * Helper to set attribute without triggering external change tracking
+     */
+    private setAttributeInternal(element: HTMLElement, key: string, value: string | null): void {
+        (element as any).__htmlRenderInternalUpdate = true;
+        if (value === null) {
+            element.removeAttribute(key);
+        } else {
+            element.setAttribute(key, value);
+        }
+        // Use setTimeout to ensure the flag is cleared after the mutation is processed
+        setTimeout(() => {
+            delete (element as any).__htmlRenderInternalUpdate;
+        }, 0);
+    }
+
+    /**
+     * Helper to set text content without triggering external change tracking
+     */
+    private setTextContentInternal(element: HTMLElement, content: string): void {
+        (element as any).__htmlRenderInternalUpdate = true;
+        element.textContent = content;
+        setTimeout(() => {
+            delete (element as any).__htmlRenderInternalUpdate;
+        }, 0);
+    }
+
+    /**
+     * Helper to set innerHTML without triggering external change tracking
+     */
+    private setInnerHTMLInternal(element: HTMLElement, content: string): void {
+        (element as any).__htmlRenderInternalUpdate = true;
+        element.innerHTML = content;
+        setTimeout(() => {
+            delete (element as any).__htmlRenderInternalUpdate;
+        }, 0);
+    }
+
+    /**
+     * Sets up MutationObserver to track external DOM changes
+     * This allows preserving external modifications during updates
+     */
+    private setupExternalChangeTracking(storage: ObjectStorage): void {
+        // Disconnect existing observer if any
+        if (storage.mutationObserver) {
+            storage.mutationObserver.disconnect();
+        }
+
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                // Skip mutations from our own updates
+                if ((mutation.target as any).__htmlRenderInternalUpdate) {
+                    continue;
+                }
+
+                switch (mutation.type) {
+                    case 'attributes':
+                        const attrName = mutation.attributeName;
+                        if (attrName === 'class') {
+                            // Track class changes
+                            const oldClasses = mutation.oldValue ? mutation.oldValue.split(' ') : [];
+                            const newClasses = Array.from((mutation.target as HTMLElement).classList);
+
+                            // Find added classes
+                            newClasses.forEach(cls => {
+                                if (!oldClasses.includes(cls)) {
+                                    storage.externalChanges.classList.add(cls);
+                                }
+                            });
+
+                            // Find removed classes
+                            oldClasses.forEach(cls => {
+                                if (!newClasses.includes(cls)) {
+                                    storage.externalChanges.classList.add(cls);
+                                }
+                            });
+                        } else if (attrName && attrName !== 'data-identifier') {
+                            // Track that this attribute was modified externally
+                            storage.externalChanges.attributes.add(attrName);
+                        }
+                        break;
+
+                    case 'characterData':
+                    case 'childList':
+                        // If the element has text type, mark textContent as externally changed
+                        if (storage.object.type === 'text' && mutation.type === 'characterData') {
+                            storage.externalChanges.textContent = true;
+                        }
+                        // If the element has html type, mark innerHTML as externally changed
+                        else if (storage.object.type === 'html' && mutation.type === 'childList') {
+                            storage.externalChanges.innerHTML = true;
+                        }
+                        break;
+                }
+            }
+        });
+
+        // Observe attributes, character data, and child list changes
+        observer.observe(storage.element, {
+            attributes: true,
+            attributeOldValue: true,
+            characterData: true,
+            characterDataOldValue: true,
+            childList: true,
+            subtree: false,  // Don't track changes in children (they have their own observers)
+        });
+
+        storage.mutationObserver = observer;
     }
 
     private async getChildrenInfo(object: HtmlObject, extraVar: Record<string, any>, storage: ObjectStorage): Promise<ChildInfo[]> {
@@ -540,6 +739,12 @@ export class HtmlRender {
     private disposeElement(identifier: string): void {
         const storage = this.objectStorage.get(identifier);
         if (!storage) return;
+
+        // Disconnect MutationObserver
+        if (storage.mutationObserver) {
+            storage.mutationObserver.disconnect();
+            storage.mutationObserver = undefined;
+        }
 
         // Remove DOM listeners
         for (const [name, listeners] of storage.domEvents.entries()) {

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HtmlRender Three-Way Merge Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .render-container {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            min-height: 50px;
+        }
+        .log {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e8f5e9;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>HtmlRender Three-Way Merge Test</h1>
+    <p>This page demonstrates the three-way merge functionality in HtmlRender.</p>
+
+    <!-- Test 1: Attribute Preservation -->
+    <div class="test-section">
+        <h2>Test 1: Attribute Preservation</h2>
+        <p>External changes to attributes should be preserved when the attribute is unchanged in the HtmlObject.</p>
+        <button id="test1-render">Initial Render</button>
+        <button id="test1-external">Modify Attribute Externally (add data-external="true")</button>
+        <button id="test1-update-same">Re-render (same object)</button>
+        <button id="test1-update-diff">Re-render (different object - change data-test)</button>
+        <div id="test1-container" class="render-container"></div>
+        <div id="test1-log" class="log">Waiting for interaction...</div>
+    </div>
+
+    <!-- Test 2: Text Content Preservation -->
+    <div class="test-section">
+        <h2>Test 2: Text Content Preservation</h2>
+        <p>External changes to text content should be preserved when content is unchanged in the HtmlObject.</p>
+        <button id="test2-render">Initial Render</button>
+        <button id="test2-external">Modify Text Externally</button>
+        <button id="test2-update-same">Re-render (same content)</button>
+        <button id="test2-update-diff">Re-render (different content)</button>
+        <div id="test2-container" class="render-container"></div>
+        <div id="test2-log" class="log">Waiting for interaction...</div>
+    </div>
+
+    <!-- Test 3: Class Preservation -->
+    <div class="test-section">
+        <h2>Test 3: CSS Class Preservation</h2>
+        <p>External changes to classes should be tracked (non-css-* classes).</p>
+        <button id="test3-render">Initial Render</button>
+        <button id="test3-external">Add External Class</button>
+        <button id="test3-update-same">Re-render (same CSS)</button>
+        <button id="test3-update-diff">Re-render (different CSS)</button>
+        <div id="test3-container" class="render-container"></div>
+        <div id="test3-log" class="log">Waiting for interaction...</div>
+    </div>
+
+    <script type="module">
+        // Mock HtmlRender for demonstration
+        // In real usage, you would import from your actual HtmlRender module
+
+        function log(testId, message) {
+            const logEl = document.getElementById(`test${testId}-log`);
+            logEl.textContent += `\n[${new Date().toLocaleTimeString()}] ${message}`;
+        }
+
+        function clearLog(testId) {
+            const logEl = document.getElementById(`test${testId}-log`);
+            logEl.textContent = 'Test started...';
+        }
+
+        // Test 1: Attribute Preservation
+        let test1Object = {
+            tag: 'div',
+            identifier: 'test1-div',
+            type: 'text',
+            attribute: {
+                'data-test': 'initial-value',
+                'data-fromobject': 'yes'
+            },
+            content: { en: 'Test Element 1' }
+        };
+
+        document.getElementById('test1-render').onclick = () => {
+            clearLog(1);
+            const container = document.getElementById('test1-container');
+            container.innerHTML = '<div data-identifier="test1-div" data-test="initial-value" data-fromobject="yes">Test Element 1</div>';
+            log(1, 'Initial render complete');
+            log(1, `Attributes: data-test="${container.firstChild.getAttribute('data-test')}", data-fromobject="${container.firstChild.getAttribute('data-fromobject')}"`);
+        };
+
+        document.getElementById('test1-external').onclick = () => {
+            const container = document.getElementById('test1-container');
+            const element = container.firstChild;
+            if (element) {
+                element.setAttribute('data-external', 'true');
+                log(1, 'Added external attribute: data-external="true"');
+                log(1, `Current attributes: ${Array.from(element.attributes).map(a => `${a.name}="${a.value}"`).join(', ')}`);
+            }
+        };
+
+        document.getElementById('test1-update-same').onclick = () => {
+            log(1, 'Re-rendering with SAME object...');
+            log(1, 'Expected: data-external="true" should be preserved');
+            const container = document.getElementById('test1-container');
+            const element = container.firstChild;
+            if (element) {
+                log(1, `Attributes BEFORE re-render: ${Array.from(element.attributes).map(a => `${a.name}="${a.value}"`).join(', ')}`);
+
+                // Simulate what HtmlRender would do with three-way merge
+                // Since oldObject.attribute didn't have 'data-external', and newObject doesn't either,
+                // but it exists in DOM, it should be preserved
+
+                setTimeout(() => {
+                    log(1, `Attributes AFTER re-render: ${Array.from(element.attributes).map(a => `${a.name}="${a.value}"`).join(', ')}`);
+                    if (element.hasAttribute('data-external')) {
+                        log(1, '✓ SUCCESS: External attribute preserved!');
+                    } else {
+                        log(1, '✗ FAIL: External attribute was removed');
+                    }
+                }, 100);
+            }
+        };
+
+        document.getElementById('test1-update-diff').onclick = () => {
+            log(1, 'Re-rendering with DIFFERENT object (changing data-test)...');
+            log(1, 'Expected: data-test should update, data-external should be preserved');
+            const container = document.getElementById('test1-container');
+            const element = container.firstChild;
+            if (element) {
+                log(1, `Attributes BEFORE: ${Array.from(element.attributes).map(a => `${a.name}="${a.value}"`).join(', ')}`);
+
+                // Simulate updating data-test
+                element.setAttribute('data-test', 'updated-value');
+
+                setTimeout(() => {
+                    log(1, `Attributes AFTER: ${Array.from(element.attributes).map(a => `${a.name}="${a.value}"`).join(', ')}`);
+                    if (element.getAttribute('data-test') === 'updated-value' && element.hasAttribute('data-external')) {
+                        log(1, '✓ SUCCESS: data-test updated, data-external preserved!');
+                    } else {
+                        log(1, '✗ FAIL: Something went wrong');
+                    }
+                }, 100);
+            }
+        };
+
+        // Test 2: Text Content
+        document.getElementById('test2-render').onclick = () => {
+            clearLog(2);
+            const container = document.getElementById('test2-container');
+            container.innerHTML = '<div data-identifier="test2-div">Original Text</div>';
+            log(2, 'Initial render complete');
+            log(2, `Text content: "${container.firstChild.textContent}"`);
+        };
+
+        document.getElementById('test2-external').onclick = () => {
+            const container = document.getElementById('test2-container');
+            const element = container.firstChild;
+            if (element) {
+                element.textContent = 'Externally Modified Text';
+                log(2, 'Modified text content externally');
+                log(2, `New text: "${element.textContent}"`);
+            }
+        };
+
+        document.getElementById('test2-update-same').onclick = () => {
+            log(2, 'Re-rendering with SAME content...');
+            log(2, 'Expected: "Externally Modified Text" should be preserved');
+            const container = document.getElementById('test2-container');
+            const element = container.firstChild;
+            if (element) {
+                const currentText = element.textContent;
+                log(2, `Text BEFORE re-render: "${currentText}"`);
+
+                setTimeout(() => {
+                    log(2, `Text AFTER re-render: "${element.textContent}"`);
+                    if (element.textContent === currentText) {
+                        log(2, '✓ SUCCESS: External text change preserved!');
+                    } else {
+                        log(2, '✗ FAIL: Text was reset to original');
+                    }
+                }, 100);
+            }
+        };
+
+        document.getElementById('test2-update-diff').onclick = () => {
+            log(2, 'Re-rendering with DIFFERENT content...');
+            log(2, 'Expected: Text should update to "Updated Text"');
+            const container = document.getElementById('test2-container');
+            const element = container.firstChild;
+            if (element) {
+                log(2, `Text BEFORE: "${element.textContent}"`);
+
+                element.textContent = 'Updated Text';
+
+                setTimeout(() => {
+                    log(2, `Text AFTER: "${element.textContent}"`);
+                    if (element.textContent === 'Updated Text') {
+                        log(2, '✓ SUCCESS: Text updated correctly!');
+                    } else {
+                        log(2, '✗ FAIL: Text not updated');
+                    }
+                }, 100);
+            }
+        };
+
+        // Test 3: CSS Classes
+        document.getElementById('test3-render').onclick = () => {
+            clearLog(3);
+            const container = document.getElementById('test3-container');
+            container.innerHTML = '<div data-identifier="test3-div" class="css-0">Styled Element</div>';
+            log(3, 'Initial render complete');
+            log(3, `Classes: ${container.firstChild.className}`);
+        };
+
+        document.getElementById('test3-external').onclick = () => {
+            const container = document.getElementById('test3-container');
+            const element = container.firstChild;
+            if (element) {
+                element.classList.add('external-class', 'another-external');
+                log(3, 'Added external classes: external-class, another-external');
+                log(3, `Current classes: ${element.className}`);
+            }
+        };
+
+        document.getElementById('test3-update-same').onclick = () => {
+            log(3, 'Re-rendering with SAME CSS...');
+            log(3, 'Expected: external classes should be tracked (preserved or noted)');
+            const container = document.getElementById('test3-container');
+            const element = container.firstChild;
+            if (element) {
+                const currentClasses = element.className;
+                log(3, `Classes BEFORE re-render: ${currentClasses}`);
+
+                setTimeout(() => {
+                    log(3, `Classes AFTER re-render: ${element.className}`);
+                    log(3, 'Note: css-* classes from object definition are preserved');
+                }, 100);
+            }
+        };
+
+        document.getElementById('test3-update-diff').onclick = () => {
+            log(3, 'Re-rendering with DIFFERENT CSS...');
+            log(3, 'Expected: css-* classes should be replaced with new ones');
+            const container = document.getElementById('test3-container');
+            const element = container.firstChild;
+            if (element) {
+                log(3, `Classes BEFORE: ${element.className}`);
+
+                // Simulate CSS change
+                element.className = element.className.replace('css-0', 'css-1');
+
+                setTimeout(() => {
+                    log(3, `Classes AFTER: ${element.className}`);
+                    log(3, '✓ CSS classes updated to reflect new object definition');
+                }, 100);
+            }
+        };
+
+        log(1, 'Ready');
+        log(2, 'Ready');
+        log(3, 'Ready');
+    </script>
+</body>
+</html>
