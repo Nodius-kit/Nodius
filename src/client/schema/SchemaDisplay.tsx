@@ -33,6 +33,7 @@ import {useNodeDragDrop} from "./hooks/useNodeDragDrop";
 import {useNodeRenderer} from "./hooks/useNodeRenderer";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
+import {useNodeConfigOverlay} from "./hooks/useNodeConfigOverlay";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -184,6 +185,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         getNodeConfig: (nodeType) => Project.state.nodeTypeConfig[nodeType]
     });
 
+
     // Helper functions
     const getNode = useCallback((nodeKey: string) => {
         return Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(nodeKey);
@@ -206,6 +208,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             nodeElement.dispatchEvent(updateEvent);
         }
     }, []);
+
+    const { updateNodeConfigOverlay } = useNodeConfigOverlay({
+        getNode: getNode,
+        enabled: (nodeId) => Project.state.editedNodeConfig?.node._key === nodeId,
+        gpuMotor: gpuMotor.current!
+    });
+
 
     // Drag and drop hook
     const { createDragHandler } = useNodeDragDrop({
@@ -346,6 +355,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             // Update HTML renderer
             await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
+
+
 
             // Trigger nodeUpdate event
             triggerEventOnNode(node._key, "nodeUpdate");

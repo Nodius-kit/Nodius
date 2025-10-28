@@ -86,7 +86,6 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
                 saveInProgress = true;
 
-                const insts: GraphInstructions[] = [];
                 const instructionsWidth = new InstructionBuilder();
                 const instructionsHeight = new InstructionBuilder();
                 instructionsWidth.key("size").key("width").set(node.size.width);
@@ -94,6 +93,9 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
                 lastSavedWidth = node.size.width;
                 lastSavedHeight = node.size.height;
+
+                let output:any;
+                const insts: GraphInstructions[] = [];
                 insts.push(
                     {
                         i: instructionsWidth.instruction,
@@ -109,7 +111,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     }
                 );
 
-                const output = await updateGraph(insts);
+                output = await updateGraph(insts);
                 if (!output.status) {
                     // Restore old size on failure
                     node.size.width = oldWidth;
@@ -156,14 +158,21 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     gpuMotor.requestRedraw();
                     config.onUpdate?.();
 
-                    if (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight) {
+                    // Only schedule save if there's no save in progress
+                    if (!saveInProgress && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {
                         const now = Date.now();
                         if (now - lastSaveTime >= sizeAnimationDelay) {
                             saveNodeSize(currentNode);
                         } else {
                             if (timeoutSave) clearTimeout(timeoutSave);
                             timeoutSave = setTimeout(() => {
-                                saveNodeSize(currentNode);
+                                // Check again if save is still needed and not in progress
+                                if (!saveInProgress) {
+                                    const node = getNode(nodeKey);
+                                    if (node && (node.size.width !== lastSavedWidth || node.size.height !== lastSavedHeight)) {
+                                        saveNodeSize(node);
+                                    }
+                                }
                             }, sizeAnimationDelay - (now - lastSaveTime));
                         }
                     }
@@ -172,6 +181,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
             const mouseUp = (evt: MouseEvent) => {
                 if (animationFrame) cancelAnimationFrame(animationFrame);
+                if (timeoutSave) clearTimeout(timeoutSave);
                 window.removeEventListener("mousemove", mouseMove);
                 window.removeEventListener("mouseup", mouseUp);
                 gpuMotor.enableInteractive(true);
@@ -179,7 +189,12 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
                 const currentNode = getNode(nodeKey);
                 if (currentNode && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {
-                    saveNodeSize(currentNode);
+                    // Final save on mouse up - if there's already a save in progress, queue it
+                    if (saveInProgress) {
+                        pendingSave = { node: currentNode, oldWidth: currentNode.size.width, oldHeight: currentNode.size.height };
+                    } else {
+                        saveNodeSize(currentNode);
+                    }
                 }
             };
 

@@ -916,55 +916,6 @@ export const useSocketSync = () => {
         }
     }, [Project.state.graph, Project.state.editedHtml, handleIntructionToGraph, Project.state.selectedSheetId, Project.state.refreshCurrentEntryDataType]);
 
-    const updateGraph = useCallback(async (instructions:Array<GraphInstructions>):Promise<ActionContext> => {
-        const start = Date.now();
-        const message:WSMessage<WSApplyInstructionToGraph> = {
-            type: "applyInstructionToGraph",
-            instructions: instructions
-        }
-
-        const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToGraph>;
-
-        if(response && response._response) {
-            if(response._response.status) {
-                const output = await applyGraphInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
-                if(output) {
-                    return {
-                        reason: output,
-                        timeTaken: Date.now() - start,
-                        status: false
-                    }
-                } else {
-                    return {
-                        timeTaken: Date.now() - start,
-                        status: true
-                    }
-                }
-            } else {
-                console.error("Unknow server error while sending WS message:", message," | server output:",response);
-                return {
-                    timeTaken: Date.now() - start,
-                    reason: "Unknow server error while sending WS message:"+JSON.stringify(message)+" | server output:"+JSON.stringify(response),
-                    status: false,
-                }
-            }
-        } else {
-            console.error("Unknow client error while sending WS message:", message);
-            return {
-                timeTaken: Date.now() - start,
-                reason: "Unknow client error while sending WS message:"+ JSON.stringify(message),
-                status: false,
-            }
-        }
-    }, [applyGraphInstructions]);
-
-    useEffect(() => {
-        Project.dispatch({
-            field: "updateGraph",
-            value: updateGraph
-        });
-    }, [updateGraph]);
-
 
     const currentEditConfig = useRef<{node: Node<any>,config: NodeTypeConfig }>(Project.state.editedNodeConfig);
     useEffect(() => {
@@ -1016,19 +967,14 @@ export const useSocketSync = () => {
                     if (!instruction.noRedraw) {
                         await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                     }
-
                 }
-
             }else {
                 return newNodeConfig.error ?? "Unknown error"
             }
-
             if(!instruction.noRedraw) {
                 redrawGraph = true;
             }
         }
-
-
 
         if(redrawGraph) {
             gpuMotor.current!.requestRedraw();
@@ -1086,6 +1032,78 @@ export const useSocketSync = () => {
             value: updateNodeConfig
         })
     }, [updateNodeConfig])
+
+    const updateGraph = useCallback(async (instructions:Array<GraphInstructions>):Promise<ActionContext> => {
+
+        const start = Date.now();
+
+        // redirect to update node config is so
+        if(Project.state.editedNodeConfig) {
+            return await updateNodeConfig(instructions.map((inst) => {
+
+                if(inst.nodeId != undefined) {
+                    inst.i.p = ["node", ...(inst.i.p??[])];
+                }
+
+                return {
+                    i: inst.i,
+                    noRedraw: inst.noRedraw,
+                    targetedIdentifier: inst.targetedIdentifier,
+                    applyUniqIdentifier: inst.applyUniqIdentifier,
+                    animatePos: inst.animatePos,
+                    animateSize: inst.animateSize,
+                    dontApplyToMySelf: inst.dontApplyToMySelf
+                }
+            }));
+        }
+
+        const message:WSMessage<WSApplyInstructionToGraph> = {
+            type: "applyInstructionToGraph",
+            instructions: instructions
+        }
+
+        const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToGraph>;
+
+        if(response && response._response) {
+            if(response._response.status) {
+                const output = await applyGraphInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
+                if(output) {
+                    return {
+                        reason: output,
+                        timeTaken: Date.now() - start,
+                        status: false
+                    }
+                } else {
+                    return {
+                        timeTaken: Date.now() - start,
+                        status: true
+                    }
+                }
+            } else {
+                console.error("Unknow server error while sending WS message:", message," | server output:",response);
+                return {
+                    timeTaken: Date.now() - start,
+                    reason: "Unknow server error while sending WS message:"+JSON.stringify(message)+" | server output:"+JSON.stringify(response),
+                    status: false,
+                }
+            }
+        } else {
+            console.error("Unknow client error while sending WS message:", message);
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Unknow client error while sending WS message:"+ JSON.stringify(message),
+                status: false,
+            }
+        }
+    }, [applyGraphInstructions, updateNodeConfig, Project.state.editedNodeConfig]);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "updateGraph",
+            value: updateGraph
+        });
+    }, [updateGraph]);
+
 
     const updateHtml = useCallback(async (instructionHtml:Instruction|Instruction[], options?:UpdateHtmlOption): Promise<ActionContext> => {
         const instructions = deepCopy(instructionHtml);

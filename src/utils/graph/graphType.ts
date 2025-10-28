@@ -25,7 +25,7 @@ import {HTMLDomEvent, HtmlObject} from "../html/htmlType";
 import {MotorEventMap} from "../../client/schema/motor/graphicalMotor";
 
 export type NodeType = "html" | "entryType" | string;
-export type handleSide = "T" | "D" | "R" | "L" | "0"
+export type handleSide = "T" /*top*/ | "D"/*down*/ | "R"/*right*/ | "L"/*left*/ | "0"/*middle, uneditable*/
 
 export interface NodeTypeEntryType {
     _key:string,

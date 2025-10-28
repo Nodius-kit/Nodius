@@ -67,6 +67,7 @@ export interface nodeConfigInstructions {
     targetedIdentifier?:string, // security check
     noRedraw?: boolean,
     animatePos?:boolean,
+    animateSize?:boolean,
 
     // don't apply instruction to the graph after sending it to the server, should be only used when working on non logic data rapidly (like node position or size)
     dontApplyToMySelf?:boolean

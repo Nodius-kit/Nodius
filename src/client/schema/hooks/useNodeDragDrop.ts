@@ -155,14 +155,21 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     gpuMotor.requestRedraw();
                     config.onUpdate?.();
 
-                    if (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY) {
+                    // Only schedule save if there's no save in progress
+                    if (!saveInProgress && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
                         const now = Date.now();
                         if (now - lastSaveTime >= posAnimationDelay) {
                             saveNodePosition(currentNode);
                         } else {
                             if (timeoutSave) clearTimeout(timeoutSave);
                             timeoutSave = setTimeout(() => {
-                                saveNodePosition(currentNode);
+                                // Check again if save is still needed and not in progress
+                                if (!saveInProgress) {
+                                    const node = getNode(nodeKey);
+                                    if (node && (node.posX !== lastSavedX || node.posY !== lastSavedY)) {
+                                        saveNodePosition(node);
+                                    }
+                                }
                             }, posAnimationDelay - (now - lastSaveTime));
                         }
                     }
@@ -171,6 +178,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
             const mouseUp = (evt: MouseEvent) => {
                 if (animationFrame) cancelAnimationFrame(animationFrame);
+                if (timeoutSave) clearTimeout(timeoutSave);
                 window.removeEventListener("mousemove", mouseMove);
                 window.removeEventListener("mouseup", mouseUp);
                 gpuMotor.enableInteractive(true);
@@ -178,7 +186,12 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                 const currentNode = getNode(nodeKey);
                 if (currentNode && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
-                    saveNodePosition(currentNode);
+                    // Final save on mouse up - if there's already a save in progress, queue it
+                    if (saveInProgress) {
+                        pendingSave = { node: currentNode, oldPosX: currentNode.posX, oldPosY: currentNode.posY };
+                    } else {
+                        saveNodePosition(currentNode);
+                    }
                 }
             };
 
