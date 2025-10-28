@@ -11,7 +11,7 @@ import {
     EditedHtmlType,
     EditedNodeTypeConfig,
     getHtmlRendererType,
-    htmlRenderContext
+    htmlRenderContext, initiateNewHtmlRendererType
 } from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 
@@ -20,13 +20,16 @@ export interface NodeEventContext {
     getNode: () => Node<any> | undefined;
     openHtmlEditor: OpenHtmlEditorFct;
     getHtmlRenderer: getHtmlRendererType;
-    initiateNewHtmlRenderer: any;
-    getHtmlAllRenderer: any;
+    initiateNewHtmlRenderer: initiateNewHtmlRendererType;
+    getHtmlAllRenderer: () =>  Record<string, Record<string, htmlRenderContext>>;
     container: HTMLElement;
     overlayContainer: HTMLElement;
     triggerEventOnNode: (nodeId: string, eventName: string) => void;
     editedHtml: EditedHtmlType;
     editedNodeConfig: EditedNodeTypeConfig;
+    selectedNode: string[],
+    addSelectedNode: (nodeId:string) => void;
+
 }
 
 export interface DomEventConfig {
@@ -127,6 +130,20 @@ export class NodeEventManager {
                 this.container.addEventListener(domEvent.name, eventHandler);
             }
         }
+
+        const list = this.eventListeners.get("click") ?? [];
+
+        const selectNode = () => {
+            const node = this.context.getNode();
+            if(!node) return;
+            this.context.addSelectedNode(node._key);
+        }
+
+        list.push(selectNode);
+        this.eventListeners.set("click", list);
+        this.overlay.addEventListener("click", selectNode);
+        this.container.addEventListener("click", selectNode);
+
     }
 
     /**

@@ -212,13 +212,21 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             getNode: () => getNode(node._key),
             openHtmlEditor: Project.state.openHtmlEditor!,
             getHtmlRenderer: Project.state.getHtmlRenderer!,
-            initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
-            getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
+            initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer!,
+            getHtmlAllRenderer: Project.state.getHtmlAllRenderer!,
             container: nodeHTML,
             overlayContainer: overlay,
             triggerEventOnNode: triggerEventOnNode,
             editedHtml: Project.state.editedHtml,
             editedNodeConfig: Project.state.editedNodeConfig,
+            addSelectedNode: (nodeId:string) => {
+                Project.state.selectedNode.push(nodeId);
+                Project.dispatch({
+                    field: "selectedNode",
+                    value: [...Project.state.selectedNode]
+                })
+            },
+            selectedNode: Project.state.selectedNode
         });
 
         // Attach events
@@ -396,6 +404,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 triggerEventOnNode: triggerEventOnNode,
                 editedHtml: Project.state.editedHtml,
                 editedNodeConfig: Project.state.editedNodeConfig,
+                addSelectedNode: (nodeId:string) => {
+                    Project.state.selectedNode.push(nodeId);
+                    Project.dispatch({
+                        field: "selectedNode",
+                        value: [...Project.state.selectedNode]
+                    })
+                },
+                selectedNode: Project.state.selectedNode
             });
 
             const nodeConfig = Project.state.nodeTypeConfig[schemaNode.node.type];
@@ -412,6 +428,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.nodeTypeConfig,
         Project.state.editedHtml,
         Project.state.editedNodeConfig,
+        Project.state.selectedNode,
         getNode,
         triggerEventOnNode
     ]);

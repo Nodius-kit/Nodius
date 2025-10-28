@@ -84,6 +84,7 @@ export type DisabledNodeInteractionType = Record<string, Partial<{
 }>>;
 
 export type getHtmlRendererType = (node:string|Node<any>) =>  Record<string, htmlRenderContext>;
+export type initiateNewHtmlRendererType = (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>;
 
 export interface ProjectContextType {
     loader: {
@@ -105,7 +106,7 @@ export interface ProjectContextType {
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
     updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 
-    initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>,
+    initiateNewHtmlRenderer?: initiateNewHtmlRendererType,
     getHtmlRenderer?: getHtmlRendererType,
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
@@ -125,7 +126,9 @@ export interface ProjectContextType {
 
     caughtUpMessage?: WSMessage<any>[] // used to caught up missing message while connecting
 
-    disabledNodeInteraction: DisabledNodeInteractionType
+    disabledNodeInteraction: DisabledNodeInteractionType,
+
+    selectedNode: string[],
 
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
@@ -138,5 +141,6 @@ export const ProjectContextDefaultValue: ProjectContextType = {
         "html": NodeTypeHtmlConfig,
         "entryType": NodeTypeEntryTypeConfig
     },
-    disabledNodeInteraction: {}
+    disabledNodeInteraction: {},
+    selectedNode: [],
 }
