@@ -114,7 +114,11 @@ export const App = () => {
         if(Project.state.editedHtml) {
             Project.state.editedHtml.htmlRender.clearBuildingOverlay();
         }
-    }, [Project.state.editedHtml])
+        /*Project.dispatch({
+            field:"selectedNode",
+            value: []
+        });*/
+    }, [Project.state.editedHtml/*, Project.state.selectedNode*/])
 
 
 

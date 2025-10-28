@@ -31,6 +31,7 @@ import {OverlayManager} from "./overlayManager";
 import {NodeEventManager} from "./nodeEventManager";
 import {useNodeDragDrop} from "./hooks/useNodeDragDrop";
 import {useNodeRenderer} from "./hooks/useNodeRenderer";
+import {useDynamicClass} from "../hooks/useDynamicClass";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -71,6 +72,38 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Managers
     const animationManager = useRef<NodeAnimationManager>(undefined);
     const overlayManager = useRef<OverlayManager>(undefined);
+
+    // Dynamic class for selected node effect
+    const selectedNodeClass = useDynamicClass(`
+        & {
+            animation: nodius-selection-pulse 2s ease-in-out infinite !important;
+            transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        @keyframes nodius-selection-pulse {
+            0%, 100% {
+                box-shadow:
+                    0 0 0 2px var(--nodius-primary, #3b82f6),
+                    0 0 20px 4px rgba(59, 130, 246, 0.4),
+                    0 0 40px 8px rgba(59, 130, 246, 0.2),
+                    0 8px 16px rgba(0, 0, 0, 0.1);
+            }
+            50% {
+                box-shadow:
+                    0 0 0 2px var(--nodius-primary, #3b82f6),
+                    0 0 25px 6px rgba(59, 130, 246, 0.5),
+                    0 0 50px 12px rgba(59, 130, 246, 0.3),
+                    0 8px 16px rgba(0, 0, 0, 0.1);
+            }
+        }
+    `);
+
+    const selectedNodeElementClass = useDynamicClass(`
+        & {
+            filter: brightness(1.05) !important;
+            transition: filter 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+    `);
 
     // Initialize WebGPU motor
     useEffect(() => {
@@ -485,9 +518,80 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         };
     }, [triggerEventOnNode]);
 
+    // Selection visual effect using dynamic classes
+    useEffect(() => {
+        const selectedNodeIds = new Set(Project.state.selectedNode);
+
+        inSchemaNode.current.forEach((schemaNode, nodeKey) => {
+            const isSelected = selectedNodeIds.has(nodeKey);
+            const overlay = schemaNode.overElement;
+            const element = schemaNode.element;
+
+            if (isSelected) {
+                // Apply selection classes
+                overlay.classList.add(selectedNodeClass);
+                element.classList.add(selectedNodeElementClass);
+
+                // Increase z-index for selected nodes
+                const currentZ = parseInt(overlay.style.zIndex) || 0;
+                overlay.style.zIndex = element.style.zIndex = (currentZ + 10000) + "";
+            } else {
+                // Remove selection classes
+                overlay.classList.remove(selectedNodeClass);
+                element.classList.remove(selectedNodeElementClass);
+
+                // Restore original z-index (if it was artificially increased)
+                const currentZ = parseInt(overlay.style.zIndex) || 0;
+                if (currentZ >= 10000) {
+                    overlay.style.zIndex = element.style.zIndex = (currentZ - 10000) + "";
+                }
+            }
+        });
+    }, [Project.state.selectedNode, selectedNodeClass, selectedNodeElementClass]);
+
     const onDoubleClick = () => {
         onExitCanvas();
     };
+
+    // Track drag state to distinguish click from drag
+    const dragState = useRef({ isDragging: false, startX: 0, startY: 0 });
+
+    const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+        dragState.current.isDragging = false;
+        dragState.current.startX = e.clientX;
+        dragState.current.startY = e.clientY;
+    }, []);
+
+    const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
+        if (dragState.current.startX !== 0 || dragState.current.startY !== 0) {
+            const dx = Math.abs(e.clientX - dragState.current.startX);
+            const dy = Math.abs(e.clientY - dragState.current.startY);
+            // Consider it a drag if moved more than 5 pixels
+            if (dx > 5 || dy > 5) {
+                dragState.current.isDragging = true;
+            }
+        }
+    }, []);
+
+    const handleCanvasMouseUp = useCallback((e: React.MouseEvent) => {
+        // If mouseup without dragging, reset selected nodes
+        if (!dragState.current.isDragging) {
+            if (Project.state.selectedNode.length > 0) {
+                Project.dispatch({
+                    field: "selectedNode",
+                    value: []
+                });
+            }
+        }
+        // Reset drag state
+        dragState.current.isDragging = false;
+        dragState.current.startX = 0;
+        dragState.current.startY = 0;
+    }, [Project]);
+
+    const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+        onCanvasClick(e);
+    }, [onCanvasClick]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
@@ -498,7 +602,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     transition: "all 0.25s ease-in-out"
                 }}
                 onDoubleClick={onDoubleClick}
-                onClick={onCanvasClick}
+                onClick={handleCanvasClick}
+                onMouseDown={handleCanvasMouseDown}
+                onMouseMove={handleCanvasMouseMove}
+                onMouseUp={handleCanvasMouseUp}
             />
             <div
                 ref={nodeDisplayContainer}
