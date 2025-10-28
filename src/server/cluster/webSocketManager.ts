@@ -634,8 +634,6 @@ export class WebSocketManager {
                 for(const instruction of message.instructions) {
                     if(instruction.nodeId) {
                         const currentNode = modifiedNodes.get(instruction.nodeId)!;
-                        console.log("aaa", instruction);
-                        console.dir(currentNode, { depth: null });
                         const newNode = applyInstruction(currentNode, instruction.i, (objectBeingApplied) => {
                             if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                                 const object:any = objectBeingApplied;

@@ -39,7 +39,7 @@ export class NodeAnimationManager {
      */
     startAnimation(
         nodeKey: string,
-        getNode: () => (Node<any> & { toPosX?: number; toPosY?: number; toWidth?: number; toHeight?: number }) | undefined,
+        getNode: () => (Node<any> & { toPosX?: number; toPosY?: number;size:{ toWidth?: number; toHeight?: number} }) | undefined,
         onUpdate: () => void
     ): void {
         let anim = this.animations[nodeKey];
@@ -100,13 +100,13 @@ export class NodeAnimationManager {
             }
 
             // Animate width
-            if (currentNode.toWidth !== undefined) {
+            if (currentNode.size.toWidth !== undefined) {
                 const currentWidth = (currentNode as any).size?.width ?? 0;
-                const deltaWidth = currentNode.toWidth - currentWidth;
+                const deltaWidth = currentNode.size.toWidth - currentWidth;
                 if (Math.abs(deltaWidth) < 0.1 && Math.abs(anim.velWidth!) < 0.1) {
                     if (!(currentNode as any).size) (currentNode as any).size = {};
-                    (currentNode as any).size.width = currentNode.toWidth;
-                    delete currentNode.toWidth;
+                    (currentNode as any).size.width = currentNode.size.toWidth;
+                    delete currentNode.size.toWidth;
                     anim.velWidth = 0;
                 } else {
                     const forceWidth = (this.springStiffness * deltaWidth) - (this.damping * anim.velWidth!);
@@ -118,13 +118,13 @@ export class NodeAnimationManager {
             }
 
             // Animate height
-            if (currentNode.toHeight !== undefined) {
+            if (currentNode.size.toHeight !== undefined) {
                 const currentHeight = (currentNode as any).size?.height ?? 0;
-                const deltaHeight = currentNode.toHeight - currentHeight;
+                const deltaHeight = currentNode.size.toHeight - currentHeight;
                 if (Math.abs(deltaHeight) < 0.1 && Math.abs(anim.velHeight!) < 0.1) {
                     if (!(currentNode as any).size) (currentNode as any).size = {};
-                    (currentNode as any).size.height = currentNode.toHeight;
-                    delete currentNode.toHeight;
+                    (currentNode as any).size.height = currentNode.size.toHeight;
+                    delete currentNode.size.toHeight;
                     anim.velHeight = 0;
                 } else {
                     const forceHeight = (this.springStiffness * deltaHeight) - (this.damping * anim.velHeight!);

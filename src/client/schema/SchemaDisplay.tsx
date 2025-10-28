@@ -32,6 +32,7 @@ import {NodeEventManager} from "./nodeEventManager";
 import {useNodeDragDrop} from "./hooks/useNodeDragDrop";
 import {useNodeRenderer} from "./hooks/useNodeRenderer";
 import {useDynamicClass} from "../hooks/useDynamicClass";
+import {useNodeResize} from "./hooks/useNodeResize";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -44,11 +45,13 @@ interface SchemaNodeInfo {
     node: Node<any>;
     element: HTMLElement;
     overElement: HTMLElement;
+    resizeHandle: HTMLElement;
     htmlRenderer?: htmlRenderContext;
     eventManager: NodeEventManager;
     mouseEnterHandler: () => void;
     mouseLeaveHandler: () => void;
     dragHandler: (evt: MouseEvent) => void;
+    resizeHandler: (evt: MouseEvent) => void;
 }
 
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
@@ -102,6 +105,34 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         & {
             filter: brightness(1.05) !important;
             transition: filter 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+    `);
+
+    const resizeHandleClass = useDynamicClass(`
+        & {
+            position: absolute;
+            bottom: -6px;
+            right: -6px;
+            width: 16px;
+            height: 16px;
+            background: var(--nodius-primary, #3b82f6);
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: nwse-resize;
+            pointer-events: all;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+            z-index: 10;
+            opacity: 0;
+            transform: scale(0.8);
+        }
+        &:hover {
+            background: var(--nodius-primary-dark, #2563eb);
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        &:active {
+            transform: scale(0.95);
         }
     `);
 
@@ -187,9 +218,25 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             const node = getNode(nodeKey) as any;
             return node && ("toPosX" in node || "toPosY" in node);
         },
-        updateZIndex,
+        updateZIndex: updateZIndex,
         config: {
             posAnimationDelay: 200,
+            onUpdate: () => overlayManager.current?.requestUpdate()
+        }
+    });
+
+    // Resize hook
+    const { createResizeHandler } = useNodeResize({
+        gpuMotor: gpuMotor.current!,
+        getNode: getNode,
+        updateGraph: Project.state.updateGraph!,
+        isNodeInteractionDisabled: (nodeKey) =>
+            (Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false) && (!Project.state.editedNodeConfig || Project.state.editedNodeConfig.node._key !== nodeKey),
+        updateZIndex: updateZIndex,
+        config: {
+            sizeAnimationDelay: 200,
+            minWidth: 50,
+            minHeight: 50,
             onUpdate: () => overlayManager.current?.requestUpdate()
         }
     });
@@ -235,6 +282,16 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         overlay.addEventListener("mouseleave", mouseLeave);
         nodeHTML.addEventListener("mouseleave", mouseLeave);
 
+        // Create resize handle
+        const resizeHandle = document.createElement('div');
+        resizeHandle.className = resizeHandleClass;
+        resizeHandle.setAttribute("data-resize-handle", node._key);
+        overlay.appendChild(resizeHandle);
+
+        // Resize handler
+        const resizeHandler = createResizeHandler(node._key, overlay, nodeHTML);
+        resizeHandle.addEventListener("mousedown", resizeHandler);
+
         // Drag handler
         const dragHandler = createDragHandler(node._key, overlay, nodeHTML);
         nodeHTML.addEventListener("mousedown", dragHandler);
@@ -272,8 +329,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             const updatedNode = getNode(node._key) as (Node<any> & {
                 toPosX?: number;
                 toPosY?: number;
-                toWidth?: number;
-                toHeight?: number;
+                size: {
+                    toWidth?: number;
+                    toHeight?: number;
+                }
             }) | undefined;
             if (!updatedNode) return;
 
@@ -295,8 +354,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             if (
                 (updatedNode.toPosX !== undefined && updatedNode.toPosX !== updatedNode.posX) ||
                 (updatedNode.toPosY !== undefined && updatedNode.toPosY !== updatedNode.posY) ||
-                (updatedNode.toWidth !== undefined) ||
-                (updatedNode.toHeight !== undefined)
+                (updatedNode.size.toWidth !== undefined && updatedNode.size.width !== updatedNode.size.toWidth) ||
+                (updatedNode.size.toHeight !== undefined && updatedNode.size.height !== updatedNode.size.toHeight)
             ) {
                 animationManager.current?.startAnimation(
                     updatedNode._key,
@@ -363,11 +422,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             node,
             element: nodeHTML,
             overElement: overlay,
+            resizeHandle,
             htmlRenderer,
             eventManager,
             mouseEnterHandler: mouseEnter,
             mouseLeaveHandler: mouseLeave,
-            dragHandler
+            dragHandler,
+            resizeHandler
         });
 
         onNodeEnter?.(node);
@@ -379,6 +440,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.getHtmlAllRenderer,
         Project.state.editedNodeConfig,
         createDragHandler,
+        createResizeHandler,
+        resizeHandleClass,
         getNode,
         nodeRenderer,
         onNodeEnter,
@@ -466,13 +529,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         triggerEventOnNode
     ]);
 
-    // Update drag handlers when createDragHandler changes (e.g., when updateGraph changes)
+    // Update drag and resize handlers when handlers change (e.g., when updateGraph changes)
     useEffect(() => {
         inSchemaNode.current.forEach(schemaNode => {
-            // Remove old handler
+            // Remove old handlers
             schemaNode.element.removeEventListener("mousedown", schemaNode.dragHandler);
+            schemaNode.resizeHandle.removeEventListener("mousedown", schemaNode.resizeHandler);
 
-            // Create and attach new handler
+            // Create and attach new drag handler
             const newDragHandler = createDragHandler(
                 schemaNode.node._key,
                 schemaNode.overElement,
@@ -480,8 +544,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             );
             schemaNode.dragHandler = newDragHandler;
             schemaNode.element.addEventListener("mousedown", newDragHandler);
+
+            // Create and attach new resize handler
+            const newResizeHandler = createResizeHandler(schemaNode.node._key, schemaNode.overElement, schemaNode.element);
+            schemaNode.resizeHandler = newResizeHandler;
+            schemaNode.resizeHandle.addEventListener("mousedown", newResizeHandler);
         });
-    }, [createDragHandler]);
+    }, [createDragHandler, createResizeHandler]);
 
     // Attach motor event listeners
     useEffect(() => {
@@ -521,16 +590,27 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Selection visual effect using dynamic classes
     useEffect(() => {
         const selectedNodeIds = new Set(Project.state.selectedNode);
+        const isSingleSelection = selectedNodeIds.size === 1;
 
         inSchemaNode.current.forEach((schemaNode, nodeKey) => {
             const isSelected = selectedNodeIds.has(nodeKey);
             const overlay = schemaNode.overElement;
             const element = schemaNode.element;
+            const resizeHandle = schemaNode.resizeHandle;
 
             if (isSelected) {
                 // Apply selection classes
                 overlay.classList.add(selectedNodeClass);
                 element.classList.add(selectedNodeElementClass);
+
+                // Show resize handle only for single selection
+                if (isSingleSelection) {
+                    resizeHandle.style.opacity = "1";
+                    resizeHandle.style.transform = "scale(1)";
+                } else {
+                    resizeHandle.style.opacity = "0";
+                    resizeHandle.style.transform = "scale(0.8)";
+                }
 
                 // Increase z-index for selected nodes
                 const currentZ = parseInt(overlay.style.zIndex) || 0;
@@ -539,6 +619,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 // Remove selection classes
                 overlay.classList.remove(selectedNodeClass);
                 element.classList.remove(selectedNodeElementClass);
+
+                // Hide resize handle
+                resizeHandle.style.opacity = "0";
+                resizeHandle.style.transform = "scale(0.8)";
 
                 // Restore original z-index (if it was artificially increased)
                 const currentZ = parseInt(overlay.style.zIndex) || 0;
@@ -575,7 +659,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     const handleCanvasMouseUp = useCallback((e: React.MouseEvent) => {
         // If mouseup without dragging, reset selected nodes
-        if (!dragState.current.isDragging) {
+        if (!dragState.current.isDragging && !Project.state.editedHtml) {
             if (Project.state.selectedNode.length > 0) {
                 Project.dispatch({
                     field: "selectedNode",
@@ -587,7 +671,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         dragState.current.isDragging = false;
         dragState.current.startX = 0;
         dragState.current.startY = 0;
-    }, [Project]);
+    }, [Project.state.selectedNode, Project.state.editedHtml]);
 
     const handleCanvasClick = useCallback((e: React.MouseEvent) => {
         onCanvasClick(e);

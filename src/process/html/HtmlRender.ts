@@ -200,6 +200,7 @@ export class HtmlRender {
         const end = performance.now();
         const durationMicro = (end - start);
         console.log("Render time taken in MS:", durationMicro);
+        //console.trace();
     }
 
     private async renderCreate(object: HtmlObject, parent: HTMLElement, extraVar: Record<string, any> = {}, insertBefore: Node | null = null) {

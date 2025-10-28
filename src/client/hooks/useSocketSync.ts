@@ -201,6 +201,7 @@ export const useSocketSync = () => {
         });
 
 
+
         if(Array.isArray(htmlRenderer.pathOfRender)) {
             let object = node as any;
             for (const path of htmlRenderer.pathOfRender) {
@@ -406,6 +407,9 @@ export const useSocketSync = () => {
                     if(i.animatePos) {
                         delete i.animatePos; // no need animation when try to caught up the current graph
                     }
+                    if(i.animateSize) {
+                        delete i.animateSize; // no need animation when try to caught up the current graph
+                    }
                 }
             })
             Project.dispatch({
@@ -603,6 +607,9 @@ export const useSocketSync = () => {
                     if(i.animatePos) {
                         delete i.animatePos; // no need animation when try to caught up the current graph
                     }
+                    if(i.animateSize) {
+                        delete i.animateSize; // no need animation when try to caught up the current graph
+                    }
                 }
             })
             Project.dispatch({
@@ -675,11 +682,14 @@ export const useSocketSync = () => {
         })
     }, [openHtmlClass]);
 
-    const handleIntructionToGraph = useCallback(async (instructions:GraphInstructions[], beforeApply?: BeforeApplyInstructionWithContext):Promise<{status:boolean, error?:string}> => {
+    const handleIntructionToGraph = useCallback(async (instructions:GraphInstructions[], beforeApply?: BeforeApplyInstructionWithContext):Promise<{status:boolean, error?:string, shouldUpdateNode:boolean}> => {
         if(!Project.state.graph || !Project.state.selectedSheetId) return {
             status: false,
-            error: "Graph not initialized"
+            error: "Graph not initialized",
+            shouldUpdateNode: false
         };
+
+        let shouldUpdateNode = false;
 
         for(const instruction of instructions) {
             if(instruction.nodeId) {
@@ -688,17 +698,25 @@ export const useSocketSync = () => {
                     return {
                         status: false,
                         error: "Can't find node with id :"+instruction.nodeId,
+                        shouldUpdateNode: false,
                     };
                 }
 
                 // this is a special case, for animating a smooth posX and posY change, sync  between html render and gpu render,
                 // if destination of instruction is posX/posY change it to toPosX and toPosY, this is client only
+                // same for width and height with animateSize flag
                 // temporary value set to animate transition
 
-                if(instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posX") {
+                if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posX") {
                     instruction.i.p[0] = "toPosX";
-                } else if(instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posY") {
+                } else if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posY") {
                     instruction.i.p[0] = "toPosY";
+                } else if(instruction.animateSize && instruction.i.p && instruction.i.p.length == 2 && instruction.i.p[0] == "size" && instruction.i.p[1] == "width") {
+                    instruction.i.p[1] = "toWidth";
+                } else if(instruction.animateSize && instruction.i.p && instruction.i.p.length == 2 && instruction.i.p[0] == "size" && instruction.i.p[1] == "height") {
+                    instruction.i.p[1] = "toHeight";
+                } else {
+                    shouldUpdateNode = true;
                 }
 
                 const newNode = applyInstruction(node, instruction.i, beforeApply ? ((objectBeingApplied) => beforeApply(instruction, objectBeingApplied)) : undefined);
@@ -709,6 +727,7 @@ export const useSocketSync = () => {
                     return {
                         status: false,
                         error: "Error while applied instruction to destination node, should not append:"+JSON.stringify(newNode),
+                        shouldUpdateNode: false
                     };
                 }
             } else if(instruction.edgeId) {
@@ -717,6 +736,7 @@ export const useSocketSync = () => {
                     return {
                         status: false,
                         error: "Can't find edge with id :"+instruction.edgeId,
+                        shouldUpdateNode: false,
                     };
                 }
                 const newEdge = applyInstruction(oldNEdge, instruction.i, beforeApply ? ((objectBeingApplied) => beforeApply(instruction, objectBeingApplied)) : undefined);
@@ -787,12 +807,14 @@ export const useSocketSync = () => {
                     return {
                         status: false,
                         error: "Error while applied instruction to destination edge, should not append:"+JSON.stringify(newEdge),
+                        shouldUpdateNode: false,
                     };
                 }
             }
         }
         return {
             status: true,
+            shouldUpdateNode: shouldUpdateNode
         }
     }, [Project.state.graph, Project.state.editedHtml, Project.state.selectedSheetId]);
 
@@ -817,6 +839,8 @@ export const useSocketSync = () => {
             const nodeAlreadyCheck:string[] = [];
             const edgeAlreadyCheck:string[] = [];
             for(const instruction of instructions) {
+
+
                 if(instruction.edgeId && !instruction.noRedraw) {
                     redrawGraph = true;
 

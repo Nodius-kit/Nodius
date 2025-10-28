@@ -53,6 +53,10 @@ export const App = () => {
                     value: undefined
                 });
                 Project.state.onCloseEditor?.();
+                Project.dispatch({
+                    field: "selectedNode",
+                    value: Project.state.selectedNode.filter((id) => id !== nodeId)
+                });
             }
 
             const nodeConfig = Project.state.nodeTypeConfig[node.type];
@@ -76,6 +80,10 @@ export const App = () => {
                     value: undefined
                 });
                 Project.state.onCloseEditor?.();
+                Project.dispatch({
+                    field: "selectedNode",
+                    value: Project.state.selectedNode.filter((id) => id !== nodeId)
+                });
             }
         }
     }, [
@@ -84,7 +92,8 @@ export const App = () => {
         Project.state.graph,
         Project.state.selectedSheetId,
         Project.state.openHtmlEditor,
-        Project.state.onCloseEditor
+        Project.state.onCloseEditor,
+        Project.state.selectedNode
     ]);
 
     const onNodeEnter = useCallback((node:Node<any>) => {
