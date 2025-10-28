@@ -199,13 +199,13 @@ export const LeftPanelComponentEditor = memo(({
                     }
                     removeInstruction.instruction.v = undefined;
 
-                    // Apply locally first (optimistic update)
+                    /*// Apply locally first (optimistic update)
                     const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
                     if(applyInstruction(newHtmlObject, removeInstruction.instruction)) {
                         editedHtmlRef.current!.html = newHtmlObject;
                         instruction = new InstructionBuilder();
                         object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, newHtmlObject, instruction) : undefined;
-                    }
+                    }*/
 
                     // Send to server
                     await updateHtmlRef.current!(removeInstruction.instruction, {
@@ -230,7 +230,6 @@ export const LeftPanelComponentEditor = memo(({
 
             const isNewHover = !lastObjectHover || lastObjectHover !== object;
             if (lastObjectHover && lastObjectHover.identifier !== object.identifier) {
-                console.log("remove");
                 await removeLastInstruction();
             }
 
@@ -303,10 +302,10 @@ export const LeftPanelComponentEditor = memo(({
                             const removeInstruction = instruction.clone();
                             removeInstruction.arrayRemoveIndex(indexOfTemporary);
 
-                            const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
+                            /*const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
                             if(applyInstruction(newHtmlObject, removeInstruction.instruction)) {
                                 editedHtmlRef.current!.html = newHtmlObject;
-                            }
+                            }*/
 
                             // Send to server
                             await updateHtmlRef.current!(removeInstruction.instruction, {
@@ -326,11 +325,11 @@ export const LeftPanelComponentEditor = memo(({
             }
 
             if (shouldAdd) {
-                // Apply locally first (optimistic update)
+                /*// Apply locally first (optimistic update)
                 const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
                 if(applyInstruction(newHtmlObject, instruction.instruction)) {
                     editedHtmlRef.current!.html = newHtmlObject;
-                }
+                }*/
 
                 // Send to server
                 await updateHtmlRef.current!(instruction.instruction, {
@@ -353,7 +352,6 @@ export const LeftPanelComponentEditor = memo(({
             enableTextSelection();
 
             if(lastInstruction) {
-                console.log(lastInstruction.clone().instruction);
                 // Create instruction to remove temporary flag
                 const cleanupInstruction = lastInstruction.clone();
                 cleanupInstruction.instruction.v = undefined;

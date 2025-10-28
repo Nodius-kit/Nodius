@@ -35,7 +35,7 @@ export const searchElementWithIdentifier = (identifier:string, object:HtmlObject
         return object.content ? searchElementWithIdentifier(_identifier, object.content, instruction) : undefined;
     } else if(object.type === "list") {
         instruction?.key("content");
-        for(let i = 0; i < object.content.length; i++) {
+        for(let i = 0; i < (object.content ?? []).length; i++) {
             const currentObject = object.content[i];
             const currentInstruction = instruction?.clone();
             currentInstruction?.index(i);

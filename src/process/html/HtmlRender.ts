@@ -116,6 +116,7 @@ export class HtmlRender {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
         }
+        if(value == this.buildingMode) return;
         if (this.buildingMode && !value) {
             for (const storage of this.objectStorage.values()) {
                 if (storage.debugOverlay) {
@@ -198,7 +199,6 @@ export class HtmlRender {
         this.previousObject = deepCopy(object);
         const end = performance.now();
         const durationMicro = (end - start);
-        //console.trace();
         console.log("Render time taken in MS:", durationMicro);
     }
 

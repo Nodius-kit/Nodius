@@ -941,9 +941,14 @@ export const useSocketSync = () => {
         });
     }, [updateGraph]);
 
+
+    const currentEditConfig = useRef<{node: Node<any>,config: NodeTypeConfig }>(Project.state.editedNodeConfig);
+    useEffect(() => {
+        currentEditConfig.current = Project.state.editedNodeConfig;
+    }, [Project.state.editedNodeConfig]);
     const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
-        if(!Project.state.editedNodeConfig) return;
-        let nodeConfig = deepCopy(Project.state.editedNodeConfig.config);
+        if(!currentEditConfig.current) return;
+        let nodeConfig = deepCopy(currentEditConfig.current.config);
 
         let redrawGraph = false;
         for(const instruction of instructions) {
@@ -976,12 +981,13 @@ export const useSocketSync = () => {
                         field: "editedHtml",
                         value: {...Project.state.editedHtml}
                     });
+                    currentEditConfig.current = {
+                        ...currentEditConfig.current,
+                        config: nodeConfig
+                    };
                     Project.dispatch({
                         field: "editedNodeConfig",
-                        value: {
-                            ...Project.state.editedNodeConfig,
-                            config: nodeConfig
-                        }
+                        value: currentEditConfig.current
                     });
                     if (!instruction.noRedraw) {
                         await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);

@@ -60,12 +60,15 @@ export class NodeEventManager {
         // Reset cursor
         this.container.style.cursor = "default";
 
+
         if(this.context.editedNodeConfig && this.context.editedNodeConfig.node._key === this.context.getNode()?._key) {
             const triggerNodeConfig = () => {
                 const htmlRenderer = this.context.getHtmlRenderer(this.context.getNode()?._key!);
                 if(htmlRenderer && htmlRenderer[""]) {
+                    htmlRenderer[""].htmlMotor.setBuildingMode(true);
                     this.context.openHtmlEditor(this.context.getNode()?._key!, htmlRenderer[""], () => {
-                        console.log("close");
+
+                        htmlRenderer[""].htmlMotor.setBuildingMode(false);
                     })
                 }
             }

@@ -348,7 +348,9 @@ export class WebSocketManager {
     private async handleIncomingMessage(ws: WebSocket, message: string): Promise<void> {
         try {
             const jsonData = JSON.parse(message) as WSMessage<any>;
-            console.log('Received JSON message:', jsonData);
+            console.log('Received JSON message:');
+            console.dir(jsonData, {depth:null});
+            console.log("----------------");
 
             const messageId = (jsonData as WSMessage<any>)._id;
 

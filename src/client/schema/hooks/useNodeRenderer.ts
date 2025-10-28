@@ -6,6 +6,7 @@
 
 import { useRef, useCallback, useEffect } from "react";
 import { htmlRenderContext } from "../../hooks/contexts/ProjectContext";
+import {deepCopy} from "../../../utils/objectUtils";
 
 export interface RendererDependencies {
     currentEntryDataType?: any;
@@ -82,7 +83,6 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
         // Trigger re-render with updated config
         const nodeConfig = getNodeConfig(nodeType);
         if (nodeConfig?.content) {
-
             await info.htmlRenderer.htmlMotor.render(nodeConfig.content);
         }
     }, [dependencies, getNodeConfig]);
