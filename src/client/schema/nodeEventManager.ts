@@ -7,17 +7,26 @@
 import { AsyncFunction } from "../../process/html/HtmlRender";
 import { Node } from "../../utils/graph/graphType";
 import { WebGpuMotor } from "./motor/webGpuMotor/index";
+import {
+    EditedHtmlType,
+    EditedNodeTypeConfig,
+    getHtmlRendererType,
+    htmlRenderContext
+} from "../hooks/contexts/ProjectContext";
+import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 
 export interface NodeEventContext {
     gpuMotor: WebGpuMotor;
     getNode: () => Node<any> | undefined;
-    openHtmlEditor: any;
-    getHtmlRenderer: any;
+    openHtmlEditor: OpenHtmlEditorFct;
+    getHtmlRenderer: getHtmlRendererType;
     initiateNewHtmlRenderer: any;
     getHtmlAllRenderer: any;
     container: HTMLElement;
     overlayContainer: HTMLElement;
     triggerEventOnNode: (nodeId: string, eventName: string) => void;
+    editedHtml: EditedHtmlType;
+    editedNodeConfig: EditedNodeTypeConfig;
 }
 
 export interface DomEventConfig {
@@ -29,7 +38,7 @@ export interface DomEventConfig {
  * Manages event listeners for a single node with proper cleanup and re-attachment
  */
 export class NodeEventManager {
-    private eventListeners = new Map<string, (event: any) => void>();
+    private eventListeners = new Map<string, ((event: any) => void)[]>();
     private container: HTMLElement;
     private overlay: HTMLElement;
     private context: NodeEventContext;
@@ -50,6 +59,22 @@ export class NodeEventManager {
     attachEvents(domEvents: DomEventConfig[]): void {
         // Reset cursor
         this.container.style.cursor = "default";
+
+        if(this.context.editedNodeConfig && this.context.editedNodeConfig.node._key === this.context.getNode()?._key) {
+            const triggerNodeConfig = () => {
+                const htmlRenderer = this.context.getHtmlRenderer(this.context.getNode()?._key!);
+                if(htmlRenderer && htmlRenderer[""]) {
+                    this.context.openHtmlEditor(this.context.getNode()?._key!, htmlRenderer[""], () => {
+                        console.log("close");
+                    })
+                }
+            }
+            const list = this.eventListeners.get("dblclick") ?? [];
+            list.push(triggerNodeConfig);
+            this.eventListeners.set("dblclick", list);
+            this.overlay.addEventListener("dblclick", triggerNodeConfig);
+            this.container.addEventListener("dblclick", triggerNodeConfig);
+        }
 
         for (const domEvent of domEvents) {
             if (domEvent.name === "click" || domEvent.name === "dblclick") {
@@ -88,11 +113,13 @@ export class NodeEventManager {
                 );
             };
 
-            this.eventListeners.set(domEvent.name, eventHandler);
 
             if (domEvent.name === "load") {
                 eventHandler(new Event("load", { bubbles: true }));
             } else {
+                const list = this.eventListeners.get(domEvent.name) ?? [];
+                list.push(eventHandler);
+                this.eventListeners.set(domEvent.name, list);
                 this.overlay.addEventListener(domEvent.name, eventHandler);
                 this.container.addEventListener(domEvent.name, eventHandler);
             }
@@ -103,9 +130,11 @@ export class NodeEventManager {
      * Remove all attached events
      */
     removeEvents(): void {
-        this.eventListeners.forEach((listener, eventName) => {
-            this.overlay.removeEventListener(eventName, listener);
-            this.container.removeEventListener(eventName, listener);
+        this.eventListeners.forEach((listeners, eventName) => {
+            listeners.forEach((listener) => {
+                this.overlay.removeEventListener(eventName, listener);
+                this.container.removeEventListener(eventName, listener);
+            })
         });
         this.eventListeners.clear();
     }

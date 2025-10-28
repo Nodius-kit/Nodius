@@ -24,7 +24,7 @@ import {memo, useContext, useEffect, useRef, forwardRef, useCallback} from "reac
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
-import {disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
+import {deepCopy, disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
 import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {NodeAnimationManager} from "./nodeAnimations";
 import {OverlayManager} from "./overlayManager";
@@ -210,13 +210,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         const eventManager = new NodeEventManager(nodeHTML, overlay, {
             gpuMotor: gpuMotor.current,
             getNode: () => getNode(node._key),
-            openHtmlEditor: Project.state.openHtmlEditor,
-            getHtmlRenderer: Project.state.getHtmlRenderer,
+            openHtmlEditor: Project.state.openHtmlEditor!,
+            getHtmlRenderer: Project.state.getHtmlRenderer!,
             initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
             getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
             container: nodeHTML,
             overlayContainer: overlay,
-            triggerEventOnNode
+            triggerEventOnNode: triggerEventOnNode,
+            editedHtml: Project.state.editedHtml,
+            editedNodeConfig: Project.state.editedNodeConfig,
         });
 
         // Attach events
@@ -284,6 +286,16 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         }
 
+        // handle node config
+        /*console.log("aaa0", deepCopy(Project.state.editedNodeConfig), Project.state.editedNodeConfig.node._key === node._key, htmlRenderer, Project.state.openHtmlEditor);
+        if(Project.state.editedNodeConfig && Project.state.editedNodeConfig.node._key === node._key && htmlRenderer && Project.state.openHtmlEditor) {
+            console.log("aaa");
+            nodeHTML.addEventListener("dblclick", () => {
+                console.log("click");
+                Project.state.openHtmlEditor?.(node._key, htmlRenderer);
+            });
+        }*/
+
         // Position overlay
         const transform = gpuMotor.current.getTransform();
         const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
@@ -324,6 +336,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.openHtmlEditor,
         Project.state.getHtmlRenderer,
         Project.state.getHtmlAllRenderer,
+        Project.state.editedNodeConfig,
         createDragHandler,
         getNode,
         nodeRenderer,
@@ -380,14 +393,25 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
                 container: schemaNode.element,
                 overlayContainer: schemaNode.overElement,
-                triggerEventOnNode
+                triggerEventOnNode: triggerEventOnNode,
+                editedHtml: Project.state.editedHtml,
+                editedNodeConfig: Project.state.editedNodeConfig,
             });
+
+            const nodeConfig = Project.state.nodeTypeConfig[schemaNode.node.type];
+            schemaNode.eventManager.removeEvents();
+            if(nodeConfig.domEvents) {
+                schemaNode.eventManager.attachEvents(nodeConfig.domEvents);
+            }
         });
     }, [
         Project.state.openHtmlEditor,
         Project.state.getHtmlRenderer,
         Project.state.initiateNewHtmlRenderer,
         Project.state.getHtmlAllRenderer,
+        Project.state.nodeTypeConfig,
+        Project.state.editedHtml,
+        Project.state.editedNodeConfig,
         getNode,
         triggerEventOnNode
     ]);

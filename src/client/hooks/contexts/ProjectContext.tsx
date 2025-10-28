@@ -83,6 +83,8 @@ export type DisabledNodeInteractionType = Record<string, Partial<{
     moving: boolean,
 }>>;
 
+export type getHtmlRendererType = (node:string|Node<any>) =>  Record<string, htmlRenderContext>;
+
 export interface ProjectContextType {
     loader: {
         active: boolean;
@@ -104,7 +106,7 @@ export interface ProjectContextType {
     updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 
     initiateNewHtmlRenderer?: (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>,
-    getHtmlRenderer?: (node:string|Node<any>) =>  Record<string, htmlRenderContext>,
+    getHtmlRenderer?: getHtmlRendererType,
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     generateUniqueId?:(amount:number) => Promise<string[]|undefined>,

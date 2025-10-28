@@ -187,28 +187,47 @@ export const useSocketSync = () => {
 
     const openHtmlEditor:OpenHtmlEditorFct = useCallback((nodeId:string,htmlRenderer:htmlRenderContext, onClose?: () => void) => {
         if(!gpuMotor.current || !Project.state.graph || !Project.state.selectedSheetId || !htmlRenderer) return;
-        if(! Array.isArray(htmlRenderer.pathOfRender) ) {
+
+        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+        if(!node) return;
+
+        /*if(! Array.isArray(htmlRenderer.pathOfRender) ) {
             console.error("Can't edit html that is not stored in a node");
             return;
-        }
+        }*/
         Project.dispatch({
             field: "onCloseEditor",
             value: onClose,
         });
-        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
 
-        let object = node as any;
-        for (const path of htmlRenderer.pathOfRender) {
-            object = object[path];
-        }
 
-        if(node && object) {
-            const newEditedHtml:EditedHtmlType = {
-                targetType: "node",
-                target: node,
-                html: object,
+        if(Array.isArray(htmlRenderer.pathOfRender)) {
+            let object = node as any;
+            for (const path of htmlRenderer.pathOfRender) {
+                object = object[path];
+            }
+
+            if (object) {
+                const newEditedHtml: EditedHtmlType = {
+                    targetType: "node",
+                    target: node,
+                    html: object,
+                    htmlRender: htmlRenderer.htmlMotor,
+                    pathOfRender: htmlRenderer.pathOfRender,
+
+                }
+                Project.dispatch({
+                    field: "editedHtml",
+                    value: newEditedHtml
+                });
+            }
+        } else if(Project.state.editedNodeConfig) {
+            const newEditedHtml: EditedHtmlType = {
+                targetType: "NodeTypeConfig",
+                target: Project.state.editedNodeConfig.config,
+                html: htmlRenderer.pathOfRender as HtmlObject,
                 htmlRender: htmlRenderer.htmlMotor,
-                pathOfRender: htmlRenderer.pathOfRender,
+                pathOfRender: ["content"]
 
             }
             Project.dispatch({
@@ -216,7 +235,8 @@ export const useSocketSync = () => {
                 value: newEditedHtml
             });
         }
-    }, [Project.state.graph, Project.state.selectedSheetId]);
+    }, [Project.state.graph, Project.state.selectedSheetId, Project.state.editedNodeConfig]);
+
     useEffect(() => {
         Project.dispatch({
             field: "openHtmlEditor",
@@ -822,7 +842,6 @@ export const useSocketSync = () => {
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                     if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && instruction.nodeId === Project.state.editedHtml.target._key) {
                         const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
-                        console.log("new node", deepCopy(newNode));
                         let objectHtml: any = newNode;
                         Project.state.editedHtml.pathOfRender.forEach((path) => {
                             objectHtml = objectHtml[path];
@@ -880,11 +899,6 @@ export const useSocketSync = () => {
             instructions: instructions
         }
 
-        console.trace();
-        console.log(message);
-
-
-
         const response = await sendMessage(message) as WSResponseMessage<WSApplyInstructionToGraph>;
 
         if(response && response._response) {
@@ -927,7 +941,7 @@ export const useSocketSync = () => {
         });
     }, [updateGraph]);
 
-    const applyNodeConfigInstructions= useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+    const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
         if(!Project.state.editedNodeConfig) return;
         let nodeConfig = deepCopy(Project.state.editedNodeConfig.config);
 
@@ -947,6 +961,34 @@ export const useSocketSync = () => {
             });
             if(newNodeConfig.success) {
                 nodeConfig = newNodeConfig.value;
+
+                if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
+
+                    let object = nodeConfig as any;
+
+                    for(const key of Project.state.editedHtml.pathOfRender) {
+                        object = object[key];
+                    }
+
+                    Project.state.editedHtml.html = object;
+                    Project.state.editedHtml.target = nodeConfig;
+                    Project.dispatch({
+                        field: "editedHtml",
+                        value: {...Project.state.editedHtml}
+                    });
+                    Project.dispatch({
+                        field: "editedNodeConfig",
+                        value: {
+                            ...Project.state.editedNodeConfig,
+                            config: nodeConfig
+                        }
+                    });
+                    if (!instruction.noRedraw) {
+                        await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
+                    }
+
+                }
+
             }else {
                 return newNodeConfig.error ?? "Unknown error"
             }
@@ -1006,7 +1048,8 @@ export const useSocketSync = () => {
 
 
 
-    }, [Project.state.editedNodeConfig]);
+    }, [applyNodeConfigInstructions]);
+
     useEffect(() => {
         Project.dispatch({
             field: "updateNodeConfig",
@@ -1024,12 +1067,12 @@ export const useSocketSync = () => {
 
                 for(const instruction of instructions) {
                     if (instruction.p) {
-                        instruction.p = ["content", ...instruction.p];
+                        instruction.p = [...Project.state.editedHtml.pathOfRender, ...instruction.p];
                     }
                 }
             } else {
                 if (instructions.p) {
-                    instructions.p = ["content", ...instructions.p];
+                    instructions.p = [...Project.state.editedHtml.pathOfRender, ...instructions.p];
                 }
             }
 
@@ -1362,8 +1405,11 @@ export const useSocketSync = () => {
         } else if(packet.type === "batchDeleteElements") {
             const message = packet as WSMessage<WSBatchDeleteElements>;
             await applyBatchDelete(message.nodeKeys, message.edgeKeys);
+        } else if(packet.type === "applyInstructionToNodeConfig") {
+            const message = packet as WSMessage<WSApplyInstructionToNodeConfig>;
+            await applyNodeConfigInstructions(message.instructions);
         }
-    }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete]);
+    }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions]);
 
 
     const workingOnCaughtUp = useRef(false);
