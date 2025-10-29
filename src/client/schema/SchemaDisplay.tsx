@@ -25,7 +25,7 @@ import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Node} from "../../utils/graph/graphType";
 import {deepCopy, disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
-import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
+import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {NodeAnimationManager} from "./nodeAnimations";
 import {OverlayManager} from "./overlayManager";
 import {NodeEventManager} from "./nodeEventManager";
@@ -34,6 +34,7 @@ import {useNodeRenderer} from "./hooks/useNodeRenderer";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
 import {useNodeConfigOverlay} from "./hooks/useNodeConfigOverlay";
+import {useHandleRenderer} from "./hooks/useHandleRenderer";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -222,6 +223,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     });
 
+    const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
+        getNode: getNode,
+        gpuMotor: gpuMotor.current!,
+        setSelectedHandle: (handle:EditedNodeHandle) => Project.dispatch({
+            field: "editedNodeHandle",
+            value: handle
+        })
+    });
+
 
     // Drag and drop hook
     const { createDragHandler } = useNodeDragDrop({
@@ -237,7 +247,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         updateZIndex: updateZIndex,
         config: {
             posAnimationDelay: 200,
-            onUpdate: () => overlayManager.current?.requestUpdate()
+            onUpdate: () => {
+                overlayManager.current?.requestUpdate();
+            }
         }
     });
 
@@ -253,7 +265,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             sizeAnimationDelay: 200,
             minWidth: 50,
             minHeight: 50,
-            onUpdate: () => overlayManager.current?.requestUpdate()
+            onUpdate: () => {
+                overlayManager.current?.requestUpdate();
+            }
         }
     });
 
@@ -381,6 +395,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     () => {
                         gpuMotor.current?.requestRedraw();
                         overlayManager.current?.requestUpdate();
+                        updateHandleOverlay(updatedNode._key, overlay);
                     }
                 );
             }
@@ -451,6 +466,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         onNodeEnter?.(node);
 
+        // Render handles for this node
+        updateHandleOverlay(node._key, overlay);
+
         // Update config overlay if this node is being edited
         if (Project.state.editedNodeConfig?.node._key === node._key) {
             updateNodeConfigOverlay(overlay, node._key);
@@ -469,7 +487,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         nodeRenderer,
         onNodeEnter,
         triggerEventOnNode,
-        updateNodeConfigOverlay
+        updateNodeConfigOverlay,
+        updateHandleOverlay
     ]);
 
     // Node leave handler
@@ -488,6 +507,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             // Clear config overlay for this node
             clearOverlay(nodeId);
 
+            // Clear handle renderer for this node
+            cleanupHandleOverlay(nodeId);
+
             nodeDisplayContainer.current.removeChild(schemaNode.element);
             nodeDisplayContainer.current.removeChild(schemaNode.overElement);
             schemaNode.eventManager.dispose();
@@ -496,7 +518,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAnimation(nodeId);
             inSchemaNode.current.delete(nodeId);
         }
-    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, clearOverlay]);
+    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, clearOverlay, cleanupHandleOverlay]);
 
     // Reset handler
     const onReset = useCallback(() => {
@@ -588,15 +610,24 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         motor.on("nodeEnter", nodeEnter);
         motor.on("nodeLeave", nodeLeave);
-        motor.on("pan", () => overlay.requestUpdate());
-        motor.on("zoom", () => overlay.requestUpdate());
+
         motor.on("reset", onReset);
+
+        const handlePan = () => {
+            overlay.requestUpdate();
+        };
+        const handleZoom = () => {
+            overlay.requestUpdate();
+        };
+
+        motor.on("pan", handlePan);
+        motor.on("zoom", handleZoom);
 
         return () => {
             motor.off("nodeEnter", nodeEnter);
             motor.off("nodeLeave", nodeLeave);
-            motor.off("pan", () => overlay.requestUpdate());
-            motor.off("zoom", () => overlay.requestUpdate());
+            motor.off("pan", handlePan);
+            motor.off("zoom", handleZoom);
             motor.off("reset", onReset);
         };
     }, [nodeEnter, nodeLeave, onReset]);

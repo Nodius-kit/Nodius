@@ -42,7 +42,6 @@ import { Edge, Node } from "../../../../utils/graph/graphType";
 import { Point } from "./types";
 import { NodeRenderer } from "./nodeRenderer";
 import { EdgeRenderer } from "./edgeRenderer";
-import { HandleRenderer } from "./handleRenderer";
 import { BackgroundRenderer } from "./backgroundRenderer";
 import { InputHandler } from "./inputHandler";
 import { CameraAnimator } from "./cameraAnimator";
@@ -76,7 +75,6 @@ export class WebGpuMotor implements GraphicalMotor {
 	// Renderers
 	private nodeRenderer: NodeRenderer | null = null;
 	private edgeRenderer: EdgeRenderer | null = null;
-	private handleRenderer: HandleRenderer | null = null;
 	private backgroundRenderer: BackgroundRenderer | null = null;
 	private inputHandler: InputHandler | null = null;
 	private cameraAnimator: CameraAnimator | null = null;
@@ -151,9 +149,6 @@ export class WebGpuMotor implements GraphicalMotor {
 
 		this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount, this.canvas, this.screenToWorld);
 		this.edgeRenderer.init(bindGroupLayout);
-
-		this.handleRenderer = new HandleRenderer(this.device, this.format, this.sampleCount);
-		this.handleRenderer.init(bindGroupLayout);
 
 		this.backgroundRenderer = new BackgroundRenderer(this.device, this.format, this.sampleCount, backgroundType);
 		this.backgroundRenderer.init(bindGroupLayout);
@@ -329,7 +324,6 @@ export class WebGpuMotor implements GraphicalMotor {
 		this.computeVisibility();
 		if(this.scene) {
 			this.nodeRenderer!.buildNodeBuffer(this.visibleNodes, this.scene!.nodes);
-			this.handleRenderer!.buildHandleBuffer(this.visibleNodes, this.scene!.nodes);
 			this.edgeRenderer!.buildEdgeBuffer(this.scene!, this.relevantEdges);
 		}
 		this.dirty = false;
@@ -386,9 +380,6 @@ export class WebGpuMotor implements GraphicalMotor {
 		// Draw nodes
 		this.nodeRenderer!.render(passEncoder, this.bindGroup!, this.visibleNodes.size);
 
-		// Draw handles
-		this.handleRenderer!.render(passEncoder, this.bindGroup!);
-
 		// Draw edges
 		this.edgeRenderer!.render(passEncoder, this.bindGroup!);
 
@@ -410,7 +401,6 @@ export class WebGpuMotor implements GraphicalMotor {
 		if (this.uniformBuffer) this.uniformBuffer.destroy();
 		this.nodeRenderer?.dispose();
 		this.edgeRenderer?.dispose();
-		this.handleRenderer?.dispose();
 		this.backgroundRenderer?.dispose();
 		this.inputHandler?.disposeKeyboardShortcut();
 		this.eventListeners = {};
