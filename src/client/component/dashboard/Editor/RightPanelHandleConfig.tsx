@@ -15,12 +15,12 @@
  * - Synchronized updates with graph rendering
  */
 
-import {memo, useContext, useEffect, useMemo, useState} from "react";
+import {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import { ProjectContext } from "../../../hooks/contexts/ProjectContext";
 import { ThemeContext } from "../../../hooks/contexts/ThemeContext";
 import { InstructionBuilder } from "../../../../utils/sync/InstructionBuilder";
 import { useDynamicClass } from "../../../hooks/useDynamicClass";
-import { Settings, Trash2 } from "lucide-react";
+import { Settings, Trash2, Circle } from "lucide-react";
 import {Node} from "../../../../utils/graph/graphType";
 
 export const RightPanelHandleConfig = memo(() => {
@@ -30,6 +30,10 @@ export const RightPanelHandleConfig = memo(() => {
     const editedHandle = Project.state.editedNodeHandle;
 
     const [node, setNode] = useState<Node<any>>();
+    const [opacity, setOpacity] = useState(1);
+
+    // Track previous handle to detect point changes
+    const prevHandleRef = useRef<typeof editedHandle>(undefined);
 
     const retrieveNode = () => {
         setNode(Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(editedHandle!.nodeId));
@@ -38,6 +42,19 @@ export const RightPanelHandleConfig = memo(() => {
     useEffect(() => {
         if (!editedHandle || !Project.state.graph || !Project.state.selectedSheetId) return undefined;
         retrieveNode();
+
+        // Detect if we switched points (opacity animation)
+        const prev = prevHandleRef.current;
+        if (prev && editedHandle &&
+            (prev.nodeId !== editedHandle.nodeId ||
+             prev.side !== editedHandle.side ||
+             prev.pointIndex !== editedHandle.pointIndex)) {
+            // Trigger fade effect
+            setOpacity(0.3);
+            setTimeout(() => setOpacity(1), 50);
+        }
+
+        prevHandleRef.current = editedHandle;
     }, [editedHandle, Project.state.graph, Project.state.selectedSheetId]);
 
     const handleConfig = useMemo(() => {
@@ -59,6 +76,38 @@ export const RightPanelHandleConfig = memo(() => {
             padding: 16px;
             height: 100%;
             overflow-y: auto;
+            transition: opacity 0.2s ease;
+        }
+    `);
+
+    const sectionGroupClass = useDynamicClass(`
+        & {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+    `);
+
+    const groupTitleClass = useDynamicClass(`
+        & {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--nodius-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 8px 0 4px 0;
+            border-bottom: 1px solid var(--nodius-divider);
+        }
+    `);
+
+    const dividerClass = useDynamicClass(`
+        & {
+            height: 1px;
+            background: var(--nodius-divider);
+            margin: 8px 0;
         }
     `);
 
@@ -97,7 +146,7 @@ export const RightPanelHandleConfig = memo(() => {
         & {
             flex: 1;
             padding: 8px 12px;
-            border: 1px solid var(--nodius-divider);
+            border: 1px solid var(--nodius-text-divider);
             border-radius: 4px;
             background: var(--nodius-background-default);
             color: var(--nodius-text-primary);
@@ -111,9 +160,9 @@ export const RightPanelHandleConfig = memo(() => {
             background: var(--nodius-background-hover);
         }
         &.active {
-            background: var(--nodius-primary);
+            background: var(--nodius-primary-main);
             color: white;
-            border-color: var(--nodius-primary);
+            border-color: var(--nodius-primary-main);
         }
     `);
 
@@ -295,7 +344,7 @@ export const RightPanelHandleConfig = memo(() => {
     };
 
     return (
-        <div className={panelClass}>
+        <div className={panelClass} style={{ opacity }}>
             {/* Header */}
             <div className={sectionClass}>
                 <div className={headerClass}>
@@ -303,78 +352,96 @@ export const RightPanelHandleConfig = memo(() => {
                     Handle Configuration
                 </div>
                 <div className={infoClass}>
-                    {sideLabels[editedHandle.side]} side - Point {editedHandle.pointIndex + 1}
+                    {sideLabels[editedHandle.side]} side - {handleConfig.point.length} point{handleConfig.point.length > 1 ? 's' : ''}
                 </div>
             </div>
 
-            {/* Type Selection */}
-            <div className={sectionClass}>
-                <div className={labelClass}>Connection Type</div>
-                <div className={buttonGroupClass}>
-                    <button
-                        className={`${buttonClass} ${point.type === 'in' ? 'active' : ''}`}
-                        onClick={() => handleTypeChange('in')}
-                    >
-                        INPUT
-                    </button>
-                    <button
-                        className={`${buttonClass} ${point.type === 'out' ? 'active' : ''}`}
-                        onClick={() => handleTypeChange('out')}
-                    >
-                        OUTPUT
-                    </button>
+            {/* POINT-SPECIFIC SETTINGS */}
+            <div className={sectionGroupClass}>
+                <div className={groupTitleClass}>
+                    <Circle size={14} />
+                    Point #{editedHandle.pointIndex + 1} Settings
                 </div>
-                <div className={infoClass}>
-                    Input handles receive data, output handles send data
+
+                {/* Type Selection */}
+                <div className={sectionClass}>
+                    <div className={labelClass}>Connection Type</div>
+                    <div className={buttonGroupClass}>
+                        <button
+                            className={`${buttonClass} ${point.type === 'in' ? 'active' : ''}`}
+                            onClick={() => handleTypeChange('in')}
+                        >
+                            INPUT
+                        </button>
+                        <button
+                            className={`${buttonClass} ${point.type === 'out' ? 'active' : ''}`}
+                            onClick={() => handleTypeChange('out')}
+                        >
+                            OUTPUT
+                        </button>
+                    </div>
+                    <div className={infoClass}>
+                        Input handles receive data, output handles send data
+                    </div>
+                </div>
+
+                {/* Delete Point */}
+                <div className={sectionClass}>
+                    <div className={labelClass}>Delete Point</div>
+                    <button className={deleteButtonClass} onClick={handleDeletePoint}>
+                        <Trash2 size={14} />
+                        Delete This Point
+                    </button>
+                    <div className={infoClass}>
+                        Remove this connection point from the handle
+                    </div>
                 </div>
             </div>
 
-            {/* Position Mode */}
-            <div className={sectionClass}>
-                <div className={labelClass}>Position Mode</div>
-                <div className={buttonGroupClass}>
-                    <button
-                        className={`${buttonClass} ${handleConfig.position === 'separate' ? 'active' : ''}`}
-                        onClick={() => handlePositionModeChange('separate')}
-                    >
-                        AUTO
-                    </button>
-                    <button
-                        className={`${buttonClass} ${handleConfig.position === 'fix' ? 'active' : ''}`}
-                        onClick={() => handlePositionModeChange('fix')}
-                    >
-                        FIXED
-                    </button>
-                </div>
-                <div className={infoClass}>
-                    {handleConfig.position === 'separate'
-                        ? 'Points are automatically distributed'
-                        : 'Points can be positioned manually by dragging'
-                    }
-                </div>
-            </div>
+            <div className={dividerClass} />
 
-            {/* Delete Point */}
-            <div className={sectionClass}>
-                <div className={labelClass}>Delete Point</div>
-                <button className={deleteButtonClass} onClick={handleDeletePoint}>
-                    <Trash2 size={14} />
-                    Delete This Point
-                </button>
-                <div className={infoClass}>
-                    Remove this connection point from the handle
+            {/* HANDLE-WIDE SETTINGS */}
+            <div className={sectionGroupClass}>
+                <div className={groupTitleClass}>
+                    <Settings size={14} />
+                    Handle Settings (All Points)
                 </div>
-            </div>
 
-            {/* Delete Handle */}
-            <div className={sectionClass}>
-                <div className={labelClass}>Delete Handle</div>
-                <button className={deleteButtonClass} onClick={handleDeleteHandle}>
-                    <Trash2 size={14} />
-                    Delete Entire Handle
-                </button>
-                <div className={infoClass}>
-                    Remove all connection points from this side
+                {/* Position Mode */}
+                <div className={sectionClass}>
+                    <div className={labelClass}>Position Mode</div>
+                    <div className={buttonGroupClass}>
+                        <button
+                            className={`${buttonClass} ${handleConfig.position === 'separate' ? 'active' : ''}`}
+                            onClick={() => handlePositionModeChange('separate')}
+                        >
+                            AUTO
+                        </button>
+                        <button
+                            className={`${buttonClass} ${handleConfig.position === 'fix' ? 'active' : ''}`}
+                            onClick={() => handlePositionModeChange('fix')}
+                        >
+                            FIXED
+                        </button>
+                    </div>
+                    <div className={infoClass}>
+                        {handleConfig.position === 'separate'
+                            ? 'Points are automatically distributed'
+                            : 'Points can be positioned manually by dragging'
+                        }
+                    </div>
+                </div>
+
+                {/* Delete Handle */}
+                <div className={sectionClass}>
+                    <div className={labelClass}>Delete Entire Handle</div>
+                    <button className={deleteButtonClass} onClick={handleDeleteHandle}>
+                        <Trash2 size={14} />
+                        Delete All Points
+                    </button>
+                    <div className={infoClass}>
+                        Remove all connection points from the {sideLabels[editedHandle.side].toLowerCase()} side
+                    </div>
                 </div>
             </div>
         </div>

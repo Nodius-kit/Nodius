@@ -118,9 +118,10 @@ export class EdgeRenderer {
 
 		const isTemporary = edge.source === undefined || edge.target === undefined;
 
+		// if edge.source or edge.target is null, so a the edge is a temporary one (dragged by user) and a point is the cursor position
 
-		const sourcePos = sourceNode && edge.source ? getHandlePosition(sourceNode, edge.sourceHandle) : this.screenToWorld(this.cursorPosition);
-		const targetPos = !(sourceNode && edge.source) ? undefined : ((targetNode && edge.target)  ? getHandlePosition(targetNode, edge.targetHandle) : this.screenToWorld(this.cursorPosition));
+		const sourcePos = !sourceNode && isTemporary ? this.screenToWorld(this.cursorPosition) : getHandlePosition(sourceNode!, edge.sourceHandle);
+		const targetPos = !targetNode && isTemporary && sourceNode ? this.screenToWorld(this.cursorPosition) : getHandlePosition(targetNode!, edge.targetHandle);
 
 		if (!sourcePos || !targetPos) return [];
 

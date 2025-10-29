@@ -50,6 +50,7 @@ export function getHandleInfo(node: Node<any>, handleId: string): HandleInfo | u
  * @returns Point with x, y coordinates in world space, or undefined if handle not found
  */
 export function getHandlePosition(node: Node<any>, handleId: string): Point | undefined {
+	if(!node) return undefined;
 	const info = getHandleInfo(node, handleId);
 	if (!info || typeof node.size === "string") return undefined;
 
