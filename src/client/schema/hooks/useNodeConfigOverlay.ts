@@ -348,12 +348,88 @@ function createConnectionPointUI(
 
     container.addEventListener('click', handleClick);
 
+    // Drag-and-drop for fixed position mode with click detection
+    let isDragging = false;
+    let dragStarted = false;
+    const DRAG_THRESHOLD = 3; // pixels
+
+    const handleMouseDown = (e: MouseEvent) => {
+        if (handleConfig.position !== 'fix') return;
+        if (e.button !== 0) return; // Only left click
+
+        e.stopPropagation();
+
+        dragStarted = false;
+        isDragging = false;
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startOffset = point.offset || 0;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+            // Only start dragging if movement exceeds threshold
+            if (!dragStarted && distance > DRAG_THRESHOLD) {
+                dragStarted = true;
+                isDragging = true;
+                e.preventDefault();
+            }
+
+            if (!isDragging) return;
+
+            // Calculate new offset based on side and GPU motor scale
+            const scale = options.gpuMotor.getTransform().scale;
+            let newOffset = startOffset;
+
+            switch (side) {
+                case 'T':
+                case 'D':
+                    newOffset = startOffset + (deltaX / scale);
+                    newOffset = Math.max(0, Math.min(node.size.width, newOffset));
+                    break;
+                case 'L':
+                case 'R':
+                    newOffset = startOffset + (deltaY / scale);
+                    newOffset = Math.max(0, Math.min(node.size.height, newOffset));
+                    break;
+            }
+
+            // Update visual position immediately
+            point.offset = newOffset;
+            positionConnectionPoint(container, side, handleConfig, index, node);
+        };
+
+        const handleMouseUp = async (e: MouseEvent) => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+
+            // Only save if actually dragged
+            if (isDragging) {
+                const instruction = new InstructionBuilder();
+                instruction.key("handles").key(side).key("point").index(index).key("offset").set(point.offset);
+                await options.updateGraph([{ nodeId, i: instruction.instruction }]);
+            }
+
+            isDragging = false;
+            dragStarted = false;
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+
     return {
         element: container,
         cleanup: () => {
             container.removeEventListener('mouseenter', handleMouseEnter);
             container.removeEventListener('mouseleave', handleMouseLeave);
             container.removeEventListener('click', handleClick);
+            container.removeEventListener('mousedown', handleMouseDown);
             if (menu) {
                 menu.remove();
                 menu = null;
@@ -368,6 +444,7 @@ function createConnectionPointUI(
 
 /**
  * Position a connection point based on side and configuration
+ * Matches the positioning logic from handleUtils.ts getHandlePosition
  */
 function positionConnectionPoint(
     element: HTMLElement,
@@ -376,57 +453,65 @@ function positionConnectionPoint(
     index: number,
     node: Node<any>
 ) {
-    if (handleConfig.position === 'fix' && handleConfig.point[index].offset !== undefined) {
-        // Fixed position with offset
-        const offset = handleConfig.point[index].offset;
+    const point = handleConfig.point[index];
+    let offset: number;
+
+    // Calculate offset based on position mode
+    if (handleConfig.position === 'fix' && point.offset !== undefined) {
+        // Fixed position - offset is in pixels
+        offset = point.offset;
+    } else {
+        // Separate position - calculate percentage offset
+        offset = (index + 0.5) / handleConfig.point.length;
+    }
+
+    if (handleConfig.position === 'fix') {
+        // Fixed pixel positioning
         switch (side) {
             case 'T':
-                element.style.top = '-5px';
+                element.style.top = '0';
                 element.style.left = `${offset}px`;
-                element.style.transform = 'translateX(-50%)';
+                element.style.transform = 'translate(-50%, -50%)';
                 break;
             case 'D':
-                element.style.bottom = '-5px';
+                element.style.bottom = '0';
                 element.style.left = `${offset}px`;
-                element.style.transform = 'translateX(-50%)';
+                element.style.transform = 'translate(-50%, 50%)';
                 break;
             case 'L':
-                element.style.left = '-5px';
+                element.style.left = '0';
                 element.style.top = `${offset}px`;
-                element.style.transform = 'translateY(-50%)';
+                element.style.transform = 'translate(-50%, -50%)';
                 break;
             case 'R':
-                element.style.right = '-5px';
+                element.style.right = '0';
                 element.style.top = `${offset}px`;
-                element.style.transform = 'translateY(-50%)';
+                element.style.transform = 'translate(50%, -50%)';
                 break;
         }
     } else {
-        // Separate positioning - distribute evenly
-        const totalPoints = handleConfig.point.length;
-        const spacing = 100 / (totalPoints + 1);
-        const position = spacing * (index + 1);
-
+        // Separate positioning - percentage based
+        const percentage = offset * 100;
         switch (side) {
             case 'T':
-                element.style.top = '-5px';
-                element.style.left = `${position}%`;
-                element.style.transform = 'translateX(-50%)';
+                element.style.top = '0';
+                element.style.left = `${percentage}%`;
+                element.style.transform = 'translate(-50%, -50%)';
                 break;
             case 'D':
-                element.style.bottom = '-5px';
-                element.style.left = `${position}%`;
-                element.style.transform = 'translateX(-50%)';
+                element.style.bottom = '0';
+                element.style.left = `${percentage}%`;
+                element.style.transform = 'translate(-50%, 50%)';
                 break;
             case 'L':
-                element.style.left = '-5px';
-                element.style.top = `${position}%`;
-                element.style.transform = 'translateY(-50%)';
+                element.style.left = '0';
+                element.style.top = `${percentage}%`;
+                element.style.transform = 'translate(-50%, -50%)';
                 break;
             case 'R':
-                element.style.right = '-5px';
-                element.style.top = `${position}%`;
-                element.style.transform = 'translateY(-50%)';
+                element.style.right = '0';
+                element.style.top = `${percentage}%`;
+                element.style.transform = 'translate(50%, -50%)';
                 break;
         }
     }
@@ -443,6 +528,12 @@ function createEditMenu(
     options: useNodeConfigOverlayOptions,
     onClose: () => void
 ): HTMLElement {
+    const node = options.getNode(nodeId);
+    if (!node) return document.createElement('div');
+
+    const handleConfig = node.handles[side];
+    if (!handleConfig) return document.createElement('div');
+
     const menu = document.createElement('div');
     menu.className = 'connection-point-menu';
     menu.style.background = 'white';
@@ -453,7 +544,7 @@ function createEditMenu(
     menu.style.display = 'flex';
     menu.style.flexDirection = 'column';
     menu.style.gap = '2px';
-    menu.style.minWidth = '80px';
+    menu.style.minWidth = '90px';
     menu.style.fontSize = '11px';
 
     // Type buttons
@@ -479,6 +570,43 @@ function createEditMenu(
     typeContainer.appendChild(outButton);
     menu.appendChild(typeContainer);
 
+    // Position mode buttons
+    const posContainer = document.createElement('div');
+    posContainer.style.display = 'flex';
+    posContainer.style.gap = '2px';
+    posContainer.style.marginTop = '2px';
+
+    const separateButton = createMenuButton('Auto', handleConfig.position === 'separate', async () => {
+        const instruction = new InstructionBuilder();
+        instruction.key("handles").key(side).key("position").set("separate");
+        // Remove offset when switching to separate
+        const removeOffsetInst = new InstructionBuilder();
+        removeOffsetInst.key("handles").key(side).key("point").index(index).key("offset").remove();
+        await options.updateGraph([
+            { nodeId, i: instruction.instruction },
+            { nodeId, i: removeOffsetInst.instruction }
+        ]);
+        onClose();
+    });
+
+    const fixButton = createMenuButton('Fixed', handleConfig.position === 'fix', async () => {
+        const instruction = new InstructionBuilder();
+        instruction.key("handles").key(side).key("position").set("fix");
+        // Set default offset based on current position
+        const defaultOffset = calculateDefaultOffset(side, index, handleConfig, node);
+        const offsetInst = new InstructionBuilder();
+        offsetInst.key("handles").key(side).key("point").index(index).key("offset").set(defaultOffset);
+        await options.updateGraph([
+            { nodeId, i: instruction.instruction },
+            { nodeId, i: offsetInst.instruction }
+        ]);
+        onClose();
+    });
+
+    posContainer.appendChild(separateButton);
+    posContainer.appendChild(fixButton);
+    menu.appendChild(posContainer);
+
     // Separator
     const separator = document.createElement('div');
     separator.style.height = '1px';
@@ -497,6 +625,24 @@ function createEditMenu(
     menu.appendChild(deleteButton);
 
     return menu;
+}
+
+/**
+ * Calculate default offset when switching to fixed mode
+ */
+function calculateDefaultOffset(side: handleSide, index: number, handleConfig: any, node: Node<any>): number {
+    const percentage = (index + 0.5) / handleConfig.point.length;
+
+    switch (side) {
+        case 'T':
+        case 'D':
+            return percentage * node.size.width;
+        case 'L':
+        case 'R':
+            return percentage * node.size.height;
+        default:
+            return 0;
+    }
 }
 
 /**

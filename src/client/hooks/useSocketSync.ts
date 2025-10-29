@@ -659,7 +659,7 @@ export const useSocketSync = () => {
             });
         });
 
-        const padding = 100;
+        const padding = 500;
         gpuMotor.current.lockCameraToArea({
             minX: baseNode.posX - padding,
             minY: baseNode.posY - padding,
@@ -943,8 +943,6 @@ export const useSocketSync = () => {
             if(newNodeConfig.success) {
                 nodeConfig = newNodeConfig.value;
                 Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.set((nodeConfig.node as Node<any>)._key, nodeConfig.node as Node<any>);
-
-                console.log((nodeConfig.node as Node<any>)._key, nodeConfig.node, Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap);
 
                 currentEditConfig.current = {
                     ...currentEditConfig.current,
