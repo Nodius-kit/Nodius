@@ -25,6 +25,7 @@ import {createContext, useCallback} from "react";
 import {
     Edge,
     Graph,
+    handleSide,
     Node,
     NodeType,
     NodeTypeConfig,
@@ -62,6 +63,12 @@ export type EditedHtmlType =
 }
     | undefined;
 export type EditedNodeTypeConfig = {node:Node<any>, config:NodeTypeConfig}|undefined;
+
+export type EditedNodeHandle = {
+    nodeId: string;
+    side: handleSide;
+    pointIndex: number;
+} | undefined;
 
 export interface ActionContext {
     timeTaken: number;
@@ -101,6 +108,8 @@ export interface ProjectContextType {
 
     editedNodeConfig?: EditedNodeTypeConfig,
     openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
+
+    editedNodeHandle?: EditedNodeHandle,
 
     updateHtml?:(instruction:Instruction|Instruction[], options?:UpdateHtmlOption) => Promise<ActionContext>,
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,

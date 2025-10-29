@@ -213,7 +213,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         getNode: getNode,
         enabled: (nodeId) => Project.state.editedNodeConfig?.node._key === nodeId,
         gpuMotor: gpuMotor.current!,
-        updateGraph: Project.state.updateGraph!
+        updateGraph: Project.state.updateGraph!,
+        onHandleClick: (nodeId, side, pointIndex) => {
+            Project.dispatch({
+                field: "editedNodeHandle",
+                value: { nodeId, side, pointIndex }
+            });
+        }
     });
 
 

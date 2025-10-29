@@ -25,7 +25,7 @@ import {MultiFade} from "../animate/MultiFade";
 import {LeftPanelComponentEditor} from "./Editor/LeftPanelComponentEditor";
 import {ResizeBar} from "../animate/ResizeBar";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
-import {ArrowLeftFromLine} from "lucide-react";
+import {ArrowLeftFromLine, ArrowRightFromLine} from "lucide-react";
 import {Fade} from "../animate/Fade";
 import {LeftPaneComponentTree} from "./Editor/LeftPanelComponentTree";
 import {RightPanelComponentEditor} from "./Editor/RightPanelComponentEditor";
@@ -34,6 +34,7 @@ import {LeftPanelEnumEditor} from "./Editor/LeftPanelEnumEditor";
 import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {WebGpuMotor} from "../../schema/motor/webGpuMotor/index";
+import {RightPanelHandleConfig} from "./Editor/RightPanelHandleConfig";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,
@@ -185,6 +186,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                     </div>
                 </Fade>
             </div>
+            {/* Right panel for HTML component editing */}
             <div ref={rightContainer} style={{
                 position:"absolute",
                 top:"0",
@@ -197,6 +199,37 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                 pointerEvents:"all",
             }}>
                 <RightPanelComponentEditor componentsList={componentsList} />
+            </div>
+
+            {/* Right panel for handle configuration */}
+            <div style={{
+                position:"absolute",
+                top:"0",
+                right:(!Project.state.editedNodeHandle ? -rightPanelWidth : 0)+"px",
+                width:rightPanelWidth+"px",
+                height:"100%",
+                backgroundColor:"var(--nodius-background-default)",
+                boxShadow: "var(--nodius-shadow-4)",
+                transition: "var(--nodius-transition-default)",
+                pointerEvents:"all",
+                zIndex: 1,
+            }}>
+                <RightPanelHandleConfig />
+                <Fade in={!!Project.state.editedNodeHandle} timeout={300} unmountOnExit={true}>
+                    <div style={{
+                        position:"absolute",
+                        top: "10px",
+                        left:"-55px",
+                        padding:"6px",
+                        backgroundColor:"var(--nodius-background-paper)",
+                        cursor:"pointer",
+                        borderRadius:"8px"
+                    }} onClick={() => {
+                        Project.dispatch({ field: "editedNodeHandle", value: undefined });
+                    }}>
+                        <ArrowRightFromLine />
+                    </div>
+                </Fade>
             </div>
         </div>
     )

@@ -17,7 +17,8 @@ export interface useNodeConfigOverlayOptions {
 
     getNode: (nodeKey: string) => Node<any> | undefined;
     enabled: (nodeKey: string) => boolean;
-    updateGraph: (instructions:Array<GraphInstructions>) => Promise<ActionContext>
+    updateGraph: (instructions:Array<GraphInstructions>) => Promise<ActionContext>;
+    onHandleClick: (nodeId: string, side: handleSide, pointIndex: number) => void;
 }
 
 interface HandleUI {
@@ -289,61 +290,10 @@ function createConnectionPointUI(
     container.addEventListener('mouseenter', handleMouseEnter);
     container.addEventListener('mouseleave', handleMouseLeave);
 
-    // Click to show edit menu
-    let menu: HTMLElement | null = null;
-    let closeMenuListener: ((evt: MouseEvent) => void) | null = null;
-
+    // Click to open side panel
     const handleClick = (e: MouseEvent) => {
         e.stopPropagation();
-
-        // Close existing menu if any
-        if (menu) {
-            menu.remove();
-            menu = null;
-            if (closeMenuListener) {
-                document.removeEventListener('mousedown', closeMenuListener);
-                closeMenuListener = null;
-            }
-            return;
-        }
-
-        // Create menu
-        menu = createEditMenu(side, index, point, nodeId, options, () => {
-            // Close callback
-            if (menu) {
-                menu.remove();
-                menu = null;
-            }
-            if (closeMenuListener) {
-                document.removeEventListener('mousedown', closeMenuListener);
-                closeMenuListener = null;
-            }
-        });
-
-        // Position menu near the point
-        menu.style.position = 'fixed';
-        menu.style.left = e.clientX + 'px';
-        menu.style.top = e.clientY + 'px';
-        menu.style.zIndex = '100000';
-
-        document.body.appendChild(menu);
-
-        // Close menu on outside click
-        closeMenuListener = (evt: MouseEvent) => {
-            if (menu && !menu.contains(evt.target as any)) {
-                menu.remove();
-                menu = null;
-                if (closeMenuListener) {
-                    document.removeEventListener('mousedown', closeMenuListener);
-                    closeMenuListener = null;
-                }
-            }
-        };
-        setTimeout(() => {
-            if (closeMenuListener) {
-                document.addEventListener('mousedown', closeMenuListener);
-            }
-        }, 0);
+        options.onHandleClick(nodeId, side, index);
     };
 
     container.addEventListener('click', handleClick);
@@ -430,14 +380,6 @@ function createConnectionPointUI(
             container.removeEventListener('mouseleave', handleMouseLeave);
             container.removeEventListener('click', handleClick);
             container.removeEventListener('mousedown', handleMouseDown);
-            if (menu) {
-                menu.remove();
-                menu = null;
-            }
-            if (closeMenuListener) {
-                document.removeEventListener('mousedown', closeMenuListener);
-                closeMenuListener = null;
-            }
         }
     };
 }
@@ -515,182 +457,6 @@ function positionConnectionPoint(
                 break;
         }
     }
-}
-
-/**
- * Create minimalist edit menu for connection point
- */
-function createEditMenu(
-    side: handleSide,
-    index: number,
-    point: any,
-    nodeId: string,
-    options: useNodeConfigOverlayOptions,
-    onClose: () => void
-): HTMLElement {
-    const node = options.getNode(nodeId);
-    if (!node) return document.createElement('div');
-
-    const handleConfig = node.handles[side];
-    if (!handleConfig) return document.createElement('div');
-
-    const menu = document.createElement('div');
-    menu.className = 'connection-point-menu';
-    menu.style.background = 'white';
-    menu.style.border = '1px solid #e5e7eb';
-    menu.style.borderRadius = '4px';
-    menu.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-    menu.style.padding = '4px';
-    menu.style.display = 'flex';
-    menu.style.flexDirection = 'column';
-    menu.style.gap = '2px';
-    menu.style.minWidth = '90px';
-    menu.style.fontSize = '11px';
-
-    // Type buttons
-    const typeContainer = document.createElement('div');
-    typeContainer.style.display = 'flex';
-    typeContainer.style.gap = '2px';
-
-    const inButton = createMenuButton('IN', point.type === 'in', async () => {
-        const instruction = new InstructionBuilder();
-        instruction.key("handles").key(side).key("point").index(index).key("type").set("in");
-        await options.updateGraph([{ nodeId, i: instruction.instruction }]);
-        onClose();
-    });
-
-    const outButton = createMenuButton('OUT', point.type === 'out', async () => {
-        const instruction = new InstructionBuilder();
-        instruction.key("handles").key(side).key("point").index(index).key("type").set("out");
-        await options.updateGraph([{ nodeId, i: instruction.instruction }]);
-        onClose();
-    });
-
-    typeContainer.appendChild(inButton);
-    typeContainer.appendChild(outButton);
-    menu.appendChild(typeContainer);
-
-    // Position mode buttons
-    const posContainer = document.createElement('div');
-    posContainer.style.display = 'flex';
-    posContainer.style.gap = '2px';
-    posContainer.style.marginTop = '2px';
-
-    const separateButton = createMenuButton('Auto', handleConfig.position === 'separate', async () => {
-        const instruction = new InstructionBuilder();
-        instruction.key("handles").key(side).key("position").set("separate");
-        // Remove offset when switching to separate
-        const removeOffsetInst = new InstructionBuilder();
-        removeOffsetInst.key("handles").key(side).key("point").index(index).key("offset").remove();
-        await options.updateGraph([
-            { nodeId, i: instruction.instruction },
-            { nodeId, i: removeOffsetInst.instruction }
-        ]);
-        onClose();
-    });
-
-    const fixButton = createMenuButton('Fixed', handleConfig.position === 'fix', async () => {
-        const instruction = new InstructionBuilder();
-        instruction.key("handles").key(side).key("position").set("fix");
-        // Set default offset based on current position
-        const defaultOffset = calculateDefaultOffset(side, index, handleConfig, node);
-        const offsetInst = new InstructionBuilder();
-        offsetInst.key("handles").key(side).key("point").index(index).key("offset").set(defaultOffset);
-        await options.updateGraph([
-            { nodeId, i: instruction.instruction },
-            { nodeId, i: offsetInst.instruction }
-        ]);
-        onClose();
-    });
-
-    posContainer.appendChild(separateButton);
-    posContainer.appendChild(fixButton);
-    menu.appendChild(posContainer);
-
-    // Separator
-    const separator = document.createElement('div');
-    separator.style.height = '1px';
-    separator.style.background = '#e5e7eb';
-    separator.style.margin = '2px 0';
-    menu.appendChild(separator);
-
-    // Delete button
-    const deleteButton = createMenuButton('Delete', false, async () => {
-        const instruction = new InstructionBuilder();
-        instruction.key("handles").key(side).key("point").arrayRemoveIndex(index);
-        await options.updateGraph([{ nodeId, i: instruction.instruction }]);
-        onClose();
-    }, '#ef4444');
-
-    menu.appendChild(deleteButton);
-
-    return menu;
-}
-
-/**
- * Calculate default offset when switching to fixed mode
- */
-function calculateDefaultOffset(side: handleSide, index: number, handleConfig: any, node: Node<any>): number {
-    const percentage = (index + 0.5) / handleConfig.point.length;
-
-    switch (side) {
-        case 'T':
-        case 'D':
-            return percentage * node.size.width;
-        case 'L':
-        case 'R':
-            return percentage * node.size.height;
-        default:
-            return 0;
-    }
-}
-
-/**
- * Create a menu button
- */
-function createMenuButton(
-    label: string,
-    active: boolean,
-    onClick: () => void,
-    color?: string
-): HTMLElement {
-    const button = document.createElement('div');
-    button.textContent = label;
-    button.style.padding = '4px 8px';
-    button.style.cursor = 'pointer';
-    button.style.borderRadius = '2px';
-    button.style.transition = 'background 0.1s ease';
-    button.style.userSelect = 'none';
-    button.style.textAlign = 'center';
-    button.style.fontSize = '11px';
-    button.style.fontWeight = '500';
-
-    if (active) {
-        button.style.background = color || '#3b82f6';
-        button.style.color = 'white';
-    } else {
-        button.style.background = 'transparent';
-        button.style.color = color || '#374151';
-    }
-
-    button.addEventListener('mouseenter', () => {
-        if (!active) {
-            button.style.background = '#f3f4f6';
-        }
-    });
-
-    button.addEventListener('mouseleave', () => {
-        if (!active) {
-            button.style.background = 'transparent';
-        }
-    });
-
-    button.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onClick();
-    });
-
-    return button;
 }
 
 /**

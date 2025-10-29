@@ -29,11 +29,26 @@ export class EdgeRenderer {
 	private edgeBufferSize: number = 0;
 	private edgePipeline: GPURenderPipeline | null = null;
 	private edgeVertexCount: number = 0;
+	private canvas: HTMLCanvasElement;
+	private cursorPosition: Point = {x:0, y:0};
+	private cursorEvent: ((e:MouseEvent) => void);
+	private screenToWorld:((point: Point) => Point );
 
-	constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number) {
+	constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number, canvas: HTMLCanvasElement, screenToWorld:((point: Point) => Point )) {
 		this.device = device;
 		this.format = format;
 		this.sampleCount = sampleCount;
+		this.canvas = canvas;
+
+		this.cursorEvent = (evt:MouseEvent) => {
+			this.cursorPosition = {
+				x: evt.clientX,
+				y: evt.clientY,
+			}
+		}
+
+		this.canvas.addEventListener("mousemove",this.cursorEvent);
+		this.screenToWorld = screenToWorld;
 	}
 
 	public init(bindGroupLayout: GPUBindGroupLayout): void {
@@ -100,21 +115,25 @@ export class EdgeRenderer {
 	public getEdgePathPoints(scene: MotorScene, edge: Edge, segments: number = 10): Point[] {
 		const sourceNode = scene.nodes.get(edge.source);
 		const targetNode = scene.nodes.get(edge.target);
-		if (!sourceNode || !targetNode) return [];
-		const sourcePos = getHandlePosition(sourceNode, edge.sourceHandle);
-		const targetPos = getHandlePosition(targetNode, edge.targetHandle);
+
+		const isTemporary = edge.source === undefined || edge.target === undefined;
+
+
+		const sourcePos = sourceNode && edge.source ? getHandlePosition(sourceNode, edge.sourceHandle) : this.screenToWorld(this.cursorPosition);
+		const targetPos = !(sourceNode && edge.source) ? undefined : ((targetNode && edge.target)  ? getHandlePosition(targetNode, edge.targetHandle) : this.screenToWorld(this.cursorPosition));
+
 		if (!sourcePos || !targetPos) return [];
 
 		const points: Point[] = [];
 		if (edge.style === "straight") {
 			points.push(sourcePos, targetPos);
 		} else {
-			const sourceInfo = getHandleInfo(sourceNode, edge.sourceHandle)!;
-			const targetInfo = getHandleInfo(targetNode, edge.targetHandle)!;
+			const sourceInfo = sourceNode ? getHandleInfo(sourceNode, edge.sourceHandle)! : undefined;
+			const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
 			const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
 			const curveStrength = dist * 0.4;
-			const sourceDir = getDir(sourceInfo.side);
-			const targetDir = getDir(targetInfo.side);
+			const sourceDir = sourceInfo ? getDir(sourceInfo.side) : {dx: 0, dy: 0};
+			const targetDir = targetInfo ? getDir(targetInfo.side) : {dx: 0, dy: 0};;
 			const control1 = {
 				x: sourcePos.x + sourceDir.dx * curveStrength,
 				y: sourcePos.y + sourceDir.dy * curveStrength,
@@ -193,5 +212,6 @@ export class EdgeRenderer {
 
 	public dispose(): void {
 		if (this.edgeVertexBuffer) this.edgeVertexBuffer.destroy();
+		this.canvas.removeEventListener("mousemove",this.cursorEvent);
 	}
 }

@@ -149,7 +149,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		this.nodeRenderer = new NodeRenderer(this.device, this.format, this.sampleCount);
 		this.nodeRenderer.init(bindGroupLayout);
 
-		this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount);
+		this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount, this.canvas, this.screenToWorld);
 		this.edgeRenderer.init(bindGroupLayout);
 
 		this.handleRenderer = new HandleRenderer(this.device, this.format, this.sampleCount);
@@ -490,14 +490,14 @@ export class WebGpuMotor implements GraphicalMotor {
 		}
 	}
 
-	public worldToScreen(point: { x: number; y: number }): { x: number; y: number } {
+	public worldToScreen(point: Point): Point {
 		return {
 			x: point.x * this.transform.scale + this.transform.translateX,
 			y: point.y * this.transform.scale + this.transform.translateY,
 		};
 	}
 
-	public screenToWorld(point: { x: number; y: number }): { x: number; y: number } {
+	public screenToWorld(point: Point): Point {
 		return {
 			x: (point.x - this.transform.translateX) / this.transform.scale,
 			y: (point.y - this.transform.translateY) / this.transform.scale,
