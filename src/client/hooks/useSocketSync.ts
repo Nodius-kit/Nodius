@@ -633,6 +633,8 @@ export const useSocketSync = () => {
             value: graph as Graph
         });
 
+        nodeConfig.node = baseNode;
+
         Project.dispatch({
             field: "editedNodeConfig",
             value: {
@@ -723,7 +725,6 @@ export const useSocketSync = () => {
                 if(newNode.success) {
                     Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.set(instruction.nodeId, newNode.value);
                 } else {
-                    console.error(newNode, instruction.i, node);
                     return {
                         status: false,
                         error: "Error while applied instruction to destination node, should not append:"+JSON.stringify(newNode),
@@ -941,6 +942,18 @@ export const useSocketSync = () => {
             });
             if(newNodeConfig.success) {
                 nodeConfig = newNodeConfig.value;
+                Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.set((nodeConfig.node as Node<any>)._key, nodeConfig.node as Node<any>);
+
+                console.log((nodeConfig.node as Node<any>)._key, nodeConfig.node, Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap);
+
+                currentEditConfig.current = {
+                    ...currentEditConfig.current,
+                    config: nodeConfig
+                };
+                Project.dispatch({
+                    field: "editedNodeConfig",
+                    value: currentEditConfig.current
+                });
 
                 if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
 
@@ -952,18 +965,13 @@ export const useSocketSync = () => {
 
                     Project.state.editedHtml.html = object;
                     Project.state.editedHtml.target = nodeConfig;
+
+
                     Project.dispatch({
                         field: "editedHtml",
                         value: {...Project.state.editedHtml}
                     });
-                    currentEditConfig.current = {
-                        ...currentEditConfig.current,
-                        config: nodeConfig
-                    };
-                    Project.dispatch({
-                        field: "editedNodeConfig",
-                        value: currentEditConfig.current
-                    });
+
                     if (!instruction.noRedraw) {
                         await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                     }

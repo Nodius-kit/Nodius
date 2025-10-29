@@ -164,7 +164,7 @@ export interface NodeTypeConfig {
     content: HtmlObject,
     category: string,
     alwaysRendered: boolean,
-    node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "posY" | "posX">,
+    node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "posX" | "posY">,
     domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap | MotorDomEventMap>>,
     border: {
         radius: number,

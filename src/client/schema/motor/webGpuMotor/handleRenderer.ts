@@ -122,7 +122,6 @@ export class HandleRenderer {
 		this.handleCount = 0;
 		for (const id of visibleNodes) {
 			const node = scene.get(id)!;
-			if (typeof node.size === "string") continue;
 			for (const side in node.handles) {
 				const s = side as handleSide;
 				const config = node.handles[s];

@@ -209,10 +209,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     }, []);
 
-    const { updateNodeConfigOverlay } = useNodeConfigOverlay({
+    const { updateNodeConfigOverlay, clearOverlay } = useNodeConfigOverlay({
         getNode: getNode,
         enabled: (nodeId) => Project.state.editedNodeConfig?.node._key === nodeId,
-        gpuMotor: gpuMotor.current!
+        gpuMotor: gpuMotor.current!,
+        updateGraph: Project.state.updateGraph!
     });
 
 
@@ -443,6 +444,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         });
 
         onNodeEnter?.(node);
+
+        // Update config overlay if this node is being edited
+        if (Project.state.editedNodeConfig?.node._key === node._key) {
+            updateNodeConfigOverlay(overlay, node._key);
+        }
     }, [
         Project.state.nodeTypeConfig,
         Project.state.initiateNewHtmlRenderer,
@@ -456,7 +462,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         getNode,
         nodeRenderer,
         onNodeEnter,
-        triggerEventOnNode
+        triggerEventOnNode,
+        updateNodeConfigOverlay
     ]);
 
     // Node leave handler
@@ -472,6 +479,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         const schemaNode = inSchemaNode.current.get(nodeId);
         if (schemaNode) {
+            // Clear config overlay for this node
+            clearOverlay(nodeId);
+
             nodeDisplayContainer.current.removeChild(schemaNode.element);
             nodeDisplayContainer.current.removeChild(schemaNode.overElement);
             schemaNode.eventManager.dispose();
@@ -480,7 +490,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAnimation(nodeId);
             inSchemaNode.current.delete(nodeId);
         }
-    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer]);
+    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, clearOverlay]);
 
     // Reset handler
     const onReset = useCallback(() => {
@@ -643,6 +653,24 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         });
     }, [Project.state.selectedNode, selectedNodeClass, selectedNodeElementClass]);
+
+    // Node config overlay - show handle configuration UI when editing node config
+    useEffect(() => {
+        if (Project.state.editedNodeConfig) {
+            const nodeId = Project.state.editedNodeConfig.node._key;
+            const schemaNode = inSchemaNode.current.get(nodeId);
+
+            // Only show overlay if the node is currently visible in the schema
+            if (schemaNode) {
+                updateNodeConfigOverlay(schemaNode.overElement, nodeId);
+            }
+        } else {
+            // Clear all overlays when not editing
+            inSchemaNode.current.forEach((schemaNode, nodeKey) => {
+                clearOverlay(nodeKey);
+            });
+        }
+    }, [Project.state.editedNodeConfig, updateNodeConfigOverlay, clearOverlay]);
 
     const onDoubleClick = () => {
         onExitCanvas();
