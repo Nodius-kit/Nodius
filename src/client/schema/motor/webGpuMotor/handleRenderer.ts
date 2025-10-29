@@ -5,14 +5,14 @@
  *
  * Renders handles as connection points on nodes:
  * - Circles for "out" (output) handles
- * - Rectangles for "in" (input) handles
+ * - Oriented rectangles for "in" (input) handles
+ * - Handles are offset from node edges
+ * - Rectangle orientation matches the side (parallel to edge)
  * - Uses fragment shader for smooth edges with anti-aliasing
- * - Handles are positioned based on node size and handle configuration
- * - Supports handles on all sides (T, D, L, R) and center (0)
  */
 
 import { handleSide } from "../../../../utils/graph/graphType";
-import { getHandlePosition } from "./handleUtils";
+import { getHandleInfo, getHandlePosition } from "./handleUtils";
 
 /**
  * Renders node handles (connection points) with different shapes based on type
@@ -44,7 +44,7 @@ export class HandleRenderer {
 		});
 		this.device.queue.writeBuffer(this.quadBuffer, 0, quadVertices);
 
-		// Handle pipeline with shape differentiation
+		// Handle pipeline with shape differentiation and orientation
 		const handleShaderCode = /* wgsl */ `
       struct Uniforms {
         scale: f32,
@@ -61,15 +61,31 @@ export class HandleRenderer {
 
       @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
+      // Rotation matrix for 2D rotation
+      fn rotate2D(pos: vec2<f32>, angle: f32) -> vec2<f32> {
+        let c = cos(angle);
+        let s = sin(angle);
+        return vec2<f32>(
+          pos.x * c - pos.y * s,
+          pos.x * s + pos.y * c
+        );
+      }
+
       @vertex
       fn vs(
         @location(0) local_pos: vec2<f32>,
         @location(1) instance_pos: vec2<f32>,
-        @location(2) instance_radius: f32,
-        @location(3) shape_type: u32
+        @location(2) instance_size: vec2<f32>, // width and height for rectangles, radius for circles
+        @location(3) rotation: f32, // rotation angle in radians
+        @location(4) shape_type: u32
       ) -> VertexOutput {
         var out: VertexOutput;
-        let world_pos = local_pos * instance_radius + instance_pos;
+
+        // Apply size and rotation to local position
+        var scaled_pos = local_pos * instance_size;
+        var rotated_pos = rotate2D(scaled_pos, rotation);
+
+        let world_pos = rotated_pos + instance_pos;
         let screen_pos = world_pos * uniforms.scale + uniforms.translate;
         let clip_x = 2.0 * screen_pos.x / uniforms.viewport.x - 1.0;
         let clip_y = 1.0 - 2.0 * screen_pos.y / uniforms.viewport.y;
@@ -114,12 +130,13 @@ export class HandleRenderer {
 						attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
 					},
 					{
-						arrayStride: 16,
+						arrayStride: 24, // 2 + 2 + 1 + 1 floats + 1 uint = 6 * 4 bytes
 						stepMode: "instance",
 						attributes: [
-							{ shaderLocation: 1, offset: 0, format: "float32x2" },
-							{ shaderLocation: 2, offset: 8, format: "float32" },
-							{ shaderLocation: 3, offset: 12, format: "uint32" },
+							{ shaderLocation: 1, offset: 0, format: "float32x2" }, // position
+							{ shaderLocation: 2, offset: 8, format: "float32x2" }, // size (width, height)
+							{ shaderLocation: 3, offset: 16, format: "float32" }, // rotation
+							{ shaderLocation: 4, offset: 20, format: "uint32" },  // shape_type
 						],
 					},
 				],
@@ -135,29 +152,78 @@ export class HandleRenderer {
 	}
 
 	public buildHandleBuffer(visibleNodes: Set<string>, scene: Map<string, any>): void {
-		const handleRadius = 5; // Increased from 2 to 5 for better visibility
+		const circleRadius = 5;
+		const rectWidth = 8; // Longer dimension
+		const rectHeight = 4; // Shorter dimension
+		const offsetFromEdge = 6; // Offset from node edge
+
 		const handleData: number[] = [];
 		this.handleCount = 0;
+
 		for (const id of visibleNodes) {
 			const node = scene.get(id)!;
 			for (const side in node.handles) {
 				const s = side as handleSide;
 				const config = node.handles[s];
 				for (const point of config!.point) {
-					const pos = getHandlePosition(node, point.id);
-					if (pos) {
-						// Determine shape type: 0 = circle (out), 1 = rectangle (in)
-						const shapeType = point.type === "out" ? 0 : 1;
-						handleData.push(pos.x, pos.y, handleRadius, shapeType);
-						this.handleCount++;
+					const basePos = getHandlePosition(node, point.id);
+					if (!basePos) continue;
+
+					const info = getHandleInfo(node, point.id);
+					if (!info) continue;
+
+					// Determine shape type: 0 = circle (out), 1 = rectangle (in)
+					const shapeType = point.type === "out" ? 0 : 1;
+
+					// Calculate offset position and rotation based on side
+					let offsetX = 0;
+					let offsetY = 0;
+					let rotation = 0; // in radians
+					let width = circleRadius;
+					let height = circleRadius;
+
+					if (shapeType === 1) {
+						// Rectangle - adjust size and rotation based on side
+						width = rectWidth;
+						height = rectHeight;
 					}
+
+					switch (info.side) {
+						case "T":
+							offsetY = -offsetFromEdge;
+							rotation = 0; // Horizontal rectangle for top
+							break;
+						case "D":
+							offsetY = offsetFromEdge;
+							rotation = 0; // Horizontal rectangle for bottom
+							break;
+						case "L":
+							offsetX = -offsetFromEdge;
+							rotation = Math.PI / 2; // Vertical rectangle for left (90 degrees)
+							break;
+						case "R":
+							offsetX = offsetFromEdge;
+							rotation = Math.PI / 2; // Vertical rectangle for right (90 degrees)
+							break;
+						case "0":
+							// Center - no offset or rotation
+							break;
+					}
+
+					const finalX = basePos.x + offsetX;
+					const finalY = basePos.y + offsetY;
+
+					// Push data: posX, posY, sizeX, sizeY, rotation, shapeType
+					handleData.push(finalX, finalY, width, height, rotation, shapeType);
+					this.handleCount++;
 				}
 			}
 		}
+
 		const handleArray = new Float32Array(handleData);
 		if (this.handleInstanceBuffer) this.handleInstanceBuffer.destroy();
 		this.handleInstanceBuffer = this.device.createBuffer({
-			size: Math.max(16, handleArray.byteLength),
+			size: Math.max(24, handleArray.byteLength),
 			usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
 		});
 		this.device.queue.writeBuffer(this.handleInstanceBuffer, 0, handleArray);
