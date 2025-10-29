@@ -11,6 +11,7 @@ import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {ActionContext} from "../../hooks/contexts/ProjectContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
+import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
 
 
 export interface useNodeConfigOverlayOptions {
@@ -201,8 +202,23 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
      */
     const createConnectionPointUI = useCallback((
         side: handleSide,
-        handleConfig: any,
-        point: any,
+        handleConfig: {
+            position: "separate" | "fix",
+            point: Array<{
+                id: string,
+                offset?:number,
+                display?: string,
+                type: "in" | "out",
+                accept: string,
+            }>
+        },
+        point: {
+            id: string,
+            offset?:number,
+            display?: string,
+            type: "in" | "out",
+            accept: string,
+        },
         index: number,
         node: Node<any>,
         nodeId: string
@@ -232,6 +248,8 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
             e.stopPropagation();
 
+            disableTextSelection();
+
             dragStarted = false;
             isDragging = false;
 
@@ -255,18 +273,52 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 const scale = options.gpuMotor.getTransform().scale;
                 let newOffset = startOffset;
 
-                switch (side) {
-                    case 'T':
-                    case 'D':
-                        newOffset = startOffset + (deltaX / scale);
-                        newOffset = Math.max(0, Math.min(node.size.width, newOffset));
-                        break;
-                    case 'L':
-                    case 'R':
-                        newOffset = startOffset + (deltaY / scale);
-                        newOffset = Math.max(0, Math.min(node.size.height, newOffset));
-                        break;
+                const changeSideThreeshold = 50;
+
+
+                if(side === 'T') {
+                    newOffset = startOffset + (deltaX / scale);
+                    newOffset = Math.max(0, Math.min(node.size.width, newOffset));
+
+
+                    if(newOffset === node.size.width && deltaY > changeSideThreeshold) {
+                        // put to side R
+                    } else if(newOffset === 0 && deltaY > changeSideThreeshold) {
+                        // put to side L
+                    }
+
+                } else if(side === 'D') {
+                    newOffset = startOffset + (deltaX / scale);
+                    newOffset = Math.max(0, Math.min(node.size.width, newOffset));
+
+                    if(newOffset === node.size.width && deltaY < changeSideThreeshold) {
+                        // put to side R
+                    } else if(newOffset === 0 && deltaY < changeSideThreeshold) {
+                        // put to side L
+                    }
+
+                } else if(side === 'L') {
+                    newOffset = startOffset + (deltaY / scale);
+                    newOffset = Math.max(0, Math.min(node.size.height, newOffset));
+
+                    if(newOffset === node.size.height && deltaX > changeSideThreeshold) {
+                        // put to side B
+                    } else if(newOffset === 0 && deltaX > changeSideThreeshold) {
+                        // put to side T
+                    }
+
+                } else if(side === 'R') {
+                    newOffset = startOffset + (deltaY / scale);
+                    newOffset = Math.max(0, Math.min(node.size.height, newOffset));
+
+                    if(newOffset === node.size.height && deltaX < changeSideThreeshold) {
+                        // put to side B
+                    } else if(newOffset === 0 && deltaX < changeSideThreeshold) {
+                        // put to side T
+                    }
                 }
+
+
 
                 point.offset = newOffset;
                 positionConnectionPoint(container, side, handleConfig, index, node);
@@ -281,7 +333,10 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                     const instruction = new InstructionBuilder();
                     instruction.key("handles").key(side).key("point").index(index).key("offset").set(point.offset);
                     await options.updateGraph([{ nodeId, i: instruction.instruction }]);
+                    options.gpuMotor.requestRedraw();
                 }
+
+                enableTextSelection();
 
                 isDragging = false;
                 dragStarted = false;
@@ -344,6 +399,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 nodeId: nodeId,
                 i: instruction.instruction,
             }]);
+            options.gpuMotor.requestRedraw();
         };
 
         button.addEventListener('click', handleClick);
@@ -361,7 +417,16 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
      */
     const createHandleConfigUI = useCallback((
         side: handleSide,
-        handleConfig: any,
+        handleConfig: {
+            position: "separate" | "fix",
+            point: Array<{
+                id: string,
+                offset?:number,
+                display?: string,
+                type: "in" | "out",
+                accept: string,
+            }>
+        },
         node: Node<any>,
         nodeId: string
     ): { elements: HTMLElement[]; cleanup: () => void } => {
@@ -450,6 +515,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 nodeId: nodeId,
                 i: instruction.instruction,
             }]);
+            options.gpuMotor.requestRedraw();
         };
 
         button.addEventListener('click', handleClick);

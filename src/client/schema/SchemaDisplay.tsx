@@ -87,17 +87,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         @keyframes nodius-selection-pulse {
             0%, 100% {
                 box-shadow:
-                    0 0 0 2px var(--nodius-primary, #3b82f6),
-                    0 0 20px 4px rgba(59, 130, 246, 0.4),
-                    0 0 40px 8px rgba(59, 130, 246, 0.2),
-                    0 8px 16px rgba(0, 0, 0, 0.1);
+                    0 0 0 1px var(--nodius-primary, #3b82f6),
+                    0 0 10px 2px rgba(59, 130, 246, 0.4),
+                    0 0 20px 4px rgba(59, 130, 246, 0.2),
+                    0 4px 8px rgba(0, 0, 0, 0.1);
             }
             50% {
                 box-shadow:
-                    0 0 0 2px var(--nodius-primary, #3b82f6),
-                    0 0 25px 6px rgba(59, 130, 246, 0.5),
-                    0 0 50px 12px rgba(59, 130, 246, 0.3),
-                    0 8px 16px rgba(0, 0, 0, 0.1);
+                    0 0 0 1px var(--nodius-primary, #3b82f6),
+                    0 0 12px 3px rgba(59, 130, 246, 0.5),
+                    0 0 25px 6px rgba(59, 130, 246, 0.3),
+                    0 4px 8px rgba(0, 0, 0, 0.1);
             }
         }
     `);
