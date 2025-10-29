@@ -97,7 +97,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
         const overlay = activeOverlays.current.get(nodeId)!;
         const node = options.getNode(nodeId);
         console.log(node);
-        console.trace();
         if(!node) return;
         // check for unused side
         for(const side of Object.keys(overlay.side)) {
@@ -131,7 +130,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     const handleInfo = getHandleInfo(node, point.id);
                     const pos = getHandlePosition(node, point.id);
 
-                    console.log(handleInfo, pos);
+                    console.log(point, handleInfo, pos);
 
                     const handleEl = document.createElement("div");
                     handleEl.dataset.handleId = point.id;
@@ -164,7 +163,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             overlay.side[side]!.push(...newHandles);
         }
 
-    }, [classHandleContainer]);
+    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, options.getNode, options.setSelectedHandle, options.gpuMotor ]);
 
     const cleanupHandleOverlay = useCallback((nodeId:string) => {
         const handle = activeOverlays.current.get(nodeId);

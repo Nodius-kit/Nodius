@@ -382,6 +382,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             // Trigger nodeUpdate event
             triggerEventOnNode(node._key, "nodeUpdate");
 
+            updateHandleOverlay(node._key, overlay);
+
             // Start animation if needed
             if (
                 (updatedNode.toPosX !== undefined && updatedNode.toPosX !== updatedNode.posX) ||
@@ -395,7 +397,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     () => {
                         gpuMotor.current?.requestRedraw();
                         overlayManager.current?.requestUpdate();
-                        updateHandleOverlay(updatedNode._key, overlay);
                     }
                 );
             }
@@ -419,15 +420,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         }
 
-        // handle node config
-        /*console.log("aaa0", deepCopy(Project.state.editedNodeConfig), Project.state.editedNodeConfig.node._key === node._key, htmlRenderer, Project.state.openHtmlEditor);
-        if(Project.state.editedNodeConfig && Project.state.editedNodeConfig.node._key === node._key && htmlRenderer && Project.state.openHtmlEditor) {
-            console.log("aaa");
-            nodeHTML.addEventListener("dblclick", () => {
-                console.log("click");
-                Project.state.openHtmlEditor?.(node._key, htmlRenderer);
-            });
-        }*/
 
         // Position overlay
         const transform = gpuMotor.current.getTransform();
@@ -467,11 +459,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         onNodeEnter?.(node);
 
         // Render handles for this node
-        updateHandleOverlay(node._key, overlay);
+        requestAnimationFrame(() => {
+            updateHandleOverlay(node._key, overlay);
+        });
 
         // Update config overlay if this node is being edited
         if (Project.state.editedNodeConfig?.node._key === node._key) {
-            updateNodeConfigOverlay(overlay, node._key);
+            await updateNodeConfigOverlay(overlay, node._key);
         }
     }, [
         Project.state.nodeTypeConfig,

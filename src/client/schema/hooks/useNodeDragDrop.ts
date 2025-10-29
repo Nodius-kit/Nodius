@@ -49,7 +49,6 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
     ) => {
         return async (evt: MouseEvent) => {
             const currentNode = getNode(nodeKey);
-            console.log("aaaaa", currentNode);
             if (!currentNode) return;
 
             if (!gpuMotor.isInteractive() || isNodeInteractionDisabled(nodeKey)) {

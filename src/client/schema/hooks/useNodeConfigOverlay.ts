@@ -119,9 +119,13 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
     /**
      * Generate unique ID for new connection point
      */
-    const generateUniqueId = useCallback((node: Node<any>, side: handleSide): string => {
-        const existingIds = node.handles[side]?.point.map(p => parseInt(p.id)).filter(id => !isNaN(id)) || [];
-        const maxId = existingIds.length > 0 ? Math.max(...existingIds) : -1;
+    const generateUniqueId = useCallback((node: Node<any>): string => {
+        // Gather all IDs from every handle side
+        const allIds = Object.values(node.handles || {})
+            .flatMap(handle => handle.point.map(p => parseInt(p.id)))
+            .filter(id => !isNaN(id));
+
+        const maxId = allIds.length > 0 ? Math.max(...allIds) : -1;
         return (maxId + 1).toString();
     }, []);
 
@@ -133,7 +137,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         side: handleSide,
         handleConfig: any,
         index: number,
-        node: Node<any>
     ) => {
         const point = handleConfig.point[index];
         let offset: number;
@@ -220,14 +223,16 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             accept: string,
         },
         index: number,
-        node: Node<any>,
         nodeId: string
     ): { element: HTMLElement; cleanup: () => void } => {
+
+
+
         const container = document.createElement('div');
         container.className = connectionPointClass;
 
         // Position the point
-        positionConnectionPoint(container, side, handleConfig, index, node);
+        positionConnectionPoint(container, side, handleConfig, index);
 
         // Click to open side panel
         const handleClick = (e: MouseEvent) => {
@@ -258,6 +263,10 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             const startOffset = point.offset || 0;
 
             const handleMouseMove = (e: MouseEvent) => {
+
+                const node = options.getNode(nodeId)!;
+                if(!node) return;
+
                 const deltaX = e.clientX - startX;
                 const deltaY = e.clientY - startY;
                 const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
@@ -321,7 +330,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
 
                 point.offset = newOffset;
-                positionConnectionPoint(container, side, handleConfig, index, node);
+                positionConnectionPoint(container, side, handleConfig, index);
                 options.gpuMotor.requestRedraw();
             };
 
@@ -427,7 +436,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 accept: string,
             }>
         },
-        node: Node<any>,
         nodeId: string
     ): { elements: HTMLElement[]; cleanup: () => void } => {
         const elements: HTMLElement[] = [];
@@ -435,7 +443,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
         // Create UI for each connection point
         handleConfig.point.forEach((point: any, index: number) => {
-            const pointUI = createConnectionPointUI(side, handleConfig, point, index, node, nodeId);
+            const pointUI = createConnectionPointUI(side, handleConfig, point, index, nodeId);
             elements.push(pointUI.element);
             cleanupCallbacks.push(pointUI.cleanup);
         });
@@ -456,7 +464,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
      */
     const createAddHandleButton = useCallback((
         side: handleSide,
-        node: Node<any>,
         nodeId: string,
         cssClass: string
     ): { button: HTMLElement; cleanup: () => void } => {
@@ -491,11 +498,14 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         const handleClick = async (e: MouseEvent) => {
             e.stopPropagation();
 
+            const node = options.getNode(nodeId)!;
+            if(!node) return;
+
             const instruction = new InstructionBuilder();
 
             if (node.handles[side]) {
                 instruction.key("handles").key(side).key("point").arrayAdd({
-                    id: generateUniqueId(node, side),
+                    id: generateUniqueId(node),
                     type: "in",
                     accept: "any",
                 });
@@ -557,7 +567,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         // Create + button for each side
         HANDLE_SIDES.forEach(side => {
             const cssClass = (side === 'T' || side === 'D') ? addButtonClassHorizontal : addButtonClassVertical;
-            const { button, cleanup } = createAddHandleButton(side, node, nodeId, cssClass);
+            const { button, cleanup } = createAddHandleButton(side, nodeId, cssClass);
             handleUIContainer.appendChild(button);
             cleanupCallbacks.push(cleanup);
         });
@@ -565,7 +575,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         // Create UI for existing handles
         Object.entries(node.handles).forEach(([side, handleConfig]) => {
             if (handleConfig) {
-                const { elements, cleanup } = createHandleConfigUI(side as handleSide, handleConfig, node, nodeId);
+                const { elements, cleanup } = createHandleConfigUI(side as handleSide, handleConfig, nodeId);
                 elements.forEach(el => handleUIContainer.appendChild(el));
                 cleanupCallbacks.push(cleanup);
             }
