@@ -376,8 +376,8 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             dragStarted = false;
             isDragging = false;
 
-            const startX = e.clientX;
-            const startY = e.clientY;
+            let startX = e.clientX;
+            let startY = e.clientY;
             const startOffset = handleInfo.offset || 0;
 
             let lastFrameId:number|undefined;
@@ -390,6 +390,9 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     const node = optionsRef.current.getNode(nodeId)!;
                     if (!node) return;
+
+                    const nodeOverlay = document.querySelector('[data-node-overlay-key="' +node._key + '"]');
+                    if(!nodeOverlay) return;
 
                     let handleInfo = getHandleInfo(node, pointId);
                     if(!handleInfo) return;
@@ -413,44 +416,20 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     const currentHandle = node.handles[handleInfo.side]!.point[handleInfo.index];
 
+                    let changeSide:handleSide|undefined = undefined;
+                    let newChangeOffset:number = 0;
+
+                    const rect = nodeOverlay.getBoundingClientRect();
 
                     if (handleInfo.side === 'T') {
                         newOffset = startOffset + (deltaX / scale);
                         newOffset = Math.max(0, Math.min(node.size.width, newOffset));
 
-
-                        if (newOffset === node.size.width && deltaY > changeSideThreeshold) {
-
-                            const instructionRemove = new InstructionBuilder();
-                            const instructionAdd = new InstructionBuilder();
-
-                            instructionRemove.key("handles").key(handleInfo.side).key("point").arrayRemoveIndex(handleInfo.index);
-                            const newHandle = deepCopy(currentHandle);
-                            newHandle.offset=0;
-                            if(node.handles["R"]) {
-                                if(node.handles["R"]!.position === "separate") {
-                                    delete newHandle.offset;
-                                }
-                                instructionAdd.key("handles").key("R").key("point").arrayAdd(newHandle);
-                            } else {
-                                instructionAdd.key("handles").key("R").set({
-                                    point: [newHandle],
-                                    position: "fix"
-                                });
-                            }
-                            await optionsRef.current.updateGraph([
-                                {
-                                    nodeId: nodeId,
-                                    i: instructionRemove.instruction
-                                },
-                                {
-                                    nodeId: nodeId,
-                                    i: instructionAdd.instruction
-                                }
-                            ]);
-
+                        if (newOffset === node.size.width && (e.clientY > rect.top + changeSideThreeshold)) {
+                            changeSide = "R";
                             // put to side R
-                        } else if (newOffset === 0 && deltaY > changeSideThreeshold) {
+                        } else if (newOffset === 0 && (e.clientY > rect.top + changeSideThreeshold)) {
+                            changeSide = "L";
                             // put to side L
                         }
 
@@ -458,10 +437,12 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         newOffset = startOffset + (deltaX / scale);
                         newOffset = Math.max(0, Math.min(node.size.width, newOffset));
 
-                        if (newOffset === node.size.width && deltaY < changeSideThreeshold) {
-
+                        if (newOffset === node.size.width && (e.clientY < rect.bottom - changeSideThreeshold)) {
+                            changeSide = "R";
+                            newChangeOffset = node.size.height;
                             // put to side R
-                        } else if (newOffset === 0 && deltaY < changeSideThreeshold) {
+                        } else if (newOffset === 0 && (e.clientY < rect.bottom - changeSideThreeshold)) {
+                            changeSide = "L";
                             // put to side L
                         }
 
@@ -469,9 +450,12 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         newOffset = startOffset + (deltaY / scale);
                         newOffset = Math.max(0, Math.min(node.size.height, newOffset));
 
-                        if (newOffset === node.size.height && deltaX > changeSideThreeshold) {
+
+                        if (newOffset === node.size.height && (e.clientX > rect.left + changeSideThreeshold)) {
+                            changeSide = "D";
                             // put to side B
-                        } else if (newOffset === 0 && deltaX > changeSideThreeshold) {
+                        } else if (newOffset === 0 && (e.clientX > rect.left + changeSideThreeshold)) {
+                            changeSide = "T";
                             // put to side T
                         }
 
@@ -479,11 +463,47 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         newOffset = startOffset + (deltaY / scale);
                         newOffset = Math.max(0, Math.min(node.size.height, newOffset));
 
-                        if (newOffset === node.size.height && deltaX < changeSideThreeshold) {
+
+                        if (newOffset === node.size.height && (e.clientX < rect.right - changeSideThreeshold)) {
+                            changeSide = "D";
+                            newChangeOffset = node.size.width;
                             // put to side B
-                        } else if (newOffset === 0 && deltaX < changeSideThreeshold) {
+                        } else if (newOffset === 0 && (e.clientX < rect.right - changeSideThreeshold)) {
+                            changeSide = "T";
+                            newChangeOffset = node.size.width;
                             // put to side T
                         }
+                    }
+
+                    if(changeSide) {
+                        const instructionRemove = new InstructionBuilder();
+                        const instructionAdd = new InstructionBuilder();
+
+                        instructionRemove.key("handles").key(handleInfo.side).key("point").arrayRemoveIndex(handleInfo.index);
+                        const newHandle = deepCopy(currentHandle);
+                        newHandle.offset=newChangeOffset;
+
+                        if(node.handles[changeSide]) {
+                            if(node.handles[changeSide]!.position === "separate") {
+                                delete newHandle.offset;
+                            }
+                            instructionAdd.key("handles").key(changeSide).key("point").arrayAdd(newHandle);
+                        } else {
+                            instructionAdd.key("handles").key(changeSide).set({
+                                point: [newHandle],
+                                position: "fix"
+                            });
+                        }
+                        await optionsRef.current.updateGraph([
+                            {
+                                nodeId: nodeId,
+                                i: instructionRemove.instruction
+                            },
+                            {
+                                nodeId: nodeId,
+                                i: instructionAdd.instruction
+                            }
+                        ]);
                     }
 
 
