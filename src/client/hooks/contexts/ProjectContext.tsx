@@ -67,7 +67,7 @@ export type EditedNodeTypeConfig = {node:Node<any>, config:NodeTypeConfig}|undef
 export type EditedNodeHandle = {
     nodeId: string;
     side: handleSide;
-    pointIndex: number;
+    pointId: string;
 } | undefined;
 
 export interface ActionContext {

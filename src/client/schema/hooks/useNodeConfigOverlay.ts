@@ -7,13 +7,8 @@
 import {handleSide, Node} from "../../../utils/graph/graphType";
 import { WebGpuMotor } from "../motor/webGpuMotor/index";
 import {useCallback, useRef} from "react";
-import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {ActionContext, EditedNodeTypeConfig} from "../../hooks/contexts/ProjectContext";
-import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
-import {handleOffset} from "./useHandleRenderer";
-
 
 export interface useNodeConfigOverlayOptions {
     gpuMotor: WebGpuMotor;
@@ -26,10 +21,7 @@ export interface useNodeConfigOverlayOptions {
 
 interface HandleUI {
     container: HTMLElement;
-    cleanup: () => void;
 }
-
-const HANDLE_SIDES: handleSide[] = ["T", "D", "L", "R"];
 
 /**
  * Hook for managing interactive node handle configuration overlay
@@ -38,72 +30,103 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
     const activeOverlays = useRef<Map<string, HandleUI>>(new Map());
 
-    const addButtonClassHorizontal = useDynamicClass(`
+
+    const updateNodeConfigOverlay = useCallback((nodeId:string) => {
+
+    }, [options]);
+
+    const clearNodeConfigOverlay = useCallback((nodeId:string) => {
+
+    }, [options])
+
+    /*
+    // Menu container for horizontal sides (T, D)
+    const menuContainerHorizontal = useDynamicClass(`
         & {
             position: absolute;
-            width: 16px;
-            height: 16px;
-            background: transparent;
             display: flex;
+            flex-direction: row;
             align-items: center;
-            justify-content: center;
-            cursor: pointer;
+            gap: 4px;
+             background: var(--nodius-background-paper);
+            border: 1px solid var(--nodius-text-divider);
+            border-radius: 6px;
+            padding: 2px 3px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             pointer-events: all;
-            font-size: 12px;
-            color: #3b82f6;
-            line-height: 1;
-            transition: transform 0.15s ease;
-            font-weight: bold;
-            user-select: none;
-        }
-        &:hover {
-            transform: translateX(-50%) scale(1.3);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
         }
     `);
 
-    const addButtonClassVertical = useDynamicClass(`
+    // Menu container for vertical sides (L, R)
+    const menuContainerVertical = useDynamicClass(`
         & {
             position: absolute;
-            width: 16px;
-            height: 16px;
-            background: transparent;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: var(--nodius-background-paper);
+            border: 1px solid var(--nodius-text-divider);
+            border-radius: 6px;
+            padding: 3px 2px;
+            box-shadow: var(--nodius-shadow-2);
+            pointer-events: all;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10000;
+        }
+    `);
+
+    const addButtonClass = useDynamicClass(`
+        & {
+            width: 20px;
+            height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             pointer-events: all;
-            font-size: 12px;
-            color: #3b82f6;
-            line-height: 1;
-            transition: transform 0.15s ease;
-            font-weight: bold;
+            color: var(--nodius-text-primary);
+            font-size: 14px;
+            transition: var(--nodius-transition-default);
             user-select: none;
+            border-radius: 4px;
+            font-weight: 200;
         }
         &:hover {
-            transform: translateY(-50%) scale(1.3);
+            background-color: var(--nodius-text-divider);
+            transform: scale(1.1);
+        }
+        &:active {
+            transform: scale(0.95);
         }
     `);
 
     const deleteButtonClass = useDynamicClass(`
         & {
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            background: transparent;
+            width: 20px;
+            height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             pointer-events: all;
-            font-size: 14px;
-            color: #ef4444;
-            line-height: 1;
-            transition: transform 0.15s ease;
-            font-weight: bold;
+            font-size: 16px;
+            color: var(--nodius-text-primary);
+            transition: var(--nodius-transition-default);
             user-select: none;
+            border-radius: 4px;
+            font-weight: 200;
         }
         &:hover {
-            transform: scale(1.3);
+            background-color: var(--nodius-text-divider);
+            transform: scale(1.1);
+        }
+        &:active {
+            transform: scale(0.95);
         }
     `);
 
@@ -120,9 +143,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
     `);
 
 
-    /**
-     * Generate unique ID for new connection point
-     */
     const generateUniqueId = useCallback((node: Node<any>): string => {
         // Gather all IDs from every handle side
         const allIds = Object.values(node.handles || {})
@@ -133,9 +153,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         return (maxId + 1).toString();
     }, []);
 
-    /**
-     * Position a connection point based on side and configuration
-     */
     const positionConnectionPoint = useCallback((
         element: HTMLElement,
         side: handleSide,
@@ -204,39 +221,21 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         }
     }, []);
 
-    /**
-     * Create UI for a single connection point
-     */
     const createConnectionPointUI = useCallback((
-        side: handleSide,
-        handleConfig: {
-            position: "separate" | "fix",
-            point: Array<{
-                id: string,
-                offset?:number,
-                display?: string,
-                type: "in" | "out",
-                accept: string,
-            }>
-        },
-        point: {
-            id: string,
-            offset?:number,
-            display?: string,
-            type: "in" | "out",
-            accept: string,
-        },
+        handleId: string,
         index: number,
         nodeId: string
     ): { element: HTMLElement; cleanup: () => void } => {
 
+        const node = options.getNode(nodeId)!;
 
+        let handleConfig = getHandleInfo(node, handleId);
 
         const container = document.createElement('div');
         container.className = connectionPointClass;
 
         // Position the point
-        positionConnectionPoint(container, side, handleConfig, index);
+        //positionConnectionPoint(container, side, handleConfig, index);
 
         // Click to open side panel
         const handleClick = (e: MouseEvent) => {
@@ -296,8 +295,10 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
                     if(newOffset === node.size.width && deltaY > changeSideThreeshold) {
                         // put to side R
+                        console.log("put to r");
                     } else if(newOffset === 0 && deltaY > changeSideThreeshold) {
                         // put to side L
+                        console.log("put to l");
                     }
 
                 } else if(side === 'D') {
@@ -335,7 +336,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
                 point.offset = newOffset;
                 positionConnectionPoint(container, side, handleConfig, index);
-                options.gpuMotor.requestRedraw();
+                (window as any).triggerNodeUpdate(nodeId);
             };
 
             const handleMouseUp = async (e: MouseEvent) => {
@@ -370,9 +371,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         };
     }, [connectionPointClass, options, positionConnectionPoint]);
 
-    /**
-     * Create delete handle button
-     */
     const createDeleteHandleButton = useCallback((
         side: handleSide,
         nodeId: string
@@ -380,27 +378,6 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         const button = document.createElement('div');
         button.className = deleteButtonClass;
         button.textContent = '×';
-
-        const mainOffset = '-18px';
-        const sideOffset = '16px';
-        switch (side) {
-            case 'T':
-                button.style.top = mainOffset;
-                button.style.left = `calc(50% + ${sideOffset})`;
-                break;
-            case 'D':
-                button.style.bottom = mainOffset;
-                button.style.left = `calc(50% + ${sideOffset})`;
-                break;
-            case 'L':
-                button.style.left = mainOffset;
-                button.style.top = `calc(50% + ${sideOffset})`;
-                break;
-            case 'R':
-                button.style.right = mainOffset;
-                button.style.top = `calc(50% + ${sideOffset})`;
-                break;
-        }
 
         const handleClick = async (e: MouseEvent) => {
             e.stopPropagation();
@@ -425,9 +402,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
         };
     }, [deleteButtonClass, options]);
 
-    /**
-     * Create UI for an existing handle configuration
-     */
+
     const createHandleConfigUI = useCallback((
         side: handleSide,
         handleConfig: {
@@ -441,63 +416,30 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             }>
         },
         nodeId: string
-    ): { elements: HTMLElement[]; cleanup: () => void } => {
-        const elements: HTMLElement[] = [];
+    ): { pointElements: HTMLElement[]; cleanup: () => void } => {
+        const pointElements: HTMLElement[] = [];
         const cleanupCallbacks: (() => void)[] = [];
 
         // Create UI for each connection point
-        handleConfig.point.forEach((point: any, index: number) => {
+        handleConfig.point.forEach((point: {id: string}, index: number) => {
             const pointUI = createConnectionPointUI(side, handleConfig, point, index, nodeId);
-            elements.push(pointUI.element);
+            pointElements.push(pointUI.element);
             cleanupCallbacks.push(pointUI.cleanup);
         });
 
-        // Add delete handle button
-        const deleteBtn = createDeleteHandleButton(side, nodeId);
-        elements.push(deleteBtn.button);
-        cleanupCallbacks.push(deleteBtn.cleanup);
-
         return {
-            elements,
+            pointElements,
             cleanup: () => cleanupCallbacks.forEach(cb => cb())
         };
-    }, [createConnectionPointUI, createDeleteHandleButton]);
+    }, [createConnectionPointUI]);
 
-    /**
-     * Create a + button to add a handle on a specific side
-     */
     const createAddHandleButton = useCallback((
         side: handleSide,
-        nodeId: string,
-        cssClass: string
+        nodeId: string
     ): { button: HTMLElement; cleanup: () => void } => {
         const button = document.createElement('div');
-        button.className = cssClass;
+        button.className = addButtonClass;
         button.textContent = '+';
-
-        const offset = '-18px';
-        switch (side) {
-            case 'T':
-                button.style.top = offset;
-                button.style.left = '50%';
-                button.style.transform = 'translateX(-50%)';
-                break;
-            case 'D':
-                button.style.bottom = offset;
-                button.style.left = '50%';
-                button.style.transform = 'translateX(-50%)';
-                break;
-            case 'L':
-                button.style.left = offset;
-                button.style.top = '50%';
-                button.style.transform = 'translateY(-50%)';
-                break;
-            case 'R':
-                button.style.right = offset;
-                button.style.top = '50%';
-                button.style.transform = 'translateY(-50%)';
-                break;
-        }
 
         const handleClick = async (e: MouseEvent) => {
             e.stopPropagation();
@@ -540,7 +482,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 button.removeEventListener('click', handleClick);
             }
         };
-    }, [generateUniqueId, options]);
+    }, [generateUniqueId, options, addButtonClass]);
 
     const updateNodeConfigOverlay = useCallback(async (overlayHtml:HTMLElement, nodeId:string) => {
         // Clear existing overlay if present
@@ -572,19 +514,51 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
         const cleanupCallbacks: (() => void)[] = [];
 
-        // Create + button for each side
+        // Create centered menu for each side
         HANDLE_SIDES.forEach(side => {
-            const cssClass = (side === 'T' || side === 'D') ? addButtonClassHorizontal : addButtonClassVertical;
-            const { button, cleanup } = createAddHandleButton(side, nodeId, cssClass);
-            handleUIContainer.appendChild(button);
-            cleanupCallbacks.push(cleanup);
+            const isHorizontal = side === 'T' || side === 'D';
+
+            // Create menu container
+            const menu = document.createElement('div');
+            menu.className = isHorizontal ? menuContainerHorizontal : menuContainerVertical;
+
+            // Position menu on the side
+            const offset = '-60px';
+            switch (side) {
+                case 'T':
+                    menu.style.top = offset;
+                    break;
+                case 'D':
+                    menu.style.bottom = offset;
+                    break;
+                case 'L':
+                    menu.style.left = offset;
+                    break;
+                case 'R':
+                    menu.style.right = offset;
+                    break;
+            }
+
+            // Add "+" button
+            const { button: addBtn, cleanup: addCleanup } = createAddHandleButton(side, nodeId);
+            menu.appendChild(addBtn);
+            cleanupCallbacks.push(addCleanup);
+
+            // Add "×" button if handle exists
+            if (node.handles[side]) {
+                const { button: deleteBtn, cleanup: deleteCleanup } = createDeleteHandleButton(side, nodeId);
+                menu.appendChild(deleteBtn);
+                cleanupCallbacks.push(deleteCleanup);
+            }
+
+            handleUIContainer.appendChild(menu);
         });
 
-        // Create UI for existing handles
+        // Create UI for existing handles (connection points)
         Object.entries(node.handles).forEach(([side, handleConfig]) => {
             if (handleConfig) {
-                const { elements, cleanup } = createHandleConfigUI(side as handleSide, handleConfig, nodeId);
-                elements.forEach(el => handleUIContainer.appendChild(el));
+                const { pointElements, cleanup } = createHandleConfigUI(side as handleSide, handleConfig, nodeId);
+                pointElements.forEach(el => handleUIContainer.appendChild(el));
                 cleanupCallbacks.push(cleanup);
             }
         });
@@ -597,7 +571,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 handleUIContainer.remove();
             }
         });
-    }, [options, addButtonClassHorizontal, addButtonClassVertical, createAddHandleButton, createHandleConfigUI]);
+    }, [options, menuContainerHorizontal, menuContainerVertical, createAddHandleButton, createDeleteHandleButton, createHandleConfigUI]);
 
     const clearOverlay = useCallback((nodeId: string) => {
         const existing = activeOverlays.current.get(nodeId);
@@ -610,6 +584,10 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
     return {
         updateNodeConfigOverlay,
         clearOverlay
+    }*/
+
+    return {
+
     }
 
 }

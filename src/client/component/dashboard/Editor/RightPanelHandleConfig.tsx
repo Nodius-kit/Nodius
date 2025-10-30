@@ -22,6 +22,7 @@ import { InstructionBuilder } from "../../../../utils/sync/InstructionBuilder";
 import { useDynamicClass } from "../../../hooks/useDynamicClass";
 import { Settings, Trash2, Circle } from "lucide-react";
 import {Node} from "../../../../utils/graph/graphType";
+import {getHandleInfo} from "../../../schema/motor/webGpuMotor/handleUtils";
 
 export const RightPanelHandleConfig = memo(() => {
     const Project = useContext(ProjectContext);
@@ -48,10 +49,10 @@ export const RightPanelHandleConfig = memo(() => {
         if (prev && editedHandle &&
             (prev.nodeId !== editedHandle.nodeId ||
              prev.side !== editedHandle.side ||
-             prev.pointIndex !== editedHandle.pointIndex)) {
+             prev.pointId !== editedHandle.pointId)) {
             // Trigger fade effect
             setOpacity(0.3);
-            setTimeout(() => setOpacity(1), 50);
+            setTimeout(() => setOpacity(1), 200);
         }
 
         prevHandleRef.current = editedHandle;
@@ -64,7 +65,7 @@ export const RightPanelHandleConfig = memo(() => {
 
     const point = useMemo(() => {
         if (!handleConfig || editedHandle === undefined) return undefined;
-        return handleConfig.point[editedHandle.pointIndex];
+        return handleConfig.point.find((p) => p.id === editedHandle.pointId);
     }, [handleConfig, editedHandle]);
 
     // Styles
@@ -209,12 +210,16 @@ export const RightPanelHandleConfig = memo(() => {
     // Handlers
     const handleTypeChange = async (type: "in" | "out") => {
         if (!editedHandle || !Project.state.updateGraph) return;
+        if(!node) return;
+
+        const handleInfo = getHandleInfo(node, editedHandle.pointId);
+        if(!handleInfo) return;
 
         const instruction = new InstructionBuilder();
         instruction.key("handles")
-            .key(editedHandle.side)
+            .key(handleInfo.side)
             .key("point")
-            .index(editedHandle.pointIndex)
+            .index(handleInfo.index)
             .key("type")
             .set(type);
 
@@ -229,6 +234,11 @@ export const RightPanelHandleConfig = memo(() => {
     const handlePositionModeChange = async (mode: "separate" | "fix") => {
         if (!editedHandle || !Project.state.updateGraph || !node || !handleConfig) return;
 
+        if(!node) return;
+
+        const handleInfo = getHandleInfo(node, editedHandle.pointId);
+        if(!handleInfo) return;
+
         const instructions = [];
 
         // Update position mode
@@ -239,14 +249,15 @@ export const RightPanelHandleConfig = memo(() => {
             i: modeInstruction.instruction
         });
 
+
         // Handle offset based on mode
         if (mode === "separate") {
             // Remove offset when switching to auto
             const offsetInstruction = new InstructionBuilder();
             offsetInstruction.key("handles")
-                .key(editedHandle.side)
+                .key(handleInfo.side)
                 .key("point")
-                .index(editedHandle.pointIndex)
+                .index(handleInfo.index)
                 .key("offset")
                 .remove();
             instructions.push({
@@ -255,7 +266,7 @@ export const RightPanelHandleConfig = memo(() => {
             });
         } else {
             // Set default offset when switching to fixed
-            const percentage = (editedHandle.pointIndex + 0.5) / handleConfig.point.length;
+            const percentage = (handleInfo.index + 0.5) / handleConfig.point.length;
             let defaultOffset: number;
 
             switch (editedHandle.side) {
@@ -273,9 +284,9 @@ export const RightPanelHandleConfig = memo(() => {
 
             const offsetInstruction = new InstructionBuilder();
             offsetInstruction.key("handles")
-                .key(editedHandle.side)
+                .key(handleInfo.side)
                 .key("point")
-                .index(editedHandle.pointIndex)
+                .index(handleInfo.index)
                 .key("offset")
                 .set(defaultOffset);
             instructions.push({
@@ -291,11 +302,16 @@ export const RightPanelHandleConfig = memo(() => {
     const handleDeletePoint = async () => {
         if (!editedHandle || !Project.state.updateGraph) return;
 
+        if(!node) return;
+
+        const handleInfo = getHandleInfo(node, editedHandle.pointId);
+        if(!handleInfo) return;
+
         const instruction = new InstructionBuilder();
         instruction.key("handles")
             .key(editedHandle.side)
             .key("point")
-            .arrayRemoveIndex(editedHandle.pointIndex);
+            .arrayRemoveIndex(handleInfo.index);
 
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
@@ -361,7 +377,7 @@ export const RightPanelHandleConfig = memo(() => {
             <div className={sectionGroupClass}>
                 <div className={groupTitleClass}>
                     <Circle size={14} />
-                    Point #{editedHandle.pointIndex + 1} Settings
+                    Point #{editedHandle.pointId + 1} Settings
                 </div>
 
                 {/* Type Selection */}

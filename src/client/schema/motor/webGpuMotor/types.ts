@@ -19,6 +19,8 @@ export interface HandleInfo {
 	side: handleSide;
 	offset: number;
 	point: { id: string; offset?: number; display?: string; type?: "in" | "out" };
+	position: "fix" | "separate",
+	index: number;
 }
 
 /**

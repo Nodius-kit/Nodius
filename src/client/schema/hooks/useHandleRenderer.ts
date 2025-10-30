@@ -12,11 +12,14 @@
 
 import { handleSide, Node } from "../../../utils/graph/graphType";
 import { WebGpuMotor } from "../motor/webGpuMotor/index";
-import { useCallback, useRef } from "react";
+import {useCallback, useEffect, useRef} from "react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import { getHandlePosition, getHandleInfo } from "../motor/webGpuMotor/handleUtils";
-import {EditedNodeHandle} from "../../hooks/contexts/ProjectContext";
-import {HandleInfo} from "../motor/webGpuMotor/types";
+import {ActionContext, EditedNodeHandle, EditedNodeTypeConfig} from "../../hooks/contexts/ProjectContext";
+import {GraphInstructions} from "../../../utils/sync/wsObject";
+import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
+import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
+
 
 export const rectangleWidth = 13;
 export const rectangleHeight = 5;
@@ -27,7 +30,9 @@ export interface useHandleRendererOptions {
     gpuMotor: WebGpuMotor;
     getNode: (nodeKey: string) => Node<any> | undefined;
     setSelectedHandle: (handle:EditedNodeHandle) => void;
-
+    editedNodeConfig: EditedNodeTypeConfig | undefined;
+    onClickOnHandle: (editedHandle:EditedNodeHandle) => void,
+    updateGraph: (instructions:Array<GraphInstructions>) => Promise<ActionContext>;
 }
 
 interface HandleOverlay {
@@ -35,8 +40,14 @@ interface HandleOverlay {
     side: Partial<Record<handleSide, Array<{
         id: string;
         element:HTMLElement;
+        configElement?: HTMLElement;
     }>>>,
     cleanup: () => void;
+}
+
+interface sideConfigPane {
+    side:handleSide,
+    container:HTMLElement,
 }
 
 /**
@@ -45,6 +56,237 @@ interface HandleOverlay {
 export function useHandleRenderer(options: useHandleRendererOptions) {
 
     const activeOverlays = useRef<Map<string, HandleOverlay>>(new Map());
+    const activeSideConfigPanel = useRef<sideConfigPane>(undefined);
+
+    // Menu container for horizontal sides (T, D)
+    const menuContainerHorizontal = useDynamicClass(`
+        & {
+            position: absolute;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 4px;
+             background: var(--nodius-background-paper);
+            border: 1px solid var(--nodius-text-divider);
+            border-radius: 6px;
+            padding: 2px 3px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            pointer-events: all;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10000;
+        }
+    `);
+
+    // Menu container for vertical sides (L, R)
+    const menuContainerVertical = useDynamicClass(`
+        & {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            background: var(--nodius-background-paper);
+            border: 1px solid var(--nodius-text-divider);
+            border-radius: 6px;
+            padding: 3px 2px;
+            box-shadow: var(--nodius-shadow-2);
+            pointer-events: all;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10000;
+        }
+    `);
+
+    const ButtonClass = useDynamicClass(`
+        & {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: all;
+            color: var(--nodius-text-primary);
+            font-size: 14px;
+            transition: var(--nodius-transition-default);
+            user-select: none;
+            border-radius: 4px;
+            font-weight: 200;
+        }
+        &:hover {
+            background-color: var(--nodius-text-divider);
+            transform: scale(1.1);
+        }
+        &:active {
+            transform: scale(0.95);
+        }
+    `);
+
+
+    const generateUniqueId = (node: Node<any>): string => {
+        // Gather all IDs from every handle side
+        const allIds = Object.values(node.handles || {})
+            .flatMap(handle => handle.point.map(p => parseInt(p.id)))
+            .filter(id => !isNaN(id));
+
+        const maxId = allIds.length > 0 ? Math.max(...allIds) : -1;
+        return (maxId + 1).toString();
+    };
+
+    const lastFrameId = useRef<number>(undefined);
+    const mouseMove = useCallback((evt:MouseEvent) => {
+
+        if(lastFrameId.current) cancelAnimationFrame(lastFrameId.current);
+
+        lastFrameId.current = requestAnimationFrame(() => {
+
+            if (!options.editedNodeConfig?.node) return;
+
+            const posX = evt.clientX;
+            const posY = evt.clientY;
+
+            const nodeOverlay = document.querySelector('[data-node-overlay-key="' + options.editedNodeConfig.node._key + '"]');
+            if (!nodeOverlay) return;
+
+            const rect = nodeOverlay.getBoundingClientRect();
+
+            // Check if cursor is outside
+            const isOutside =
+                posX < rect.left ||
+                posX > rect.right ||
+                posY < rect.top ||
+                posY > rect.bottom;
+
+            if (isOutside) {
+                let direction: handleSide | null = null;
+
+                const dxLeft = rect.left - posX;
+                const dxRight = posX - rect.right;
+                const dyTop = rect.top - posY;
+                const dyBottom = posY - rect.bottom;
+
+                // pick the direction of greatest overflow
+                const maxDist = Math.max(dxLeft, dxRight, dyTop, dyBottom);
+
+                if (maxDist === dxLeft) direction = 'L';
+                else if (maxDist === dxRight) direction = 'R';
+                else if (maxDist === dyTop) direction = 'T';
+                else if (maxDist === dyBottom) direction = 'D';
+
+                if (activeSideConfigPanel.current && activeSideConfigPanel.current.side !== direction) {
+                    activeSideConfigPanel.current.container.remove();
+                    activeSideConfigPanel.current = undefined;
+                }
+                if (!activeSideConfigPanel.current) {
+                    const node = options.getNode(options.editedNodeConfig.node._key);
+                    if(!node) return;
+
+                    const container = document.createElement("div");
+
+                    container.className = (direction === 'T' || direction === 'D') ? menuContainerHorizontal : menuContainerVertical;
+
+                    const space = -50;
+
+                    if(direction === 'T') {
+                        container.style.top = space+"px"
+                    } else if(direction === 'D') {
+                        container.style.bottom = space+"px"
+                    } else if(direction === 'L') {
+                        container.style.left = space+"px"
+                    } else if(direction === 'R') {
+                        container.style.right = space+"px"
+                    }
+
+                    const addButton = document.createElement("div");
+                    addButton.textContent = "+";
+                    addButton.className = ButtonClass;
+
+                    addButton.addEventListener("click", async (e:MouseEvent) => {
+                        e.stopPropagation();
+
+                        const _node = options.getNode(node._key)!;
+                        if(!_node) return;
+
+                        const instruction = new InstructionBuilder();
+
+                        if (_node.handles[direction!]) {
+                            instruction.key("handles").key(direction!).key("point").arrayAdd({
+                                id: generateUniqueId(_node),
+                                type: "in",
+                                accept: "any",
+                            });
+                        } else {
+                            const handle = {
+                                position: "separate" as const,
+                                point: [{
+                                    id: generateUniqueId(_node),
+                                    type: "in" as const,
+                                    accept: "any",
+                                }]
+                            };
+                            instruction.key("handles").key(direction!).set(handle);
+                        }
+
+                        await options.updateGraph([{
+                            nodeId: node._key,
+                            i: instruction.instruction,
+                        }]);
+                    })
+
+                    container.appendChild(addButton);
+
+
+                    if(node.handles[direction!] && node.handles[direction!]!.point.length > 0 ) {
+                        const removeButton = document.createElement("div");
+                        removeButton.textContent = "x";
+                        removeButton.className = ButtonClass;
+
+                        removeButton.addEventListener("click",async (e:MouseEvent) => {
+                            removeButton.remove();
+                            e.stopPropagation();
+
+                            const instruction = new InstructionBuilder();
+                            instruction.key("handles").key(direction!).remove();
+
+                            await options.updateGraph([{
+                                nodeId: node._key,
+                                i: instruction.instruction,
+                            }]);
+                            options.gpuMotor.requestRedraw();
+
+                        })
+                        container.appendChild(removeButton);
+                    }
+
+                    nodeOverlay.appendChild(container);
+
+
+                    activeSideConfigPanel.current = {
+                        side: direction!,
+                        container: container,
+                    }
+                }
+            } else if (activeSideConfigPanel.current) {
+                activeSideConfigPanel.current.container.remove();
+                activeSideConfigPanel.current = undefined;
+            }
+        });
+    }, [menuContainerHorizontal, menuContainerVertical, options.getNode, options.setSelectedHandle, ButtonClass]);
+
+
+    useEffect(() => {
+        if(options.editedNodeConfig) {
+            window.addEventListener("mousemove", mouseMove);
+        } else if(activeSideConfigPanel.current) {
+            activeSideConfigPanel.current.container.remove();
+            activeSideConfigPanel.current = undefined;
+        }
+        return () => {
+            window.removeEventListener("mousemove", mouseMove);
+        }
+    }, [options.editedNodeConfig, mouseMove]);
+
 
     const classHandleContainer = useDynamicClass(`
         & {
@@ -74,6 +316,168 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             pointer-events: all;
         }
     `);
+
+    const connectionPointClass = useDynamicClass(`
+        & {
+            position: absolute;
+            pointer-events: all;
+            background: red;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            z-index:9999;
+            
+        }
+    `);
+
+
+    const createMoveableHandle = useCallback((nodeId:string, pointId:string) => {
+
+        const container = document.createElement("div");
+        container.className = connectionPointClass;
+
+        let isDragging = false;
+        let dragStarted = false;
+        const DRAG_THRESHOLD = 3;
+
+        container.addEventListener("click", (evt:MouseEvent)  => {
+            evt.stopPropagation();
+            const node = options.getNode(nodeId);
+            if(!node) return;
+            const handleInfo = getHandleInfo(node, pointId);
+            if(!handleInfo) return;
+            options.setSelectedHandle({
+                nodeId: node._key,
+                side:  handleInfo.side,
+                pointId: handleInfo.point.id
+            });
+        });
+
+        const handleMouseDown = (e: MouseEvent) => {
+            e.stopPropagation();
+
+            const node = options.getNode(nodeId);
+            if(!node) return;
+            const handleInfo = getHandleInfo(node, pointId);
+            if(!handleInfo) return;
+
+            if (handleInfo.position !== 'fix') return;
+            if (e.button !== 0) return;
+
+            e.stopPropagation();
+
+            disableTextSelection();
+
+            dragStarted = false;
+            isDragging = false;
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startOffset = handleInfo.offset || 0;
+
+            const handleMouseMove = (e: MouseEvent) => {
+
+                const node = options.getNode(nodeId)!;
+                if(!node) return;
+
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                if (!dragStarted && distance > DRAG_THRESHOLD) {
+                    dragStarted = true;
+                    isDragging = true;
+                    e.preventDefault();
+                }
+
+                if (!isDragging) return;
+
+                const scale = options.gpuMotor.getTransform().scale;
+                let newOffset = startOffset;
+
+                const changeSideThreeshold = 50;
+
+
+                if(handleInfo.side === 'T') {
+                    newOffset = startOffset + (deltaX / scale);
+                    newOffset = Math.max(0, Math.min(node.size.width, newOffset));
+
+
+                    if(newOffset === node.size.width && deltaY > changeSideThreeshold) {
+                        // put to side R
+                        console.log("put to r");
+                    } else if(newOffset === 0 && deltaY > changeSideThreeshold) {
+                        // put to side L
+                        console.log("put to l");
+                    }
+
+                } else if(handleInfo.side === 'D') {
+                    newOffset = startOffset + (deltaX / scale);
+                    newOffset = Math.max(0, Math.min(node.size.width, newOffset));
+
+                    if(newOffset === node.size.width && deltaY < changeSideThreeshold) {
+                        // put to side R
+                    } else if(newOffset === 0 && deltaY < changeSideThreeshold) {
+                        // put to side L
+                    }
+
+                } else if(handleInfo.side === 'L') {
+                    newOffset = startOffset + (deltaY / scale);
+                    newOffset = Math.max(0, Math.min(node.size.height, newOffset));
+
+                    if(newOffset === node.size.height && deltaX > changeSideThreeshold) {
+                        // put to side B
+                    } else if(newOffset === 0 && deltaX > changeSideThreeshold) {
+                        // put to side T
+                    }
+
+                } else if(handleInfo.side === 'R') {
+                    newOffset = startOffset + (deltaY / scale);
+                    newOffset = Math.max(0, Math.min(node.size.height, newOffset));
+
+                    if(newOffset === node.size.height && deltaX < changeSideThreeshold) {
+                        // put to side B
+                    } else if(newOffset === 0 && deltaX < changeSideThreeshold) {
+                        // put to side T
+                    }
+                }
+
+
+
+                handleInfo.offset = newOffset;
+                (window as any).triggerNodeUpdate(nodeId);
+            };
+
+            const handleMouseUp = async (e: MouseEvent) => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+
+                const node = options.getNode(nodeId);
+                if(!node) return;
+                const handleInfo = getHandleInfo(node, pointId);
+                if(!handleInfo) return;
+
+                if (isDragging) {
+                    const instruction = new InstructionBuilder();
+                    instruction.key("handles").key(handleInfo.side).key("point").index(handleInfo.index).key("offset").set(handleInfo.offset);
+                    await options.updateGraph([{ nodeId, i: instruction.instruction }]);
+                    options.gpuMotor.requestRedraw();
+                }
+
+                enableTextSelection();
+
+                isDragging = false;
+                dragStarted = false;
+            };
+
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        };
+
+        container.addEventListener('mousedown', handleMouseDown);
+
+        return container;
+    }, [connectionPointClass, options.updateGraph, options.getNode, options.setSelectedHandle])
 
     const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement) => {
 
@@ -107,6 +511,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 overlay.side[side as handleSide]!.forEach((p) => {
                     console.log(p);
                     p.element.remove();
+                    p.configElement?.remove();
                 })
                 delete overlay.side[side as handleSide];
             }
@@ -121,10 +526,11 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
             // Remove deleted handles (not present in current node.handles)
             const currentPointIds = new Set(handleGroup.point.map(p => p.id));
-            overlay.side[side] = overlay.side[side]!.filter(({ id, element }) => {
+            overlay.side[side] = overlay.side[side]!.filter(({ id, element,configElement }) => {
                 if (!currentPointIds.has(id)) {
                     console.log("remove", id);
                     element.remove();
+                    configElement?.remove();
                     return false;
                 }
                 return true;
@@ -141,10 +547,12 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     handleEl.dataset.nodeId = nodeId;
                     handleEl.dataset.side = side;
 
+                    const moveableContainer = options.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
                     overlay.container.appendChild(handleEl);
+                    if(moveableContainer) overlay.container.appendChild(moveableContainer);
 
-                    return { id: point.id, element: handleEl };
+                    return { id: point.id, element: handleEl, configElement:moveableContainer  };
                 });
             overlay.side[side]!.push(...newHandles);
 
@@ -162,17 +570,33 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     point.element.style.top = `${pos.y - ( circleWidth / 2) + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
                     point.element.style.width = circleWidth+"px";
                     point.element.style.height = circleWidth+"px";
+
+                    if(point.configElement) {
+                        point.configElement.style.left = point.element.style.left;
+                        point.configElement.style.top = point.element.style.top;
+                        point.configElement.style.width = point.element.style.width;
+                        point.configElement.style.height = point.element.style.height;
+                        point.configElement.style.scale = "2";
+                    }
                 } else {
                     point.element.className = classRectHandleClass;
                     point.element.style.left = `${pos.x - ((handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0))}px`;
                     point.element.style.top = `${pos.y - (!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
                     point.element.style.width = `${(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
                     point.element.style.height = `${!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
+
+                    if(point.configElement) {
+                        point.configElement.style.left = point.element.style.left;
+                        point.configElement.style.top = point.element.style.top;
+                        point.configElement.style.width = point.element.style.width;
+                        point.configElement.style.height = point.element.style.height;
+                        point.configElement.style.scale = "2";
+                    }
                 }
             })
         }
 
-    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, options.getNode, options.setSelectedHandle, options.gpuMotor ]);
+    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, options.getNode, options.setSelectedHandle, options.gpuMotor, options.editedNodeConfig, createMoveableHandle]);
 
     const cleanupHandleOverlay = useCallback((nodeId:string) => {
         const handle = activeOverlays.current.get(nodeId);

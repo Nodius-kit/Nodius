@@ -33,7 +33,6 @@ import {useNodeDragDrop} from "./hooks/useNodeDragDrop";
 import {useNodeRenderer} from "./hooks/useNodeRenderer";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
-import {useNodeConfigOverlay} from "./hooks/useNodeConfigOverlay";
 import {useHandleRenderer} from "./hooks/useHandleRenderer";
 
 interface SchemaDisplayProps {
@@ -210,7 +209,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     }, []);
 
-    const { updateNodeConfigOverlay, clearOverlay } = useNodeConfigOverlay({
+    /*const { updateNodeConfigOverlay, clearOverlay } = useNodeConfigOverlay({
         getNode: getNode,
         enabled: (nodeId) => Project.state.editedNodeConfig?.node._key === nodeId,
         gpuMotor: gpuMotor.current!,
@@ -222,7 +221,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             });
         },
         editedNodeConfig: Project.state.editedNodeConfig
-    });
+    });*/
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
         getNode: getNode,
@@ -230,7 +229,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         setSelectedHandle: (handle:EditedNodeHandle) => Project.dispatch({
             field: "editedNodeHandle",
             value: handle
-        })
+        }),
+        editedNodeConfig: Project.state.editedNodeConfig,
+        onClickOnHandle: (editedHandle:EditedNodeHandle) => Project.dispatch({field:"editedNodeHandle", value: editedHandle}),
+        updateGraph: Project.state.updateGraph!
     });
 
 
@@ -462,10 +464,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         // Render handles for this node
         updateHandleOverlay(node, overlay);
 
-        // Update config overlay if this node is being edited
-        if (Project.state.editedNodeConfig?.node._key === node._key) {
-            await updateNodeConfigOverlay(overlay, node._key);
-        }
+
     }, [
         Project.state.nodeTypeConfig,
         Project.state.initiateNewHtmlRenderer,
@@ -480,7 +479,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         nodeRenderer,
         onNodeEnter,
         triggerEventOnNode,
-        updateNodeConfigOverlay,
         updateHandleOverlay
     ]);
 
@@ -497,8 +495,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         const schemaNode = inSchemaNode.current.get(nodeId);
         if (schemaNode) {
-            // Clear config overlay for this node
-            clearOverlay(nodeId);
 
             // Clear handle renderer for this node
             cleanupHandleOverlay(nodeId);
@@ -511,7 +507,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAnimation(nodeId);
             inSchemaNode.current.delete(nodeId);
         }
-    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, clearOverlay, cleanupHandleOverlay]);
+    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, cleanupHandleOverlay]);
 
     // Reset handler
     const onReset = useCallback(() => {
@@ -683,24 +679,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         });
     }, [Project.state.selectedNode, selectedNodeClass, selectedNodeElementClass]);
-
-    // Node config overlay - show handle configuration UI when editing node config
-    useEffect(() => {
-        if (Project.state.editedNodeConfig) {
-            const nodeId = Project.state.editedNodeConfig.node._key;
-            const schemaNode = inSchemaNode.current.get(nodeId);
-
-            // Only show overlay if the node is currently visible in the schema
-            if (schemaNode) {
-                updateNodeConfigOverlay(schemaNode.overElement, nodeId);
-            }
-        } else {
-            // Clear all overlays when not editing
-            inSchemaNode.current.forEach((schemaNode, nodeKey) => {
-                clearOverlay(nodeKey);
-            });
-        }
-    }, [Project.state.editedNodeConfig, updateNodeConfigOverlay, clearOverlay]);
 
     const onDoubleClick = () => {
         onExitCanvas();

@@ -408,7 +408,9 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	public setScene(scene: MotorScene): void {
 		this.scene = scene;
-		this.dirty = true;
+		requestAnimationFrame(() => {
+			this.requestRedraw();
+		});
 	}
 
 	public updateNode(id: string, updates: Partial<Pick<Node<any>, 'posX' | 'posY' | 'size'>>): void {
