@@ -23,6 +23,7 @@ import { useDynamicClass } from "../../../hooks/useDynamicClass";
 import { Settings, Trash2, Circle } from "lucide-react";
 import {Node} from "../../../../utils/graph/graphType";
 import {getHandleInfo} from "../../../schema/motor/webGpuMotor/handleUtils";
+import { Input } from "../../form/Input";
 
 export const RightPanelHandleConfig = memo(() => {
     const Project = useContext(ProjectContext);
@@ -427,6 +428,19 @@ export const RightPanelHandleConfig = memo(() => {
                     </div>
                     <div className={infoClass}>
                         Input handles receive data, output handles send data
+                    </div>
+                </div>
+
+                {/* Display Content */}
+                <div className={sectionClass}>
+                    <Input
+                        label="Display Content"
+                        value={point.display || ""}
+                        onChange={(value) => handleSetDisplay(value)}
+                        placeholder="Enter display text..."
+                    />
+                    <div className={infoClass}>
+                        Optional text label displayed near the connection point
                     </div>
                 </div>
 
