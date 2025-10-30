@@ -41,6 +41,7 @@ interface HandleOverlay {
         id: string;
         element:HTMLElement;
         configElement?: HTMLElement;
+        textElement?: HTMLElement;
     }>>>,
     cleanup: () => void;
 }
@@ -192,7 +193,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     container.className = (direction === 'T' || direction === 'D') ? menuContainerHorizontal : menuContainerVertical;
 
-                    const space = -50;
+                    const space = -80;
 
                     if(direction === 'T') {
                         container.style.top = space+"px"
@@ -327,12 +328,25 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
         & {
             position: absolute;
             pointer-events: all;
-            background: red;
+            background: transparent;
             width: 16px;
             height: 16px;
             cursor: pointer;
             z-index:9999;
-            
+
+        }
+    `);
+
+    const handleTextClass = useDynamicClass(`
+        & {
+            position: absolute;
+            pointer-events: none;
+            font-size: 10px;
+            color: var(--nodius-text-secondary);
+            white-space: nowrap;
+            z-index: 9998;
+            user-select: none;
+            text-align: center;
         }
     `);
 
@@ -597,6 +611,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     console.log(p);
                     p.element.remove();
                     p.configElement?.remove();
+                    p.textElement?.remove();
                 })
                 delete overlay.side[side as handleSide];
             }
@@ -611,11 +626,12 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
             // Remove deleted handles (not present in current node.handles)
             const currentPointIds = new Set(handleGroup.point.map(p => p.id));
-            overlay.side[side] = overlay.side[side]!.filter(({ id, element,configElement }) => {
+            overlay.side[side] = overlay.side[side]!.filter(({ id, element, configElement, textElement }) => {
                 if (!currentPointIds.has(id)) {
                     console.log("remove", id);
                     element.remove();
                     configElement?.remove();
+                    textElement?.remove();
                     return false;
                 }
                 return true;
@@ -634,10 +650,16 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     const moveableContainer = optionsRef.current.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
+                    // Create text element for accept string
+                    const textEl = document.createElement("div");
+                    textEl.className = handleTextClass;
+                    textEl.textContent = point.accept || "";
+
                     overlay.container.appendChild(handleEl);
                     if(moveableContainer) overlay.container.appendChild(moveableContainer);
+                    overlay.container.appendChild(textEl);
 
-                    return { id: point.id, element: handleEl, configElement:moveableContainer  };
+                    return { id: point.id, element: handleEl, configElement: moveableContainer, textElement: textEl };
                 });
             overlay.side[side]!.push(...newHandles);
 
@@ -647,7 +669,10 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 const pos = getHandlePosition(node, point.id)!;
                 if(!handleInfo || !pos) return;
 
-
+                // Update text content if it changed
+                if(point.textElement) {
+                    point.textElement.textContent = handleInfo.point.display ? (handleInfo.point.display+(handleInfo.point.accept ? " ("+handleInfo.point.accept+")":"")) : (handleInfo.point.accept || "");
+                }
 
                 if (handleInfo.point.type === "out") {
                     point.element.className = classCircleHandleClass;
@@ -678,10 +703,38 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         point.configElement.style.scale = "2";
                     }
                 }
+
+                // Position text element based on handle side
+                if(point.textElement) {
+                    const textOffset = 15; // Distance from handle center
+
+                    // Position text centered on handle point but offset based on side
+                    if (handleInfo.side === "T") {
+                        // Top side: text above the handle
+                        point.textElement.style.left = `${pos.x}px`;
+                        point.textElement.style.top = `${pos.y - textOffset}px`;
+                        point.textElement.style.transform = "translate(-50%, -100%)";
+                    } else if (handleInfo.side === "D") {
+                        // Bottom side: text below the handle
+                        point.textElement.style.left = `${pos.x}px`;
+                        point.textElement.style.top = `${pos.y + textOffset}px`;
+                        point.textElement.style.transform = "translate(-50%, 0%)";
+                    } else if (handleInfo.side === "L") {
+                        // Left side: text to the left of the handle
+                        point.textElement.style.left = `${pos.x - textOffset}px`;
+                        point.textElement.style.top = `${pos.y}px`;
+                        point.textElement.style.transform = "translate(-100%, -50%)";
+                    } else if (handleInfo.side === "R") {
+                        // Right side: text to the right of the handle
+                        point.textElement.style.left = `${pos.x + textOffset}px`;
+                        point.textElement.style.top = `${pos.y}px`;
+                        point.textElement.style.transform = "translate(0%, -50%)";
+                    }
+                }
             })
         }
 
-    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, createMoveableHandle]);
+    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, handleTextClass, createMoveableHandle]);
 
     const cleanupHandleOverlay = useCallback((nodeId:string) => {
         const handle = activeOverlays.current.get(nodeId);

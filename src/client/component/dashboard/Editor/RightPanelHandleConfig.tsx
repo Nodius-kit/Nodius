@@ -339,6 +339,34 @@ export const RightPanelHandleConfig = memo(() => {
         Project.dispatch({ field: "editedNodeHandle", value: undefined });
     };
 
+    const handleSetDisplay = async (value:string) => {
+        if (!editedHandle || !Project.state.updateGraph) return;
+        if(!node) return;
+
+        const handleInfo = getHandleInfo(node, editedHandle.pointId);
+        if(!handleInfo) return;
+
+        const instruction = new InstructionBuilder();
+        instruction.key("handles")
+            .key(handleInfo.side)
+            .key("point")
+            .index(handleInfo.index)
+            .key("display")
+
+        if(value.trim() === "") {
+            instruction.remove();
+        } else {
+            instruction.set(value);
+        }
+
+        await Project.state.updateGraph([{
+            nodeId: editedHandle.nodeId,
+            i: instruction.instruction
+        }]);
+        retrieveNode();
+
+    }
+
     // If no handle is selected, show empty state
     if (!editedHandle || !node || !handleConfig || !point) {
         return (
