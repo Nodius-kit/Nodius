@@ -378,7 +378,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
             let startX = e.clientX;
             let startY = e.clientY;
-            const startOffset = handleInfo.offset || 0;
+            let startOffset = handleInfo.offset || 0;
 
             let lastFrameId:number|undefined;
 
@@ -412,7 +412,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     const scale = optionsRef.current.gpuMotor.getTransform().scale;
                     let newOffset = startOffset;
 
-                    const changeSideThreeshold = 50;
+                    const changeSideThreeshold = 5;
 
                     const currentHandle = node.handles[handleInfo.side]!.point[handleInfo.index];
 
@@ -443,6 +443,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                             // put to side R
                         } else if (newOffset === 0 && (e.clientY < rect.bottom - changeSideThreeshold)) {
                             changeSide = "L";
+                            newChangeOffset = node.size.height;
                             // put to side L
                         }
 
@@ -481,7 +482,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                         instructionRemove.key("handles").key(handleInfo.side).key("point").arrayRemoveIndex(handleInfo.index);
                         const newHandle = deepCopy(currentHandle);
-                        newHandle.offset=newChangeOffset;
+                        newHandle.offset = newChangeOffset;
 
                         if(node.handles[changeSide]) {
                             if(node.handles[changeSide]!.position === "separate") {
@@ -504,6 +505,23 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                                 i: instructionAdd.instruction
                             }
                         ]);
+
+                        // === CRITICAL FIX: Re-sync drag start after side change ===
+                        startX = e.clientX;
+                        startY = e.clientY;
+
+                        // Re-query handle info after mutation
+                        const updatedNode = optionsRef.current.getNode(nodeId);
+                        if (!updatedNode) return;
+
+                        const newHandleInfo = getHandleInfo(updatedNode, pointId);
+                        if (!newHandleInfo) return;
+
+                        // Update startOffset to match new side
+                        startOffset = newHandleInfo.offset || 0;
+
+                        // Prevent further offset update this frame
+                        return;
                     }
 
 
