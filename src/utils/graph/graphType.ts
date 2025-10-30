@@ -66,6 +66,7 @@ export interface Node<T> {
     },
     posX: number,
     posY: number,
+    process?:string,
     handles: Partial<Record<handleSide, {
         position: "separate" | "fix",
         point: Array<{

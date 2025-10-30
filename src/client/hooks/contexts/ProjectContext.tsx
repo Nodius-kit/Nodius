@@ -38,6 +38,7 @@ import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBu
 import {GraphInstructions, nodeConfigInstructions, WSMessage} from "../../../utils/sync/wsObject";
 import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 import {OpenHtmlEditorFct} from "../useSocketSync";
+import {TextChangeInfo} from "../../../utils/objectUtils";
 
 export interface ProjectContextProps {
     state: ProjectContextType;
@@ -136,6 +137,13 @@ export interface ProjectContextType {
     caughtUpMessage?: WSMessage<any>[] // used to caught up missing message while connecting
 
     disabledNodeInteraction: DisabledNodeInteractionType,
+
+    editedCode?: {
+        path:string[],
+        nodeId:string,
+        baseText:string,
+        applyChange?: (changes:TextChangeInfo|TextChangeInfo[]) => void,
+    }
 
     selectedNode: string[],
 

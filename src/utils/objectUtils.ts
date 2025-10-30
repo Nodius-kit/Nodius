@@ -333,3 +333,105 @@ export const mapToDict = (map: any):any => Object.fromEntries(map);
  *          The resulting `Map` will have the same keys and values as the original plain object.
  */
 export const dictToMap = (dic: any):any => new Map(Object.entries(dic));
+
+
+
+export interface TextChangeInfo {
+    insert:string,
+    from:number,
+    to?:number
+}
+export function getTextChanges(base: string, newText: string): TextChangeInfo[] {
+    const n = base.length;
+    const m = newText.length;
+    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+
+    for (let i = 1; i <= n; i++) {
+        for (let j = 1; j <= m; j++) {
+            if (base[i - 1] === newText[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    const ops: { type: 'match' | 'insert' | 'delete'; char: string }[] = [];
+    let i = n;
+    let j = m;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && base[i - 1] === newText[j - 1]) {
+            ops.push({ type: 'match', char: base[i - 1] });
+            i--;
+            j--;
+        } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            ops.push({ type: 'insert', char: newText[j - 1] });
+            j--;
+        } else if (i > 0) {
+            ops.push({ type: 'delete', char: base[i - 1] });
+            i--;
+        }
+    }
+    ops.reverse();
+
+    const changes: TextChangeInfo[] = [];
+    let pos = 0;
+    let delStart: number | null = null;
+    let insertBuf = '';
+
+    const flush = () => {
+        if (insertBuf || delStart !== null) {
+            const from = delStart !== null ? delStart : pos;
+            const to = delStart !== null ? pos : undefined;
+            changes.push({ insert: insertBuf, from, to });
+        }
+        delStart = null;
+        insertBuf = '';
+    };
+
+    for (const op of ops) {
+        if (op.type === 'match') {
+            flush();
+            pos++;
+        } else if (op.type === 'insert') {
+            insertBuf += op.char;
+        } else if (op.type === 'delete') {
+            if (insertBuf) {
+                // Flush pending insert before starting delete
+                changes.push({ insert: insertBuf, from: pos, to: undefined });
+                insertBuf = '';
+            }
+            if (delStart === null) {
+                delStart = pos;
+            }
+            pos++;
+        }
+    }
+    flush();
+
+    return changes;
+}
+
+export function applyTextChanges(base: string, changes: TextChangeInfo[]): string {
+    // Sort changes by 'from' to ensure correct order
+    const sortedChanges = [...changes].sort((a, b) => a.from - b.from);
+
+    let result = '';
+    let pos = 0;
+
+    for (const change of sortedChanges) {
+        // Append unchanged part
+        result += base.slice(pos, change.from);
+
+        // Append the insertion
+        result += change.insert;
+
+        // Update position: if 'to' is defined, skip to 'to'; else, stay at 'from'
+        pos = change.to !== undefined ? change.to : change.from;
+    }
+
+    // Append the remaining part after the last change
+    result += base.slice(pos);
+
+    return result;
+}

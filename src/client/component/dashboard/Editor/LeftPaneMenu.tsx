@@ -20,7 +20,7 @@
 
 import {JSX, memo, useContext, useEffect, useMemo} from "react";
 import {editingPanel} from "../SchemaEditor";
-import {BetweenHorizontalStart, Binary, Cable, CopyPlus, Frame, List} from "lucide-react";
+import {BetweenHorizontalStart, Binary, Cable, Code, CopyPlus, Frame, List} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
@@ -93,10 +93,23 @@ export const LeftPaneMenu = memo((
     `);
 
 
+    useEffect(() => {
+        console.log(Project.state.selectedNode);
+    }, [Project.state.selectedNode]);
+
     const iconActionList:iconActionListType[] = useMemo(() => [
         {
             name: "Build",
             actions: [
+                {
+                    icon: <Code  width={iconSize} height={iconSize} />,
+                    onClick: () => {
+                        console.log("click");
+                    },
+                    selected: true,
+                    disabled: !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === Project.state.editedNodeConfig!.node._key),
+                    hided: !Project.state.editedNodeConfig
+                },
                 {
                     icon: <CopyPlus  width={iconSize} height={iconSize} />,
                     onClick: () => {
@@ -145,7 +158,7 @@ export const LeftPaneMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig]);
+    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig, Project.state.selectedNode]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

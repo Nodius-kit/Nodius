@@ -499,10 +499,13 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         newHandle.offset = newChangeOffset;
 
                         if(node.handles[changeSide]) {
+                            instructionAdd.key("handles").key(changeSide).key("point").arrayAdd(newHandle);
                             if(node.handles[changeSide]!.position === "separate") {
                                 delete newHandle.offset;
+                                if(handleInfo.side === 'T' && (changeSide === "R" || changeSide === "L")) {
+                                    instructionAdd.arrayInsertAtIndex(0, newHandle);
+                                }
                             }
-                            instructionAdd.key("handles").key(changeSide).key("point").arrayAdd(newHandle);
                         } else {
                             instructionAdd.key("handles").key(changeSide).set({
                                 point: [newHandle],
