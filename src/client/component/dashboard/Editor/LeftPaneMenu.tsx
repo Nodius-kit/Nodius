@@ -20,7 +20,7 @@
 
 import {JSX, memo, useContext, useEffect, useMemo} from "react";
 import {editingPanel} from "../SchemaEditor";
-import {BetweenHorizontalStart, Binary, Cable, Code, CopyPlus, Frame, List} from "lucide-react";
+import {BetweenHorizontalStart, Binary, Cable, Code, CopyPlus, Frame, List, Boxes} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
@@ -138,6 +138,19 @@ export const LeftPaneMenu = memo((
                     },
                     selected: editingPanel === "hierarchy",
                     disabled: Project.state.editedHtml == undefined
+                }
+            ]
+        },
+        {
+            name: "Nodes",
+            actions: [
+                {
+                    icon: <Boxes width={iconSize} height={iconSize}/>,
+                    onClick: () => {
+                        setEditingPanel(editingPanel === "nodeLibrary" ? "" : "nodeLibrary");
+                    },
+                    selected: editingPanel === "nodeLibrary",
+                    disabled: false
                 }
             ]
         },

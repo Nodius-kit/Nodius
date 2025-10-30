@@ -32,16 +32,18 @@ import {RightPanelComponentEditor} from "./Editor/RightPanelComponentEditor";
 import {LeftPanelTypeEditor} from "./Editor/LeftPanelTypeEditor";
 import {LeftPanelEnumEditor} from "./Editor/LeftPanelEnumEditor";
 import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
+import {LeftPanelNodeLibrary} from "./Editor/LeftPanelNodeLibrary";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {WebGpuMotor} from "../../schema/motor/webGpuMotor/index";
 import {RightPanelHandleConfig} from "./Editor/RightPanelHandleConfig";
 import {CodeEditorModal} from "../code/CodeEditorModal";
+import {NodeTypeConfig} from "../../utils/graph/graphType";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,
 }
 
-export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | ""
+export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
 
 export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
     returnToMenu,
@@ -59,15 +61,19 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
 
     const Theme = useContext(ThemeContext);
 
-    // Fetch available components on mount
+    // Fetch available components and node configs on mount
     useEffect(() => {
         retrieveComponentList();
+        retrieveNodeConfigs();
     }, []);
 
     const [componentsList, setComponentsList] = useState<
         Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined
     >(undefined);
     const retrieveComponentListAbortController = useRef<AbortController>(undefined);
+
+    const [nodeConfigsList, setNodeConfigsList] = useState<NodeTypeConfig[] | undefined>(undefined);
+    const retrieveNodeConfigsAbortController = useRef<AbortController>(undefined);
 
     /**
      * Fetches and categorizes available HTML builder components
@@ -106,6 +112,42 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
         }
     }
 
+    /**
+     * Fetches available node configurations from the database
+     * Node configs define custom node types that can be placed in the graph
+     */
+    const retrieveNodeConfigs = async () => {
+        if(retrieveNodeConfigsAbortController.current) {
+            retrieveNodeConfigsAbortController.current.abort();
+        }
+
+        retrieveNodeConfigsAbortController.current = new AbortController();
+        try {
+            const response = await fetch('http://localhost:8426/api/nodeconfig/list', {
+                method: "POST",
+                signal: retrieveNodeConfigsAbortController.current.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                }),
+            });
+
+            if(response.status === 200) {
+                const json = await response.json() as NodeTypeConfig[];
+                setNodeConfigsList(json);
+            } else {
+                setNodeConfigsList(undefined);
+            }
+        } catch(error) {
+            if ((error as Error).name !== 'AbortError') {
+                console.error("Error fetching node configs:", error);
+                setNodeConfigsList(undefined);
+            }
+        }
+    }
+
     // Track previous editing state to auto-open component panel when workflow is opened
     const noEditingPrevious = useRef<boolean>(true);
     useEffect(() => {
@@ -125,7 +167,9 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
         editingPanel === "hierarchy" ? 1 : (
             editingPanel === "type" ? 2 : (
                 editingPanel === "enum" ? 3 : (
-                    editingPanel === "entryData" ? 4 : -1
+                    editingPanel === "entryData" ? 4 : (
+                        editingPanel === "nodeLibrary" ? 5 : -1
+                    )
                 )
             )
         )
@@ -165,6 +209,9 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
                             <LeftPanelEntryTypeSelect />
+                        </div>
+                        <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
+                            <LeftPanelNodeLibrary nodeConfigsList={nodeConfigsList} />
                         </div>
                     </MultiFade>
                 </div>
