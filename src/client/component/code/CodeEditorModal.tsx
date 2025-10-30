@@ -109,6 +109,9 @@ const CodeEditorModal = memo(() => {
       color: var(--nodius-primary-main);
       opacity: 0.8;
     }
+    & > h4 {
+        padding-top:2px;
+    }
   `);
 
     const classButtonGroup = useDynamicClass(`
@@ -271,6 +274,8 @@ const CodeEditorModal = memo(() => {
     }
   `);
 
+
+
     const customSource = (ctx: CompletionContext) => {
         const word = ctx.matchBefore(/\w*/);
         if (!word || (word.from === word.to && !ctx.explicit)) return null;
@@ -327,11 +332,60 @@ const CodeEditorModal = memo(() => {
 
     const avoidNextUpdate = useRef<boolean>(false);
 
+    // Batching refs for debounced sending
+    const pendingChangesRef = useRef<TextChangeInfo[]>([]);
+    const sendTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Debounced batch send function
+    const batchSendChangesRef = useRef<((changes: TextChangeInfo[]) => void) | null>(null);
+
+    batchSendChangesRef.current = (changes: TextChangeInfo[]) => {
+        // Add changes to pending queue
+        pendingChangesRef.current.push(...changes);
+
+        // Clear existing timeout
+        if (sendTimeoutRef.current) {
+            clearTimeout(sendTimeoutRef.current);
+        }
+
+        // Set new timeout to send after 300ms
+        sendTimeoutRef.current = setTimeout(() => {
+            if (pendingChangesRef.current.length > 0) {
+                const changesToSend = [...pendingChangesRef.current];
+                pendingChangesRef.current = [];
+                sendChangesRef.current?.(changesToSend);
+            }
+            sendTimeoutRef.current = null;
+        }, 300);
+    };
+
+    const mergeChanges = (changes: TextChangeInfo[]): TextChangeInfo[] => {
+        if (changes.length <= 1) return changes;
+        const merged: TextChangeInfo[] = [];
+        let current = { ...changes[0] };
+        for (let i = 1; i < changes.length; i++) {
+            const next = { ...changes[i] };
+            if (
+                current.to === current.from &&
+                next.to === next.from &&
+                next.from === current.from + (current.insert?.length ?? 0)
+            ) {
+                current.insert = (current.insert ?? '') + (next.insert ?? '');
+            } else {
+                merged.push(current);
+                current = { ...next };
+            }
+        }
+        merged.push(current);
+        return merged;
+    };
+
     // Use ref for sendChanges to keep it stable and avoid recreating editor extensions
     const sendChangesRef = useRef<((changes: TextChangeInfo[]) => Promise<boolean>) | null>(null);
 
     sendChangesRef.current = async (changes: TextChangeInfo[]) : Promise<boolean> => {
         if (Project.state.editedCode.length === 0 || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId) return false;
+        if (changes.length === 0) return false;
 
         const activeTab = Project.state.editedCode[activeTabIndex];
         if (!activeTab) return false;
@@ -339,30 +393,40 @@ const CodeEditorModal = memo(() => {
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(activeTab.nodeId);
         if(!node) return false;
 
-        const oldBaseText = baseTextRef.current.get(activeTabIndex) || "";
+        const oldBaseText = baseTextRef.current.get(activeTabIndex) ?? "";
         const newBaseText = applyTextChanges(oldBaseText, changes.map(c => ({ from: c.from, to: c.to, insert: c.insert })));
+        const mergedChanges = mergeChanges(changes);
 
         // Update ref instead of state to avoid editor recreation
         baseTextRef.current.set(activeTabIndex, newBaseText);
 
-        const instructions:GraphInstructions[] = changes.map(change => {
+        let instructions: GraphInstructions[];
+        if (node.process) {
+            instructions = mergedChanges.map(change => {
+                const instruction = new InstructionBuilder();
+                for (const path of activeTab.path) {
+                    instruction.key(path);
+                }
+                instruction.insertString(change.from, change.insert, change.to);
+                return {
+                    nodeId: activeTab.nodeId,
+                    i: instruction.instruction,
+                    dontApplyToMySelf: true,
+                };
+            });
+        } else {
             const instruction = new InstructionBuilder();
             for (const path of activeTab.path) {
                 instruction.key(path);
             }
-            if(node.process) {
-                instruction.insertString(change.from, change.insert, change.to);
-                node.process = newBaseText
-            } else {
-                instruction.set(change.insert);
-                node.process = change.insert;
-            }
-            return {
+            instruction.set(newBaseText);
+            instructions = [{
                 nodeId: activeTab.nodeId,
                 i: instruction.instruction,
                 dontApplyToMySelf: true,
-            };
-        });
+            }];
+        }
+        node.process = newBaseText;
 
         const output = await Project.state.updateGraph(instructions);
 
@@ -465,7 +529,7 @@ const CodeEditorModal = memo(() => {
                 ]),
                 javascript(),
                 autocompletion({ override: [customSource] }),
-                EditorView.updateListener.of(async (update) => {
+                EditorView.updateListener.of((update) => {
                     if (update.docChanged) {
                         const changes: TextChangeInfo[] = [];
                         update.transactions.forEach(tr => {
@@ -478,7 +542,8 @@ const CodeEditorModal = memo(() => {
                                 avoidNextUpdate.current = false;
                                 return;
                             }
-                            await sendChangesRef.current?.(changes);
+                            // Use batch send instead of immediate send
+                            batchSendChangesRef.current?.(changes);
                         }
                     }
                 }),
@@ -494,6 +559,17 @@ const CodeEditorModal = memo(() => {
         viewRef.current = view;
 
         return () => {
+            // Clear pending timer when switching tabs
+            if (sendTimeoutRef.current) {
+                clearTimeout(sendTimeoutRef.current);
+                sendTimeoutRef.current = null;
+            }
+            // Send any pending changes immediately before destroying
+            if (pendingChangesRef.current.length > 0) {
+                const changesToSend = [...pendingChangesRef.current];
+                pendingChangesRef.current = [];
+                sendChangesRef.current?.(changesToSend);
+            }
             view.destroy();
             viewRef.current = null;
         };
@@ -502,6 +578,17 @@ const CodeEditorModal = memo(() => {
     // Cleanup when modal is closed
     useEffect(() => {
         if (Project.state.editedCode.length === 0) {
+            // Clear pending timer
+            if (sendTimeoutRef.current) {
+                clearTimeout(sendTimeoutRef.current);
+                sendTimeoutRef.current = null;
+            }
+            // Send any pending changes immediately before closing
+            if (pendingChangesRef.current.length > 0) {
+                const changesToSend = [...pendingChangesRef.current];
+                pendingChangesRef.current = [];
+                sendChangesRef.current?.(changesToSend);
+            }
             editedCodeIdRef.current = null;
             baseTextRef.current.clear();
             setActiveTabIndex(0);
@@ -623,7 +710,7 @@ const CodeEditorModal = memo(() => {
                     <div className={classHeader} onMouseDown={handleDragStart}>
                         <div className={classTitle}>
                             <Code2 size={18} />
-                            <span>{activeTab?.title || 'Code Editor'}</span>
+                            <h4>{activeTab?.title || 'Code Editor'}</h4>
                         </div>
                         <div className={classButtonGroup}>
                             <button
