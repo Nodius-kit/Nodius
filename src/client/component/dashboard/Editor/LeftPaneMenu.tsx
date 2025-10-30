@@ -120,7 +120,7 @@ export const LeftPaneMenu = memo((
                         }
                     },
                     selected: Project.state.editedNodeConfig != undefined && Project.state.editedCode.some((e) => e.nodeId === Project.state.editedNodeConfig!.node._key),
-                    disabled: !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === Project.state.editedNodeConfig!.node._key),
+                    disabled: !Project.state.editedNodeConfig || !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === Project.state.editedNodeConfig!.node._key),
                     hided: !Project.state.editedNodeConfig
                 },
                 {

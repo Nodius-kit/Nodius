@@ -584,7 +584,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
     const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement) => {
 
         const node = typeof based_node === "string" ? optionsRef.current.getNode(based_node) : based_node;
-        console.log(based_node, node);
         if(!node) return;
         const nodeId = node._key;
 
@@ -609,9 +608,9 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
         // check for unused side
         for(const side of Object.keys(overlay.side)) {
+            if(side === "0") continue;
             if (!Object.keys(node.handles).includes(side)) {
                 overlay.side[side as handleSide]!.forEach((p) => {
-                    console.log(p);
                     p.element.remove();
                     p.configElement?.remove();
                     p.textElement?.remove();
@@ -622,6 +621,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
         for (const sideStr in node.handles) {
             const side = sideStr as handleSide;
+            if(side === "0") continue;
             const handleGroup = node.handles[side]!;
 
             // Initialize side array if not exists

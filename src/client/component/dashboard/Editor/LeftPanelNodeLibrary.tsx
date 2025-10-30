@@ -17,7 +17,7 @@
  * - Click to place node on canvas
  */
 
-import React, {memo, useContext, useMemo, useState} from "react";
+import React, {Fragment, memo, useContext, useMemo, useState} from "react";
 import {Search, Box, ChevronDown, ChevronUp, CloudAlert} from "lucide-react";
 import {Input} from "../../form/Input";
 import {Card} from "../../form/Card";
@@ -230,10 +230,10 @@ export const LeftPanelNodeLibrary = memo(({
             <div className={classSearchContainer}>
                 <Input
                     type="text"
-                    icon={<Search size={16} />}
+                    startIcon={<Search size={16} />}
                     placeholder="Search nodes..."
                     value={nodeSearch}
-                    onChange={(e) => setNodeSearch(e.target.value)}
+                    onChange={(e) => setNodeSearch(e)}
                 />
                 <select
                     className={classFilterSelect}
@@ -263,43 +263,45 @@ export const LeftPanelNodeLibrary = memo(({
                         const isHidden = hideCategory.includes(category);
                         return (
                             <Card key={category} style={{padding: "8px"}}>
-                                <div
-                                    className={classCategoryHeader}
-                                    onClick={() => {
-                                        if (isHidden) {
-                                            setHideCategory(hideCategory.filter(c => c !== category));
-                                        } else {
-                                            setHideCategory([...hideCategory, category]);
-                                        }
-                                    }}
-                                >
-                                    <div className={classCategoryTitle}>
-                                        <span>{category}</span>
-                                        <span style={{fontSize: "11px", opacity: 0.7}}>({nodes.length})</span>
+                                <Fragment>
+                                    <div
+                                        className={classCategoryHeader}
+                                        onClick={() => {
+                                            if (isHidden) {
+                                                setHideCategory(hideCategory.filter(c => c !== category));
+                                            } else {
+                                                setHideCategory([...hideCategory, category]);
+                                            }
+                                        }}
+                                    >
+                                        <div className={classCategoryTitle}>
+                                            <span>{category}</span>
+                                            <span style={{fontSize: "11px", opacity: 0.7}}>({nodes.length})</span>
+                                        </div>
+                                        {isHidden ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                                     </div>
-                                    {isHidden ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-                                </div>
-                                <Collapse in={!isHidden}>
-                                    <div className={classNodeGrid}>
-                                        {nodes.map((nodeConfig) => (
-                                            <div
-                                                key={nodeConfig._key}
-                                                className={classNodeCard}
-                                                onClick={() => handleNodeClick(nodeConfig)}
-                                                title={nodeConfig.description || nodeConfig.displayName}
-                                            >
-                                                <div className={classNodeName}>
-                                                    {nodeConfig.displayName}
-                                                </div>
-                                                {nodeConfig.description && (
-                                                    <div className={classNodeDescription}>
-                                                        {nodeConfig.description}
+                                    <Collapse in={!isHidden}>
+                                        <div className={classNodeGrid}>
+                                            {nodes.map((nodeConfig) => (
+                                                <div
+                                                    key={nodeConfig._key}
+                                                    className={classNodeCard}
+                                                    onClick={() => handleNodeClick(nodeConfig)}
+                                                    title={nodeConfig.description || nodeConfig.displayName}
+                                                >
+                                                    <div className={classNodeName}>
+                                                        {nodeConfig.displayName}
                                                     </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </Collapse>
+                                                    {nodeConfig.description && (
+                                                        <div className={classNodeDescription}>
+                                                            {nodeConfig.description}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </Collapse>
+                                </Fragment>
                             </Card>
                         );
                     })
