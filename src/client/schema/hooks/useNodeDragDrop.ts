@@ -13,7 +13,6 @@ import { GraphInstructions } from "../../../utils/sync/wsObject";
 
 export interface NodeDragDropConfig {
     posAnimationDelay?: number;
-    onUpdate?: () => void;
 }
 
 export interface UseNodeDragDropOptions {
@@ -117,7 +116,6 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     node.posX = oldPosX;
                     node.posY = oldPosY;
                     gpuMotor.requestRedraw();
-                    config.onUpdate?.();
                     console.error("Failed to save node position:", output.reason);
                 }
                 lastSaveTime = Date.now();
@@ -153,7 +151,8 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     lastY = newY;
 
                     gpuMotor.requestRedraw();
-                    config.onUpdate?.();
+                    (window as any).triggerNodeUpdate(currentNode._key);
+
 
                     // Only schedule save if there's no save in progress
                     if (!saveInProgress && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {

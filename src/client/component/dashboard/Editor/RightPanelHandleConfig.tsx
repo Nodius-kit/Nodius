@@ -223,6 +223,7 @@ export const RightPanelHandleConfig = memo(() => {
             i: instruction.instruction
         }]);
         retrieveNode();
+
     };
 
     const handlePositionModeChange = async (mode: "separate" | "fix") => {

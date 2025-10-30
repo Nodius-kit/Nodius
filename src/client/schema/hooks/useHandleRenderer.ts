@@ -16,6 +16,12 @@ import { useCallback, useRef } from "react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import { getHandlePosition, getHandleInfo } from "../motor/webGpuMotor/handleUtils";
 import {EditedNodeHandle} from "../../hooks/contexts/ProjectContext";
+import {HandleInfo} from "../motor/webGpuMotor/types";
+
+export const rectangleWidth = 13;
+export const rectangleHeight = 5;
+export const handleOffset = 2;
+export const circleWidth = 10;
 
 export interface useHandleRendererOptions {
     gpuMotor: WebGpuMotor;
@@ -54,29 +60,28 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
     const classCircleHandleClass = useDynamicClass(`
         & {
             position: absolute;
-            width: 10px;
-            height: 10px;
+            background: var(--nodius-primary-dark);
             border-radius: 50%;
-            background: rgba(255, 102, 51, 0.9);
-            border: 2px solid rgba(255, 255, 255, 0.8);
-            pointer-events: none;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            pointer-events: all;
         }
     `);
 
     const classRectHandleClass = useDynamicClass(`
         & {
             position: absolute;
-            background: rgba(51, 204, 102, 0.9);
-            border: 2px solid rgba(255, 255, 255, 0.8);
-            pointer-events: none;
-            transform-origin: center center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            background: var(--nodius-primary-dark);
+            border-radius: 2px;
+            pointer-events: all;
         }
     `);
 
-    const updateHandleOverlay = useCallback((nodeId:string, overlayHtml:HTMLElement) => {
+    const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement) => {
+
+        const node = typeof based_node === "string" ? options.getNode(based_node) : based_node;
+        console.log(node);
+        if(!node) return;
+        const nodeId = node._key;
+
         if(!activeOverlays.current.has(nodeId)) {
 
             const handleContainer = document.createElement("div");
@@ -95,12 +100,14 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
 
         const overlay = activeOverlays.current.get(nodeId)!;
-        const node = options.getNode(nodeId);
-        console.log(node);
-        if(!node) return;
+
         // check for unused side
         for(const side of Object.keys(overlay.side)) {
             if (!Object.keys(node.handles).includes(side)) {
+                overlay.side[side as handleSide]!.forEach((p) => {
+                    console.log(p);
+                    p.element.remove();
+                })
                 delete overlay.side[side as handleSide];
             }
         }
@@ -116,6 +123,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             const currentPointIds = new Set(handleGroup.point.map(p => p.id));
             overlay.side[side] = overlay.side[side]!.filter(({ id, element }) => {
                 if (!currentPointIds.has(id)) {
+                    console.log("remove", id);
                     element.remove();
                     return false;
                 }
@@ -127,40 +135,41 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             const newHandles = handleGroup.point
                 .filter(p => !existingIds.has(p.id))
                 .map(point => {
-                    const handleInfo = getHandleInfo(node, point.id);
-                    const pos = getHandlePosition(node, point.id);
-
-                    console.log(point, handleInfo, pos);
 
                     const handleEl = document.createElement("div");
                     handleEl.dataset.handleId = point.id;
                     handleEl.dataset.nodeId = nodeId;
                     handleEl.dataset.side = side;
 
-                    // Apply shape class based on handle type
-                    /*if (handleGroup.type === "out") {
-                        handleEl.className = classCircleHandleClass;
-                        handleEl.style.left = `${pos.x}px`;
-                        handleEl.style.top = `${pos.y}px`;
-                    } else {
-                        handleEl.className = classRectHandleClass;
-                        handleEl.style.left = `${pos.x - handleInfo.width / 2}px`;
-                        handleEl.style.top = `${pos.y - handleInfo.height / 2}px`;
-                        handleEl.style.width = `${handleInfo.width}px`;
-                        handleEl.style.height = `${handleInfo.height}px`;
-                        handleEl.style.transform = `translate(0, 0) rotate(${handleInfo.rotation}deg)`;
-                    }*/
-
-                    // Optional: Add interaction (even if pointer-events: none on container, we can enable per handle if needed)
-                    // handleEl.style.pointerEvents = 'auto';
-                    // handleEl.addEventListener('click', () => options.setSelectedHandle({ nodeId, side, pointId: point.id }));
 
                     overlay.container.appendChild(handleEl);
 
                     return { id: point.id, element: handleEl };
                 });
-
             overlay.side[side]!.push(...newHandles);
+
+            //update
+            overlay.side[side]!.forEach((point) => {
+                const handleInfo = getHandleInfo(node, point.id);
+                const pos = getHandlePosition(node, point.id)!;
+                if(!handleInfo || !pos) return;
+
+
+
+                if (handleInfo.point.type === "out") {
+                    point.element.className = classCircleHandleClass;
+                    point.element.style.left = `${pos.x - ( circleWidth / 2) + (handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0))}px`;
+                    point.element.style.top = `${pos.y - ( circleWidth / 2) + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
+                    point.element.style.width = circleWidth+"px";
+                    point.element.style.height = circleWidth+"px";
+                } else {
+                    point.element.className = classRectHandleClass;
+                    point.element.style.left = `${pos.x - ((handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0))}px`;
+                    point.element.style.top = `${pos.y - (!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
+                    point.element.style.width = `${(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
+                    point.element.style.height = `${!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
+                }
+            })
         }
 
     }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, options.getNode, options.setSelectedHandle, options.gpuMotor ]);

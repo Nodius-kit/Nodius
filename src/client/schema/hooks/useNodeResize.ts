@@ -15,7 +15,6 @@ export interface NodeResizeConfig {
     sizeAnimationDelay?: number;
     minWidth?: number;
     minHeight?: number;
-    onUpdate?: () => void;
 }
 
 export interface UseNodeResizeOptions {
@@ -117,7 +116,6 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     node.size.width = oldWidth;
                     node.size.height = oldHeight;
                     gpuMotor.requestRedraw();
-                    config.onUpdate?.();
                     console.error("Failed to save node size:", output.reason);
                 }
                 lastSaveTime = Date.now();
@@ -156,7 +154,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     lastY = newY;
 
                     gpuMotor.requestRedraw();
-                    config.onUpdate?.();
+                    (window as any).triggerNodeUpdate(currentNode._key);
 
                     // Only schedule save if there's no save in progress
                     if (!saveInProgress && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {

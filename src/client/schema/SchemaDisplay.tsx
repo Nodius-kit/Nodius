@@ -220,7 +220,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 field: "editedNodeHandle",
                 value: { nodeId, side, pointIndex }
             });
-        }
+        },
+        editedNodeConfig: Project.state.editedNodeConfig
     });
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
@@ -246,10 +247,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         },
         updateZIndex: updateZIndex,
         config: {
-            posAnimationDelay: 200,
-            onUpdate: () => {
-                overlayManager.current?.requestUpdate();
-            }
+            posAnimationDelay: 200
         }
     });
 
@@ -265,9 +263,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             sizeAnimationDelay: 200,
             minWidth: 50,
             minHeight: 50,
-            onUpdate: () => {
-                overlayManager.current?.requestUpdate();
-            }
         }
     });
 
@@ -364,7 +359,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     toHeight?: number;
                 }
             }) | undefined;
-            if (!updatedNode) return;
+            if (!updatedNode) {
+                console.log("aaaaaaaaaaa");
+                return;
+            };
 
             const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
             if (!updatedConfig) return;
@@ -376,6 +374,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             // Update HTML renderer
             await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
+
+            overlayManager.current?.requestUpdate(node._key)
 
 
 
@@ -396,7 +396,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     () => getNode(updatedNode._key) as any,
                     () => {
                         gpuMotor.current?.requestRedraw();
-                        overlayManager.current?.requestUpdate();
+                        overlayManager.current?.requestUpdate(node._key);
+                        updateHandleOverlay(node._key, overlay);
                     }
                 );
             }
@@ -459,9 +460,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         onNodeEnter?.(node);
 
         // Render handles for this node
-        requestAnimationFrame(() => {
-            updateHandleOverlay(node._key, overlay);
-        });
+        updateHandleOverlay(node, overlay);
 
         // Update config overlay if this node is being edited
         if (Project.state.editedNodeConfig?.node._key === node._key) {

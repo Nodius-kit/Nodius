@@ -35,8 +35,8 @@ export function getHandleInfo(node: Node<any>, handleId: string): HandleInfo | u
 			}
 			return {
 				side: side as handleSide,
-				offset,
-				point,
+				offset: offset,
+				point: point,
 			};
 		}
 	}

@@ -974,6 +974,7 @@ export const useSocketSync = () => {
                         await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                     }
                 }
+                (window as any).triggerNodeUpdate?.((nodeConfig.node as Node<any>)._key);
             }else {
                 return newNodeConfig.error ?? "Unknown error"
             }

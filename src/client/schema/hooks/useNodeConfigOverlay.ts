@@ -9,9 +9,10 @@ import { WebGpuMotor } from "../motor/webGpuMotor/index";
 import {useCallback, useRef} from "react";
 import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
-import {ActionContext} from "../../hooks/contexts/ProjectContext";
+import {ActionContext, EditedNodeTypeConfig} from "../../hooks/contexts/ProjectContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
+import {handleOffset} from "./useHandleRenderer";
 
 
 export interface useNodeConfigOverlayOptions {
@@ -20,6 +21,7 @@ export interface useNodeConfigOverlayOptions {
     enabled: (nodeKey: string) => boolean;
     updateGraph: (instructions:Array<GraphInstructions>) => Promise<ActionContext>;
     onHandleClick: (nodeId: string, side: handleSide, pointIndex: number) => void;
+    editedNodeConfig?:EditedNodeTypeConfig
 }
 
 interface HandleUI {
@@ -113,8 +115,10 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             width: 16px;
             height: 16px;
             cursor: pointer;
+            z-index:9999;
         }
     `);
+
 
     /**
      * Generate unique ID for new connection point
@@ -152,22 +156,22 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             // Fixed pixel positioning
             switch (side) {
                 case 'T':
-                    element.style.top = '0';
+                    element.style.top = -handleOffset+'px';
                     element.style.left = `${offset}px`;
                     element.style.transform = 'translate(-50%, -50%)';
                     break;
                 case 'D':
-                    element.style.bottom = '0';
+                    element.style.bottom = -handleOffset+'px';
                     element.style.left = `${offset}px`;
                     element.style.transform = 'translate(-50%, 50%)';
                     break;
                 case 'L':
-                    element.style.left = '0';
+                    element.style.left = -handleOffset+'px';
                     element.style.top = `${offset}px`;
                     element.style.transform = 'translate(-50%, -50%)';
                     break;
                 case 'R':
-                    element.style.right = '0';
+                    element.style.right = -handleOffset+'px';
                     element.style.top = `${offset}px`;
                     element.style.transform = 'translate(50%, -50%)';
                     break;
@@ -177,22 +181,22 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             const percentage = offset * 100;
             switch (side) {
                 case 'T':
-                    element.style.top = '0';
+                    element.style.top = -handleOffset+'px';
                     element.style.left = `${percentage}%`;
                     element.style.transform = 'translate(-50%, -50%)';
                     break;
                 case 'D':
-                    element.style.bottom = '0';
+                    element.style.bottom = -handleOffset+'px';
                     element.style.left = `${percentage}%`;
                     element.style.transform = 'translate(-50%, 50%)';
                     break;
                 case 'L':
-                    element.style.left = '0';
+                    element.style.left = -handleOffset+'px';
                     element.style.top = `${percentage}%`;
                     element.style.transform = 'translate(-50%, -50%)';
                     break;
                 case 'R':
-                    element.style.right = '0';
+                    element.style.right = -handleOffset+'px';
                     element.style.top = `${percentage}%`;
                     element.style.transform = 'translate(50%, -50%)';
                     break;
@@ -513,7 +517,7 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
                 const handle = {
                     position: "separate" as const,
                     point: [{
-                        id: "0",
+                        id: generateUniqueId(node),
                         type: "in" as const,
                         accept: "any",
                     }]
@@ -546,6 +550,8 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
             activeOverlays.current.delete(nodeId);
         }
 
+        if(!options.editedNodeConfig) return;
+
         // Only create overlay if enabled
         if (!options.enabled(nodeId)) {
             return;
@@ -553,6 +559,8 @@ export function useNodeConfigOverlay(options: useNodeConfigOverlayOptions) {
 
         const node = options.getNode(nodeId);
         if (!node) return;
+
+        if(node._key !== options.editedNodeConfig.node._key) return;
 
         // Create container for handle UI elements
         const handleUIContainer = document.createElement('div');
