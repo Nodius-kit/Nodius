@@ -866,14 +866,15 @@ export const useSocketSync = () => {
 
                     const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
 
-                    if(Project.state.editedCode && Project.state.editedCode.nodeId === instruction.nodeId && Project.state.editedCode.applyChange) {
+                    const editeCode = Project.state.editedCode.find((e) => e.nodeId === instruction.nodeId);
+                    if(editeCode && editeCode.applyChange) {
                         let newText = newNode as any;
-                        for(const path of Project.state.editedCode.path) {
+                        for(const path of editeCode.path) {
                             newText = newText[path];
                         }
-                        const diff = getTextChanges(Project.state.editedCode.baseText, newText);
+                        const diff = getTextChanges(editeCode.baseText, newText);
                         if(diff.length > 0) {
-                            Project.state.editedCode.applyChange(diff);
+                            editeCode.applyChange(diff);
                         }
                     }
 
@@ -966,14 +967,15 @@ export const useSocketSync = () => {
                     value: currentEditConfig.current
                 });
 
-                if(Project.state.editedCode && Project.state.editedCode.nodeId === currentEditConfig.current.node._key && Project.state.editedCode.applyChange) {
+                const editeCode = Project.state.editedCode.find((e) => e.nodeId === currentEditConfig.current!.node._key);
+                if(editeCode && editeCode.applyChange) {
                     let newText = nodeConfig.node as any;
-                    for(const path of Project.state.editedCode.path) {
+                    for(const path of editeCode.path) {
                         newText = newText[path];
                     }
-                    const diff = getTextChanges(Project.state.editedCode.baseText, newText);
+                    const diff = getTextChanges(editeCode.baseText, newText);
                     if(diff.length > 0) {
-                        Project.state.editedCode.applyChange(diff);
+                        editeCode.applyChange(diff);
                     }
                 }
 

@@ -24,6 +24,7 @@ import {
     oneDarkTheme
 } from "@uiw/react-codemirror";
 import {bracketMatching, defaultHighlightStyle, foldGutter, indentOnInput, syntaxHighlighting, foldKeymap} from "@codemirror/language";
+import { Minimize2, Maximize2, X, Code2 } from 'lucide-react';
 
 const CodeEditorModal = memo(() => {
     const Project = useContext(ProjectContext);
@@ -31,11 +32,25 @@ const CodeEditorModal = memo(() => {
     const viewRef = useRef<EditorView | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [minimized, setMinimized] = useState(false);
-    const [position, setPosition] = useState({ top: 50, left: 50 });
-    const [size, setSize] = useState({ width: 500, height: 500 });
+    const [activeTabIndex, setActiveTabIndex] = useState(0);
+
+    // Calculate centered position based on default size
+    const defaultSize = { width: 500, height: 500 };
+    const getCenteredPosition = () => ({
+        top: Math.max(0, (window.innerHeight - defaultSize.height) / 2),
+        left: Math.max(0, (window.innerWidth - defaultSize.width) / 2),
+    });
+
+    const [position, setPosition] = useState(getCenteredPosition);
+    const [size, setSize] = useState(defaultSize);
     const dragStartRef = useRef({ x: 0, y: 0, left: 0, top: 0 });
     const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
     const customCompletions: Completion[] = []; // Add custom completions here based on context
+
+    // Track baseText for each tab to avoid recreating the editor on every change
+    const baseTextRef = useRef<Map<number, string>>(new Map());
+    // Track the initial editedCode identity to detect when a new code session starts
+    const editedCodeIdRef = useRef<string | null>(null);
 
     const classModal = useDynamicClass(`
     & {
@@ -51,23 +66,106 @@ const CodeEditorModal = memo(() => {
       pointer-events: all;
       position: absolute;
       background: var(--nodius-background-paper);
-      box-shadow: var(--nodius-shadow-2);
-      border-radius: 4px;
+      box-shadow: var(--nodius-shadow-4);
+      border-radius: 12px;
+      border: 1px solid rgba(66, 165, 245, 0.2);
+      overflow: hidden;
+      backdrop-filter: blur(10px);
     }
   `);
 
     const classHeader = useDynamicClass(`
     & {
-      height: 40px;
-      background: var(--nodius-header-background);
+      height: 48px;
+      background: transparent;
       display: flex;
       align-items: center;
-      padding: 0 10px;
+      padding: 0 16px;
       cursor: grab;
       user-select: none;
-      border-bottom: 1px solid var(--nodius-border);
-      border-top-left-radius: 4px;
-      border-top-right-radius: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      gap: 12px;
+      position: relative;
+    }
+    &:active {
+      cursor: grabbing;
+    }
+
+  `);
+
+    const classTitle = useDynamicClass(`
+    & {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--nodius-text-primary);
+      font-weight: 500;
+      font-size: 13px;
+      letter-spacing: 0.3px;
+      flex: 1;
+      opacity: 0.9;
+    }
+    & > svg {
+      color: var(--nodius-primary-main);
+      opacity: 0.8;
+    }
+  `);
+
+    const classButtonGroup = useDynamicClass(`
+    & {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+  `);
+
+    const classIconButton = useDynamicClass(`
+    & {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--nodius-text-secondary);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0;
+    }
+    &:hover {
+      background: rgba(66, 165, 245, 0.1);
+      color: var(--nodius-primary-light);
+      transform: translateY(-1px);
+    }
+    &:active {
+      transform: translateY(0);
+    }
+  `);
+
+    const classCloseButton = useDynamicClass(`
+    & {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--nodius-text-secondary);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 0;
+    }
+    &:hover {
+      background: rgba(244, 67, 54, 0.15);
+      color: var(--nodius-error-light);
+      transform: translateY(-1px);
+    }
+    &:active {
+      transform: translateY(0);
     }
   `);
 
@@ -76,10 +174,100 @@ const CodeEditorModal = memo(() => {
       position: absolute;
       right: 0;
       bottom: 0;
-      width: 10px;
-      height: 10px;
+      width: 20px;
+      height: 20px;
       cursor: nwse-resize;
+      transition: var(--nodius-transition-default);
+    }
+    &::after {
+      content: '';
+      position: absolute;
+      right: 2px;
+      bottom: 2px;
+      width: 12px;
+      height: 12px;
+      background:
+        linear-gradient(135deg, transparent 0%, transparent 50%, rgba(66, 165, 245, 0.3) 50%);
+      border-bottom-right-radius: 12px;
+      transition: var(--nodius-transition-default);
+    }
+    &:hover::after {
+      background:
+        linear-gradient(135deg, transparent 0%, transparent 50%, var(--nodius-primary-main) 50%);
+    }
+  `);
+
+    const classTabBar = useDynamicClass(`
+    & {
+      display: flex;
+      gap: 4px;
+      padding: 8px 16px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
+    &::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(66, 165, 245, 0.3);
+      border-radius: 2px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(66, 165, 245, 0.5);
+    }
+  `);
+
+    const classTab = useDynamicClass(`
+    & {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 6px;
       background: transparent;
+      color: var(--nodius-text-secondary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    &:hover {
+      background: rgba(66, 165, 245, 0.1);
+      color: var(--nodius-text-primary);
+    }
+    &.active {
+      background: rgba(66, 165, 245, 0.2);
+      color: var(--nodius-primary-light);
+    }
+  `);
+
+    const classTabCloseButton = useDynamicClass(`
+    & {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--nodius-text-secondary);
+      cursor: pointer;
+      padding: 0;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-shrink: 0;
+    }
+    &:hover {
+      background: rgba(244, 67, 54, 0.2);
+      color: var(--nodius-error-light);
     }
   `);
 
@@ -92,62 +280,74 @@ const CodeEditorModal = memo(() => {
         };
     };
 
-    const applyChange = (changes: TextChangeInfo | TextChangeInfo[]) => {
-        if(!Project.state.editedCode) return;
-        const normalizedChanges = Array.isArray(changes) ? changes : [changes];
-        const cmChanges = normalizedChanges.map(c => ({
-            from: c.from,
-            to: c.to !== undefined ? c.to : c.from,
-            insert: c.insert || '',
-        }));
+    // Stable applyChange function factory - creates a closure for each tab
+    const createApplyChangeForTab = useCallback((tabIndex: number) => {
+        return (changes: TextChangeInfo | TextChangeInfo[]) => {
+            const normalizedChanges = Array.isArray(changes) ? changes : [changes];
+            const cmChanges = normalizedChanges.map(c => ({
+                from: c.from,
+                to: c.to !== undefined ? c.to : c.from,
+                insert: c.insert || '',
+            }));
 
-        Project.dispatch({
-            field: "editedCode",
-            value: {
-                ...Project.state.editedCode,
-                baseText: applyTextChanges(Project.state.editedCode.baseText, normalizedChanges),
-            },
-        });
+            // Update local ref without triggering state update
+            const currentBaseText = baseTextRef.current.get(tabIndex) || "";
+            const newBaseText = applyTextChanges(currentBaseText, normalizedChanges);
+            baseTextRef.current.set(tabIndex, newBaseText);
 
-        if (viewRef.current) {
-            viewRef.current.dispatch({ changes: cmChanges });
-        }
-    };
+            // Only apply changes if this is the currently active tab
+            if (tabIndex === activeTabIndex && viewRef.current) {
+                viewRef.current.dispatch({ changes: cmChanges });
+            }
+        };
+    }, [activeTabIndex]);
 
+    // Register applyChange callback for each tab that doesn't have one
     useEffect(() => {
-        if (Project.state.editedCode && Project.state.editedCode.applyChange !== applyChange) {
-            Project.dispatch({
-                field: "editedCode",
-                value: {
-                    ...Project.state.editedCode,
-                    applyChange,
-                },
+        if (Project.state.editedCode.length > 0) {
+            const updatedTabs = Project.state.editedCode.map((tab, index) => {
+                if (!tab.applyChange) {
+                    return {
+                        ...tab,
+                        applyChange: createApplyChangeForTab(index),
+                    };
+                }
+                return tab;
             });
+
+            // Only update if there were changes
+            if (updatedTabs.some((tab, index) => tab !== Project.state.editedCode[index])) {
+                Project.dispatch({
+                    field: "editedCode",
+                    value: updatedTabs,
+                });
+            }
         }
-    }, []);
+    }, [Project.state.editedCode, createApplyChangeForTab]);
 
     const avoidNextUpdate = useRef<boolean>(false);
 
-    const sendChanges = useCallback(async (changes: TextChangeInfo[]) : Promise<boolean> => {
-        if (!Project.state.editedCode || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId) return false;
+    // Use ref for sendChanges to keep it stable and avoid recreating editor extensions
+    const sendChangesRef = useRef<((changes: TextChangeInfo[]) => Promise<boolean>) | null>(null);
 
-        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(Project.state.editedCode.nodeId);
+    sendChangesRef.current = async (changes: TextChangeInfo[]) : Promise<boolean> => {
+        if (Project.state.editedCode.length === 0 || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId) return false;
+
+        const activeTab = Project.state.editedCode[activeTabIndex];
+        if (!activeTab) return false;
+
+        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(activeTab.nodeId);
         if(!node) return false;
 
-        const oldBaseText = Project.state.editedCode.baseText;
+        const oldBaseText = baseTextRef.current.get(activeTabIndex) || "";
         const newBaseText = applyTextChanges(oldBaseText, changes.map(c => ({ from: c.from, to: c.to, insert: c.insert })));
 
-        Project.dispatch({
-            field: "editedCode",
-            value: {
-                ...Project.state.editedCode,
-                baseText: newBaseText,
-            },
-        });
+        // Update ref instead of state to avoid editor recreation
+        baseTextRef.current.set(activeTabIndex, newBaseText);
 
         const instructions:GraphInstructions[] = changes.map(change => {
             const instruction = new InstructionBuilder();
-            for (const path of Project.state.editedCode!.path) {
+            for (const path of activeTab.path) {
                 instruction.key(path);
             }
             if(node.process) {
@@ -158,7 +358,7 @@ const CodeEditorModal = memo(() => {
                 node.process = change.insert;
             }
             return {
-                nodeId: Project.state.editedCode!.nodeId,
+                nodeId: activeTab.nodeId,
                 i: instruction.instruction,
                 dontApplyToMySelf: true,
             };
@@ -168,13 +368,7 @@ const CodeEditorModal = memo(() => {
 
         if (!output.status) {
             // Rollback to old baseText, may lose concurrent remote changes in race conditions
-            Project.dispatch({
-                field: "editedCode",
-                value: {
-                    ...Project.state.editedCode,
-                    baseText: oldBaseText,
-                },
-            });
+            baseTextRef.current.set(activeTabIndex, oldBaseText);
             if (viewRef.current) {
                 avoidNextUpdate.current = true;
                 viewRef.current.dispatch({
@@ -184,13 +378,38 @@ const CodeEditorModal = memo(() => {
         }
 
         return output.status;
-    }, [Project.state.updateGraph, Project.state.editedCode, Project.state.graph, Project.state.selectedSheetId]);
+    };
 
+    // Editor initialization effect - recreate when switching tabs or opening new session
     useEffect(() => {
-        if (!Project.state.editedCode || !editorRef.current) return;
+        if (Project.state.editedCode.length === 0 || !editorRef.current) return;
+
+        const activeTab = Project.state.editedCode[activeTabIndex];
+        if (!activeTab) return;
+
+        // Check if this is a new code editing session or tab switch
+        const currentId = `${activeTab.nodeId}-${activeTab.path.join('.')}`;
+        const isNewSession = editedCodeIdRef.current !== currentId;
+
+        if (!isNewSession && viewRef.current) {
+            // Same tab, don't recreate editor
+            return;
+        }
+
+        // New tab or session - update tracking refs
+        editedCodeIdRef.current = currentId;
+        const baseText = activeTab.baseText || "";
+        baseTextRef.current.set(activeTabIndex, baseText);
+
+        // Only recenter modal if it's a brand new session (not just a tab switch)
+        if (!viewRef.current) {
+            setPosition(getCenteredPosition());
+            setSize(defaultSize);
+            setMinimized(false);
+        }
 
         const startState = EditorState.create({
-            doc: Project.state.editedCode.baseText,
+            doc: baseText,
             extensions: [
                 // A line number gutter
                 lineNumbers(),
@@ -259,7 +478,7 @@ const CodeEditorModal = memo(() => {
                                 avoidNextUpdate.current = false;
                                 return;
                             }
-                            await sendChanges(changes);
+                            await sendChangesRef.current?.(changes);
                         }
                     }
                 }),
@@ -278,7 +497,23 @@ const CodeEditorModal = memo(() => {
             view.destroy();
             viewRef.current = null;
         };
-    }, [Project.state.editedCode, sendChanges]);
+    }, [activeTabIndex, Project.state.editedCode]);
+
+    // Cleanup when modal is closed
+    useEffect(() => {
+        if (Project.state.editedCode.length === 0) {
+            editedCodeIdRef.current = null;
+            baseTextRef.current.clear();
+            setActiveTabIndex(0);
+        }
+    }, [Project.state.editedCode]);
+
+    // Reset active tab if it goes out of bounds
+    useEffect(() => {
+        if (activeTabIndex >= Project.state.editedCode.length && Project.state.editedCode.length > 0) {
+            setActiveTabIndex(Project.state.editedCode.length - 1);
+        }
+    }, [activeTabIndex, Project.state.editedCode.length]);
 
     // Drag handling
     const handleDragStart = (e: React.MouseEvent) => {
@@ -346,39 +581,90 @@ const CodeEditorModal = memo(() => {
         return () => window.removeEventListener('resize', handleWindowResize);
     }, [position, size]);
 
-    const onClose = () => {
-        Project.dispatch({ field: "editedCode", value: undefined });
+    const handleTabClose = (e: React.MouseEvent, tabIndex: number) => {
+        e.stopPropagation();
+        const newTabs = Project.state.editedCode.filter((_, index) => index !== tabIndex);
+        Project.dispatch({ field: "editedCode", value: newTabs });
+
+        // Adjust active tab if needed
+        if (tabIndex === activeTabIndex && newTabs.length > 0) {
+            setActiveTabIndex(Math.min(activeTabIndex, newTabs.length - 1));
+        } else if (tabIndex < activeTabIndex) {
+            setActiveTabIndex(activeTabIndex - 1);
+        }
     };
 
-    if (!Project.state.editedCode) return null;
+    const onClose = () => {
+        Project.dispatch({ field: "editedCode", value: [] });
+    };
+
+    if (Project.state.editedCode.length === 0) return null;
+
+    const activeTab = Project.state.editedCode[activeTabIndex];
 
     const containerStyle = {
         top: `${position.top}px`,
         left: `${position.left}px`,
         width: `${size.width}px`,
-        height: minimized ? '40px' : `${size.height}px`,
+        height: minimized ? '48px' : `${size.height}px`,
         overflow: minimized ? 'hidden' : 'visible',
     };
 
     const editorStyle = {
-        height: 'calc(100% - 40px)',
+        height: Project.state.editedCode.length > 1 ? 'calc(100% - 48px - 40px)' : 'calc(100% - 48px)',
         display: minimized ? 'none' : 'block',
+        borderRadius: "12px"
     };
 
     return (
-        <Fade in={!!Project.state.editedCode} unmountOnExit>
+        <Fade in={Project.state.editedCode.length > 0} unmountOnExit>
             <div className={classModal}>
                 <div ref={containerRef} className={classContainer} style={containerStyle}>
                     <div className={classHeader} onMouseDown={handleDragStart}>
-                        <span>Code Editor</span>
-                        <button onClick={() => setMinimized(!minimized)} style={{ marginLeft: 'auto' }}>
-                            {minimized ? 'Maximize' : 'Minimize'}
-                        </button>
-                        <button onClick={onClose} style={{ marginLeft: '10px' }}>
-                            Close
-                        </button>
+                        <div className={classTitle}>
+                            <Code2 size={18} />
+                            <span>{activeTab?.title || 'Code Editor'}</span>
+                        </div>
+                        <div className={classButtonGroup}>
+                            <button
+                                className={classIconButton}
+                                onClick={() => setMinimized(!minimized)}
+                                title={minimized ? 'Maximize' : 'Minimize'}
+                            >
+                                {minimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}
+                            </button>
+                            <button
+                                className={classCloseButton}
+                                onClick={onClose}
+                                title="Close"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
                     </div>
-                    <div ref={editorRef} style={editorStyle} />
+                    {Project.state.editedCode.length > 1 && (
+                        <div className={classTabBar}>
+                            {Project.state.editedCode.map((tab, index) => (
+                                <button
+                                    key={`${tab.nodeId}-${tab.path.join('.')}`}
+                                    className={`${classTab} ${index === activeTabIndex ? 'active' : ''}`}
+                                    onClick={() => setActiveTabIndex(index)}
+                                >
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {tab.title}
+                                    </span>
+                                    <button
+                                        className={classTabCloseButton}
+                                        onClick={(e) => handleTabClose(e, index)}
+                                        title="Close tab"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div ref={editorRef} style={editorStyle} className={"ͼo"} />
                     {!minimized && <div className={classResizer} onMouseDown={handleResizeStart} />}
                 </div>
             </div>

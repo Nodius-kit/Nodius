@@ -101,23 +101,25 @@ export const LeftPaneMenu = memo((
                     icon: <Code  width={iconSize} height={iconSize} />,
                     onClick: () => {
                         if(!Project.state.editedNodeConfig) return;
-                        if(Project.state.editedCode) {
+                        if(Project.state.editedCode.some((e) => e.nodeId === Project.state.editedNodeConfig!.node._key)) {
                             Project.dispatch({
                                 field: "editedCode",
-                                value: undefined
+                                value: Project.state.editedCode.filter((e) => e.nodeId !== Project.state.editedNodeConfig!.node._key)
                             });
                         } else {
+                            Project.state.editedCode.push({
+                                path:["process"],
+                                title: "Node Logic #"+Project.state.editedNodeConfig.node._key,
+                                nodeId:Project.state.editedNodeConfig.node._key,
+                                baseText:Project.state.editedNodeConfig.node.process ?? ""
+                            })
                             Project.dispatch({
                                 field: "editedCode",
-                                value: {
-                                    path:["process"],
-                                    nodeId:Project.state.editedNodeConfig.node._key,
-                                    baseText:Project.state.editedNodeConfig.node.process ?? ""
-                                }
+                                value: [...Project.state.editedCode]
                             })
                         }
                     },
-                    selected: Project.state.editedCode != undefined,
+                    selected: Project.state.editedNodeConfig != undefined && Project.state.editedCode.some((e) => e.nodeId === Project.state.editedNodeConfig!.node._key),
                     disabled: !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === Project.state.editedNodeConfig!.node._key),
                     hided: !Project.state.editedNodeConfig
                 },

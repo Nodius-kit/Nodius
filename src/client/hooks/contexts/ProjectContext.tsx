@@ -138,12 +138,13 @@ export interface ProjectContextType {
 
     disabledNodeInteraction: DisabledNodeInteractionType,
 
-    editedCode?: {
+    editedCode: Array<{
         path:string[],
         nodeId:string,
+        title:string,
         baseText:string,
         applyChange?: (changes:TextChangeInfo|TextChangeInfo[]) => void,
-    }
+    }>
 
     selectedNode: string[],
 
@@ -160,4 +161,5 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     },
     disabledNodeInteraction: {},
     selectedNode: [],
+    editedCode: []
 }
