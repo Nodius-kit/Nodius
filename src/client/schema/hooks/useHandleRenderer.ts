@@ -18,7 +18,7 @@ import { getHandlePosition, getHandleInfo } from "../motor/webGpuMotor/handleUti
 import {ActionContext, EditedNodeHandle, EditedNodeTypeConfig} from "../../hooks/contexts/ProjectContext";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
-import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
+import {deepCopy, disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
 
 
 export const rectangleWidth = 13;
@@ -386,7 +386,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 e.stopPropagation();
                 if(lastFrameId!=undefined) cancelAnimationFrame(lastFrameId);
 
-                lastFrameId = requestAnimationFrame(() => {
+                lastFrameId = requestAnimationFrame(async () => {
 
                     const node = optionsRef.current.getNode(nodeId)!;
                     if (!node) return;
@@ -411,6 +411,8 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     const changeSideThreeshold = 50;
 
+                    const currentHandle = node.handles[handleInfo.side]!.point[handleInfo.index];
+
 
                     if (handleInfo.side === 'T') {
                         newOffset = startOffset + (deltaX / scale);
@@ -418,6 +420,35 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
 
                         if (newOffset === node.size.width && deltaY > changeSideThreeshold) {
+
+                            const instructionRemove = new InstructionBuilder();
+                            const instructionAdd = new InstructionBuilder();
+
+                            instructionRemove.key("handles").key(handleInfo.side).key("point").arrayRemoveIndex(handleInfo.index);
+                            const newHandle = deepCopy(currentHandle);
+                            newHandle.offset=0;
+                            if(node.handles["R"]) {
+                                if(node.handles["R"]!.position === "separate") {
+                                    delete newHandle.offset;
+                                }
+                                instructionAdd.key("handles").key("R").key("point").arrayAdd(newHandle);
+                            } else {
+                                instructionAdd.key("handles").key("R").set({
+                                    point: [newHandle],
+                                    position: "fix"
+                                });
+                            }
+                            await optionsRef.current.updateGraph([
+                                {
+                                    nodeId: nodeId,
+                                    i: instructionRemove.instruction
+                                },
+                                {
+                                    nodeId: nodeId,
+                                    i: instructionAdd.instruction
+                                }
+                            ]);
+
                             // put to side R
                         } else if (newOffset === 0 && deltaY > changeSideThreeshold) {
                             // put to side L
@@ -428,6 +459,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         newOffset = Math.max(0, Math.min(node.size.width, newOffset));
 
                         if (newOffset === node.size.width && deltaY < changeSideThreeshold) {
+
                             // put to side R
                         } else if (newOffset === 0 && deltaY < changeSideThreeshold) {
                             // put to side L
@@ -456,7 +488,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
 
                     if(handleInfo.position === 'fix') {
-                        node.handles[handleInfo.side]!.point[handleInfo.index].offset = newOffset;
+                        currentHandle.offset = newOffset;
                     }
                     (window as any).triggerNodeUpdate(nodeId);
                 });
