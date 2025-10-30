@@ -35,6 +35,7 @@ import {LeftPanelEntryTypeSelect} from "./Editor/LeftPanelEntryTypeSelect";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {WebGpuMotor} from "../../schema/motor/webGpuMotor/index";
 import {RightPanelHandleConfig} from "./Editor/RightPanelHandleConfig";
+import {CodeEditorModal} from "../code/CodeEditorModal";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,
@@ -146,6 +147,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                 display:"flex",
                 flexDirection:"row"
             }}>
+                <CodeEditorModal/>
                 <LeftPaneMenu setEditingPanel={setEditingPanel} editingPanel={editingPanel} setMenuWidth={setSubLeftMenuWidth} returnToMenu={returnToMenu} />
                 <div style={{flex:"1"}}>
                     <MultiFade active={activeFade} timeout={200}>

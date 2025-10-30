@@ -114,7 +114,7 @@ import {
     WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
     WSResponseMessage
 } from "../../utils/sync/wsObject";
-import {deepCopy} from "../../utils/objectUtils";
+import {deepCopy, getTextChanges} from "../../utils/objectUtils";
 import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
 
@@ -864,9 +864,22 @@ export const useSocketSync = () => {
                     }
                     nodeAlreadyCheck.push(instruction.nodeId);
 
+                    const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+
+                    if(Project.state.editedCode && Project.state.editedCode.nodeId === instruction.nodeId && Project.state.editedCode.applyChange) {
+                        let newText = newNode as any;
+                        for(const path of Project.state.editedCode.path) {
+                            newText = newText[path];
+                        }
+                        const diff = getTextChanges(Project.state.editedCode.baseText, newText);
+                        if(diff.length > 0) {
+                            Project.state.editedCode.applyChange(diff);
+                        }
+                    }
+
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                     if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && instruction.nodeId === Project.state.editedHtml.target._key) {
-                        const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+
                         let objectHtml: any = newNode;
                         Project.state.editedHtml.pathOfRender.forEach((path) => {
                             objectHtml = objectHtml[path];
@@ -883,7 +896,7 @@ export const useSocketSync = () => {
 
                     } else if(htmlRenderer.current[instruction.nodeId]) { // look for a htmlRenderer
                         const renderers = htmlRenderer.current[instruction.nodeId];
-                        const newNode = Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!;
+
                         for(const [key, renderer] of Object.entries(renderers)) {
                             if(!instruction.noRedraw && key !== "") {
                                 // key == "" meaning that this is SchemaDisplay that created this renderer
@@ -953,6 +966,17 @@ export const useSocketSync = () => {
                     value: currentEditConfig.current
                 });
 
+                if(Project.state.editedCode && Project.state.editedCode.nodeId === currentEditConfig.current.node._key && Project.state.editedCode.applyChange) {
+                    let newText = nodeConfig.node as any;
+                    for(const path of Project.state.editedCode.path) {
+                        newText = newText[path];
+                    }
+                    const diff = getTextChanges(Project.state.editedCode.baseText, newText);
+                    if(diff.length > 0) {
+                        Project.state.editedCode.applyChange(diff);
+                    }
+                }
+
                 if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
 
                     let object = nodeConfig as any;
@@ -987,7 +1011,7 @@ export const useSocketSync = () => {
             gpuMotor.current!.requestRedraw();
         }
 
-    }, [Project.state.editedNodeConfig, Project.state.editedHtml]);
+    }, [Project.state.editedNodeConfig, Project.state.editedHtml, Project.state.editedCode]);
 
     const updateNodeConfig = useCallback(async (instructions:Array<nodeConfigInstructions>): Promise<ActionContext> => {
         const start = Date.now();

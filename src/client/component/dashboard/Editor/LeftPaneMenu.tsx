@@ -24,6 +24,7 @@ import {BetweenHorizontalStart, Binary, Cable, Code, CopyPlus, Frame, List} from
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import {TextChangeInfo} from "../../../../utils/objectUtils";
 
 interface LeftPaneMenuProps {
     setEditingPanel: (value:editingPanel) => void,
@@ -92,11 +93,6 @@ export const LeftPaneMenu = memo((
         }
     `);
 
-
-    useEffect(() => {
-        console.log(Project.state.selectedNode);
-    }, [Project.state.selectedNode]);
-
     const iconActionList:iconActionListType[] = useMemo(() => [
         {
             name: "Build",
@@ -104,9 +100,24 @@ export const LeftPaneMenu = memo((
                 {
                     icon: <Code  width={iconSize} height={iconSize} />,
                     onClick: () => {
-                        console.log("click");
+                        if(!Project.state.editedNodeConfig) return;
+                        if(Project.state.editedCode) {
+                            Project.dispatch({
+                                field: "editedCode",
+                                value: undefined
+                            });
+                        } else {
+                            Project.dispatch({
+                                field: "editedCode",
+                                value: {
+                                    path:["process"],
+                                    nodeId:Project.state.editedNodeConfig.node._key,
+                                    baseText:Project.state.editedNodeConfig.node.process ?? ""
+                                }
+                            })
+                        }
                     },
-                    selected: true,
+                    selected: Project.state.editedCode != undefined,
                     disabled: !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === Project.state.editedNodeConfig!.node._key),
                     hided: !Project.state.editedNodeConfig
                 },
@@ -158,7 +169,7 @@ export const LeftPaneMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig, Project.state.selectedNode]);
+    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig, Project.state.selectedNode, Project.state.editedCode]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

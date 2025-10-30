@@ -50,12 +50,12 @@ export interface Instruction {
     o: OpType;      // operation
     p?: string[];   // path (keys) - also source path for OBJ_MOVE
     v?: any;        // value
-    i?: number;     // index
+    i?: number;     // index (from_index for STR_INS)
     l?: number;     // length
     s?: string;     // search string (for replace)
     r?: string;     // replacement string
-    f?: number;     // from_index (new: for ARR_MOVE)
-    t?: number;     // to_index (new: for ARR_MOVE)
+    f?: number;     // from_index (for ARR_MOVE)
+    t?: number;     // to_index (for ARR_MOVE and STR_INS to_index for deletion)
     d?: string[];   // destination path (for OBJ_MOVE)
 }
 
@@ -168,11 +168,15 @@ export class InstructionBuilder {
 
     // === String Operations ===
 
-    // Insert string at index
-    insertString(index: number, text: string): Instruction {
+    // Insert string at index, optionally replacing characters from index to toIndex
+    // When toIndex is provided, acts as replace operation (delete from index to toIndex, then insert text)
+    insertString(index: number, text: string, toIndex?: number): Instruction {
         this.instruction.o = OpType.STR_INS;
         this.instruction.i = index;
         this.instruction.v = text;
+        if (toIndex !== undefined) {
+            this.instruction.t = toIndex;
+        }
         return this.instruction;
     }
 
@@ -431,7 +435,16 @@ export function applyInstruction<T = any>(target: T, instruction: Instruction | 
                 if (inst.i == null || inst.i < 0 || inst.i > current.length) {
                     return {success: false, error: `Invalid index ${inst.i} for string of length ${current.length}`};
                 }
-                const newStr = current.slice(0, inst.i) + inst.v + current.slice(inst.i);
+                // If 't' (to) is provided, delete from i to t, then insert
+                let newStr: string;
+                if (inst.t !== undefined) {
+                    if (inst.t < inst.i || inst.t > current.length) {
+                        return {success: false, error: `Invalid to index ${inst.t} for string of length ${current.length}`};
+                    }
+                    newStr = current.slice(0, inst.i) + inst.v + current.slice(inst.t);
+                } else {
+                    newStr = current.slice(0, inst.i) + inst.v + current.slice(inst.i);
+                }
                 if (lastKey && parent != null) {
                     parent[lastKey] = newStr;
                 } else {
@@ -1026,7 +1039,25 @@ export function getInverseInstruction(target: any, instruction: Instruction | st
             }
 
             case OpType.STR_INS: {
-                inverse = { o: OpType.STR_REM, p: inst.p ? [...inst.p] : undefined, i: inst.i, l: (inst.v as string).length };
+                // If 't' (to) is provided, we need to restore the deleted text
+                if (inst.t !== undefined) {
+                    nav = getAtPath(target, inst.p, true);
+                    if (!nav.success) return nav;
+                    const { current } = nav.value;
+                    if (typeof current !== 'string') {
+                        return { success: false, error: 'Target is not a string for STR_INS inverse' };
+                    }
+                    if (inst.i == null || inst.t < inst.i || inst.t > current.length) {
+                        return { success: false, error: `Invalid index range ${inst.i}-${inst.t} for string of length ${current.length}` };
+                    }
+                    // Get the text that was deleted (from i to t)
+                    const deletedText = current.slice(inst.i, inst.t);
+                    // Inverse: insert deleted text and remove the inserted text
+                    inverse = { o: OpType.STR_INS, p: inst.p ? [...inst.p] : undefined, i: inst.i, v: deletedText, t: inst.i + (inst.v as string).length };
+                } else {
+                    // Simple insert: inverse is remove
+                    inverse = { o: OpType.STR_REM, p: inst.p ? [...inst.p] : undefined, i: inst.i, l: (inst.v as string).length };
+                }
                 break;
             }
 
