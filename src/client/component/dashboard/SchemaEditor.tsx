@@ -18,7 +18,7 @@
  * - ResizeBar components for user-controlled panel sizing
  */
 
-import {forwardRef, memo, useContext, useEffect, useRef, useState} from "react";
+import {forwardRef, memo, useCallback, useContext, useEffect, useRef, useState} from "react";
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../utils/html/htmlType";
 import {LeftPaneMenu} from "./Editor/LeftPaneMenu";
 import {MultiFade} from "../animate/MultiFade";
@@ -37,17 +37,16 @@ import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {WebGpuMotor} from "../../schema/motor/webGpuMotor/index";
 import {RightPanelHandleConfig} from "./Editor/RightPanelHandleConfig";
 import {CodeEditorModal} from "../code/CodeEditorModal";
-import {NodeTypeConfig} from "../../utils/graph/graphType";
+import {NodeType, NodeTypeConfig} from "../../../utils/graph/graphType";
 
 interface SchemaEditorProps  {
     returnToMenu: () => void,
+    getMotor: () => (WebGpuMotor | undefined);
 }
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
 
-export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
-    returnToMenu,
-}, motorRef) => {
+export const SchemaEditor = memo(({returnToMenu, getMotor}:SchemaEditorProps) => {
 
     const [editingPanel, setEditingPanel] = useState<editingPanel>("");
     const [subLeftMenuWidth, setSubLeftMenuWidth] = useState<number>(0);
@@ -137,6 +136,14 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
             if(response.status === 200) {
                 const json = await response.json() as NodeTypeConfig[];
                 setNodeConfigsList(json);
+                for(const config of json) {
+                    Project.state.nodeTypeConfig[config._key as NodeType] = config;
+                }
+                Project.dispatch({
+                    field: "nodeTypeConfig",
+                    value: {...Project.state.nodeTypeConfig}
+                })
+                console.log(Project.state.nodeTypeConfig);
             } else {
                 setNodeConfigsList(undefined);
             }
@@ -211,7 +218,7 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
                             <LeftPanelEntryTypeSelect />
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
-                            <LeftPanelNodeLibrary nodeConfigsList={nodeConfigsList} />
+                            <LeftPanelNodeLibrary nodeConfigsList={nodeConfigsList} getMotor={getMotor} />
                         </div>
                     </MultiFade>
                 </div>
@@ -282,6 +289,6 @@ export const SchemaEditor = memo(forwardRef<WebGpuMotor, SchemaEditorProps>(({
             </div>
         </div>
     )
-}));
+});
 
 SchemaEditor.displayName = "SchemaEditor";

@@ -28,13 +28,16 @@ import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {NodeTypeConfig} from "../../../../utils/graph/graphType";
 import {disableTextSelection, enableTextSelection} from "../../../../utils/objectUtils";
 import {createNodeFromConfig} from "../../../../utils/graph/nodeUtils";
+import {WebGpuMotor} from "../../../schema/motor/webGpuMotor/index";
 
 interface LeftPanelNodeLibraryProps {
     nodeConfigsList: NodeTypeConfig[] | undefined;
+    getMotor: () => (WebGpuMotor | undefined);
 }
 
 export const LeftPanelNodeLibrary = memo(({
-    nodeConfigsList
+    nodeConfigsList,
+    getMotor
 }: LeftPanelNodeLibraryProps) => {
 
     const [nodeSearch, setNodeSearch] = useState<string>("");
@@ -43,6 +46,7 @@ export const LeftPanelNodeLibrary = memo(({
 
     const Project = useContext(ProjectContext);
     const Theme = useContext(ThemeContext);
+
 
 
     // Group nodes by category
@@ -198,41 +202,17 @@ export const LeftPanelNodeLibrary = memo(({
                         Project.state.selectedSheetId
                     );
 
+                    const pos = getMotor!()!.screenToWorld({
+                        x: evt.clientX,
+                        y: evt.clientY,
+                    })
 
+                    nodeType.posX = pos.x - (nodeType.size.width/2);
+                    nodeType.posY = pos.y - (nodeType.size.height/2);
 
-                    /*
-                    const uniqueId = await Project.state.generateUniqueId!(2);
-            if(!uniqueId) return;
+                    const output = await Project.state.batchCreateElements!([nodeType], []);
+                    // ho boy we're in
 
-            const nodeKey = uniqueId[0];
-            const edgeKey = uniqueId[1];
-
-            const height = 500;
-            const width = 300;
-            nodeType = createNodeFromConfig<NodeTypeEntryType>(
-                NodeTypeEntryTypeConfig,
-                nodeKey,
-                Project.state.graph._key,
-                nodeRoot.sheet
-            );
-            nodeType.posX = nodeRoot.posX - (width+100);
-            nodeType.posY = (nodeRoot.size.height/2)-(height/2);
-            nodeType.data!._key = dataType._key
-
-            const edge:Edge = {
-                _key: edgeKey,
-                source: nodeKey,
-                target: nodeRoot._key,
-                sheet: nodeType.sheet,
-                graphKey: Project.state.graph._key,
-                sourceHandle: "0",
-                undeletable: true,
-                targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
-                style: "curved"
-            }
-
-            const output = await Project.state.batchCreateElements!([nodeType], [edge]);
-                     */
                 }
             }
 

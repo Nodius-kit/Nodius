@@ -228,7 +228,7 @@ export const App = () => {
 
                 <DashboardWorkFlow />
 
-                <SchemaEditor returnToMenu={returnToMenu} />
+                <SchemaEditor returnToMenu={returnToMenu} getMotor={() => gpuMotor.current!} />
             </MultiFade>
 
         </div>
