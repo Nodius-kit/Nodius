@@ -19,6 +19,7 @@ import {ActionContext, EditedNodeHandle, EditedNodeTypeConfig} from "../../hooks
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {deepCopy, disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
+import {Point} from "../motor/webGpuMotor/types";
 
 
 export const rectangleWidth = 13;
@@ -666,7 +667,11 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             //update
             overlay.side[side]!.forEach((point) => {
                 const handleInfo = getHandleInfo(node, point.id);
-                const pos = getHandlePosition(node, point.id)!;
+                const absolute_pos = getHandlePosition(node, point.id)!; // getHandlePosition return world position
+                const pos:Point = { // make it local/relative
+                    x: absolute_pos.x - node!.posX,
+                    y: absolute_pos.y - node!.posY,
+                }
                 if(!handleInfo || !pos) return;
 
                 // Update text content if it changed
