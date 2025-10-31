@@ -1,6 +1,3 @@
-
-
-
 /*
  create at 5 am, don't ask me what im doing here, you need a beer and multiple hour to work on it
 
@@ -11,7 +8,7 @@
 
 import {WebGpuMotor} from "../motor/webGpuMotor";
 import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
-import {useCallback, useContext, useEffect} from "react";
+import {useCallback, useContext, useEffect, useRef} from "react";
 import {ActionContext, ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {getHandleInfo, getHandlePosition} from "../motor/webGpuMotor/handleUtils";
 import {Edge, Node, handleSide} from "../../../utils/graph/graphType";
@@ -35,6 +32,12 @@ export const useEdgeHandler = ({
 
     const Project = useContext(ProjectContext);
 
+    // Keep the latest Project context to avoid stale closures in window handlers
+    const projectRef = useRef(Project);
+    useEffect(() => {
+        projectRef.current = Project;
+    }, [Project]);
+
     const isValidConnection = (sourceNode:Node<any>, sourceHandle:HandleInfo, targetNode:Node<any>, targetHandle:HandleInfo) => {
         if(sourceNode._key === targetNode._key) return false; // obviously ...
 
@@ -53,86 +56,37 @@ export const useEdgeHandler = ({
      * @param maxDistance - Maximum search distance in world units (default: 150)
      * @returns ClosestHandleResult or null if no valid handle found
      */
-    const findClosestValidHandle = useCallback((
-        cursorWorldPos: Point,
-        baseNode: Node<any>,
-        baseHandleInfo: HandleInfo,
-        maxDistance: number = 150
-    ): ClosestHandleResult | null => {
-        const scene = gpuMotor.getScene();
-        if (!scene || !Project.state.graph || !Project.state.selectedSheetId) return null;
+    const findClosestValidHandle = useCallback((cursorWorldPos: Point, fromNode: Node<any>, fromHandleInfo: HandleInfo, maxDistance: number): ClosestHandleResult | undefined => {
+        const Project = projectRef.current;
+        if(!Project.state.graph || !Project.state.selectedSheetId) return undefined;
 
         const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
-        if (!sheet) return null;
+        if(!sheet) return undefined;
 
-        // Determine what type we're looking for (opposite of base)
-        const lookingForType: "in" | "out" = baseHandleInfo.point.type === "out" ? "in" : "out";
+        let closestResult: ClosestHandleResult | undefined;
+        let closestDistanceSq = maxDistance * maxDistance;
 
-        let closestResult: ClosestHandleResult | null = null;
-        let closestDistanceSq = maxDistance * maxDistance; // Use squared distance to avoid sqrt
+        for (const node of sheet.nodeMap.values()) {
+            if (node._key === fromNode._key) continue;
 
-        // Iterate through visible nodes only (spatial optimization)
-        const visibleNodeIds = Array.from(scene.nodes.keys());
+            const handles = node.handles;
+            if(!handles) continue;
 
-        for (const nodeId of visibleNodeIds) {
-            const node = scene.nodes.get(nodeId)!;
+            for (const h of Object.values(handles)) {
+                for (const point of h.point) {
+                    const handleInfo = getHandleInfo(node, point.id);
+                    if (!handleInfo) continue;
 
-            // Skip the base node
-            if (node._key === baseNode._key) continue;
+                    // Prevent connecting two outputs or two inputs
+                    if (handleInfo.point.type === fromHandleInfo.point.type) continue;
 
-            // Skip if node is string-sized (can't calculate position)
-            if (typeof node.size === "string") continue;
-
-            // Quick AABB check: is cursor even close to this node?
-            const nodeMinX = node.posX;
-            const nodeMaxX = node.posX + node.size.width;
-            const nodeMinY = node.posY;
-            const nodeMaxY = node.posY + node.size.height;
-
-            // Expand bounds by maxDistance for quick rejection
-            if (
-                cursorWorldPos.x < nodeMinX - maxDistance ||
-                cursorWorldPos.x > nodeMaxX + maxDistance ||
-                cursorWorldPos.y < nodeMinY - maxDistance ||
-                cursorWorldPos.y > nodeMaxY + maxDistance
-            ) {
-                continue; // Skip this node, cursor is too far
-            }
-
-            // Check all handles on this node
-            for (const [sideKey, handleGroup] of Object.entries(node.handles)) {
-                const side = sideKey as handleSide;
-                if (side === "0") continue; // Skip center handles
-
-                for (let i = 0; i < handleGroup.point.length; i++) {
-                    const point = handleGroup.point[i];
-
-                    // Type check: must be opposite type
-                    if (point.type !== lookingForType) continue;
-
-                    // Validation check
-                    const handleInfo: HandleInfo = {
-                        side,
-                        offset: point.offset ?? (handleGroup.position === "separate" ? (i + 0.5) / handleGroup.point.length : 0.5),
-                        point,
-                        position: handleGroup.position,
-                        index: i
-                    };
-
-                    if (!isValidConnection(baseNode, baseHandleInfo, node, handleInfo)) {
-                        continue;
-                    }
-
-                    // Calculate handle position
                     const handlePos = getHandlePosition(node, point.id);
                     if (!handlePos) continue;
 
-                    // Calculate squared distance (faster than sqrt)
                     const dx = handlePos.x - cursorWorldPos.x;
                     const dy = handlePos.y - cursorWorldPos.y;
                     const distanceSq = dx * dx + dy * dy;
 
-                    // Update closest if this is nearer
                     if (distanceSq < closestDistanceSq) {
                         closestDistanceSq = distanceSq;
                         closestResult = {
@@ -148,13 +102,14 @@ export const useEdgeHandler = ({
         }
 
         return closestResult;
-    }, [Project.state.graph, Project.state.selectedSheetId]);
+    }, []);
 
     const createATemporaryEdge = useCallback(async (e:MouseEvent, nodeId:string, pointId:string) => {
 
-        if(!Project.state.generateUniqueId || !Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
+        const ProjectNow = projectRef.current;
+        if(!ProjectNow.state.generateUniqueId || !ProjectNow.state.graph || !ProjectNow.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
 
-        let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+        let node = ProjectNow.state.graph.sheets[ProjectNow.state.selectedSheetId].nodeMap.get(nodeId);
         if(!node) return;
 
         let handleInfo = getHandleInfo(node, pointId);
@@ -164,7 +119,7 @@ export const useEdgeHandler = ({
         e.stopPropagation();
         disableTextSelection();
 
-        const uniqId = await Project.state.generateUniqueId(1);
+        const uniqId = await ProjectNow.state.generateUniqueId(1);
         if(!uniqId) return;
 
         const temporaryEdge:Partial<Edge> = {
@@ -201,12 +156,10 @@ export const useEdgeHandler = ({
         const mouseMove = (e:MouseEvent) => {
             if(frameId) cancelAnimationFrame(frameId);
             frameId = requestAnimationFrame(() => {
-                if(!Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
-                const cursorPos:Point = {
-                    x: e.clientX,
-                    y: e.clientY
-                }
-                let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+                const P = projectRef.current;
+                if(!P.state.graph || !P.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
+                const cursorPos:Point = { x: e.clientX, y: e.clientY };
+                let node = P.state.graph.sheets[P.state.selectedSheetId].nodeMap.get(nodeId);
                 if(!node) return;
 
                 let handleInfo = getHandleInfo(node, pointId);
@@ -242,15 +195,15 @@ export const useEdgeHandler = ({
             });
         }
         const mouseUp = async (e:MouseEvent) => {
-            if(!Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges || !Project.state.batchCreateElements) return;
+            const P = projectRef.current;
+            if(!P.state.graph || !P.state.selectedSheetId || !gpuMotor.getScene()?.edges || !P.state.batchCreateElements) return;
 
             window.removeEventListener('mousemove', mouseMove);
             window.removeEventListener('mouseup', mouseUp);
             enableTextSelection();
 
-            let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+            let node = P.state.graph.sheets[P.state.selectedSheetId].nodeMap.get(nodeId);
             if(!node) return;
-
             let handleInfo = getHandleInfo(node, pointId);
             if(!handleInfo) return;
 
@@ -273,17 +226,14 @@ export const useEdgeHandler = ({
             }
 
             if(previousFound) {
-                const output = await Project.state.batchCreateElements([], [temporaryEdge as Edge]);
-                console.log(output);
+                const output = await P.state.batchCreateElements([], [temporaryEdge as Edge]);
             }
 
-
             gpuMotor.requestRedraw();
-
         }
         window.addEventListener('mousemove', mouseMove);
         window.addEventListener('mouseup', mouseUp);
-    }, [Project.state.generateUniqueId,Project.state.graph,Project.state.selectedSheetId,Project.state.batchCreateElements, findClosestValidHandle]);
+    }, [/* keep only gpuMotor + ref-based getters to avoid stale context */ gpuMotor, findClosestValidHandle]);
 
 
     return {

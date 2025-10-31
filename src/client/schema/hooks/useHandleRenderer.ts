@@ -644,7 +644,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             const currentPointIds = new Set(handleGroup.point.map(p => p.id));
             overlay.side[side] = overlay.side[side]!.filter(({ id, element, configElement, textElement }) => {
                 if (!currentPointIds.has(id)) {
-                    console.log("remove", id);
                     element.remove();
                     configElement?.remove();
                     textElement?.remove();
@@ -687,7 +686,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 }
                 if(!handleInfo || !pos) return;
 
-                console.log("update", node._key);
                 point.element.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
 
                 // Update text content if it changed
