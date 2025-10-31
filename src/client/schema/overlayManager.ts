@@ -69,7 +69,6 @@ export class OverlayManager {
 
     /**
      * Update overlay positions and sizes.
-     * Uses CSS coordinates to account for browser zoom.
      * @param nodeKeys optional – update only these keys (or all if omitted)
      */
     private updateOverlays(nodeKeys?: string | string[]): void {
@@ -78,8 +77,7 @@ export class OverlayManager {
         const toUpdate = this.getOverlaysToUpdate(nodeKeys);
 
         for (const overlay of toUpdate) {
-            // Use CSS coordinates instead of buffer coordinates to account for browser zoom
-            const rect = this.gpuMotor.getNodeScreenRectCss(overlay.nodeKey);
+            const rect = this.gpuMotor.getNodeScreenRect(overlay.nodeKey);
             if (!rect) continue;
 
             const inv = 1 / scale;

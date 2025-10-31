@@ -433,9 +433,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
 
 
-        // Position overlay using CSS coordinates (accounts for browser zoom)
+        // Position overlay
         const transform = gpuMotor.current.getTransform();
-        const rect = gpuMotor.current.getNodeScreenRectCss(node._key)!;
+        const rect = gpuMotor.current.getNodeScreenRect(node._key)!;
 
         overlay.style.zoom = nodeHTML.style.zoom = transform.scale + "";
         overlay.style.left = nodeHTML.style.left = `${rect.x / transform.scale}px`;
