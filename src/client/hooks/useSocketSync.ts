@@ -433,6 +433,9 @@ export const useSocketSync = () => {
             response.missingMessages.forEach((m) => {
                 if(m.instructions) {
                     for (const i of m.instructions) {
+                        if(i.dontApplyToMySelf) {
+                            delete i.dontApplyToMySelf;
+                        }
                         if (i.animatePos) {
                             delete i.animatePos; // no need animation when try to caught up the current graph
                         }
@@ -635,6 +638,9 @@ export const useSocketSync = () => {
             response.missingMessages.forEach((m) => {
                 if(m.instructions) {
                     for (const i of m.instructions) {
+                        if(i.dontApplyToMySelf) {
+                            delete i.dontApplyToMySelf;
+                        }
                         if (i.animatePos) {
                             delete i.animatePos; // no need animation when try to caught up the current graph
                         }
@@ -992,7 +998,7 @@ export const useSocketSync = () => {
             status: true,
             config: nodeConfig
         }
-    }, [currentEditConfig]);
+    }, []);
 
     const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
         if(!currentEditConfig.current) return;
@@ -1018,9 +1024,10 @@ export const useSocketSync = () => {
 
             // Update current edit config
             currentEditConfig.current = {
-                ...currentEditConfig.current,
+                node: nodeConfig.node as Node<any>,
                 config: nodeConfig
             };
+            console.log(deepCopy(currentEditConfig.current));
 
             // Dispatch editedNodeConfig update
             Project.dispatch({

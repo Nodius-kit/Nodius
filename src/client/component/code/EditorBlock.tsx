@@ -44,6 +44,8 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         };
     };
 
+    const disableSendEvent = useRef<boolean>(false);
+
     const applyChange = (changes: TextChangeInfo | TextChangeInfo[]) => {
         if(!Project.state.editedCode) return;
         const normalizedChanges = Array.isArray(changes) ? changes : [changes];
@@ -58,6 +60,8 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         }));
 
 
+
+        console.log(normalizedChanges);
         currentEditor.baseText = applyTextChanges(currentEditor.baseText, normalizedChanges)
         Project.dispatch({
             field: "editedCode",
@@ -65,8 +69,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         });
 
         if (viewRef.current) {
-            const selection = viewRef.current.state.selection;
-            console.log(selection);
+            disableSendEvent.current = true;
             viewRef.current.dispatch({ changes: cmChanges });
         }
     };
@@ -86,13 +89,19 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
     const avoidNextUpdate = useRef<boolean>(false);
 
     const sendChanges = useCallback(async (changes: TextChangeInfo[]) : Promise<boolean> => {
-        if (!Project.state.editedCode || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId) return false;
+        if (!Project.state.editedCode || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId ) return false;
+        if(disableSendEvent.current) {
+            disableSendEvent.current = false;
+            return false;
+        }
 
         const currentEditor = Project.state.editedCode[index]
         if(!currentEditor) return false;
 
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(currentEditor.nodeId);
         if(!node) return false;
+
+        console.log("send change", changes);
 
         const oldBaseText = currentEditor.baseText;
         const newBaseText = applyTextChanges(oldBaseText, changes.map(c => ({ from: c.from, to: c.to, insert: c.insert })));
@@ -119,13 +128,13 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
             return {
                 nodeId: currentEditor.nodeId,
                 i: instruction.instruction,
-                dontApplyToMySelf: true,
             };
         });
 
         const output = await Project.state.updateGraph(instructions);
 
         if (!output.status) {
+            console.log(output);
             // Rollback to old baseText, may lose concurrent remote changes in race conditions
             currentEditor.baseText = oldBaseText;
             Project.dispatch({
@@ -144,7 +153,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
     }, [Project.state.updateGraph, Project.state.editedCode, Project.state.graph, Project.state.selectedSheetId, index]);
 
     useEffect(() => {
-        if (!Project.state.editedCode || !editorRef.current) return;
+        if (!Project.state.editedCode || !editorRef.current || viewRef.current) return;
 
         const currentEditor = Project.state.editedCode[index]
         if(!currentEditor) return;
@@ -234,10 +243,6 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
 
         viewRef.current = view;
 
-        return () => {
-            view.destroy();
-            viewRef.current = null;
-        };
     }, [Project.state.editedCode, sendChanges, index]);
 
     const editorStyle = {

@@ -143,7 +143,6 @@ export const SchemaEditor = memo(({returnToMenu, getMotor}:SchemaEditorProps) =>
                     field: "nodeTypeConfig",
                     value: {...Project.state.nodeTypeConfig}
                 })
-                console.log(Project.state.nodeTypeConfig);
             } else {
                 setNodeConfigsList(undefined);
             }

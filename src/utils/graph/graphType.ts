@@ -62,7 +62,7 @@ export interface Node<T> {
     },
     posX: number,
     posY: number,
-    process?:string,
+    process:string,
     handles: Partial<Record<handleSide, {
         position: "separate" | "fix",
         point: Array<{
@@ -209,6 +209,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
     alwaysRendered: true,
     node: {
         type: "html",
+        process: "",
         handles: {
             0: {
                 position: "fix",
@@ -328,6 +329,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
 
     node: {
         type: "entryType",
+        process: "",
         handles: {
             0: {
                 position: "fix",

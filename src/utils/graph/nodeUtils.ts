@@ -140,6 +140,7 @@ export const createNodeFromConfig = <T = any>(config:NodeTypeConfig, nodeKey:str
         type: config._key,
         data: config.node.data,
         handles: config.node.handles,
+        process: config.node.process,
     }
     return deepCopy(node);
 }

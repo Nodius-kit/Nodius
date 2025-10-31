@@ -415,9 +415,9 @@ const CodeEditorModal = memo(() => {
                         </div>
                     )}
                     <div style={editorStyle}>
-                        {Project.state.editedCode.map((_, index) => (
+                        {Project.state.editedCode.map((editor, index) => (
                             <div
-                                key={index}
+                                key={index+"-"+editor.title}
                                 style={{
                                     display: index === activeTabIndex ? 'block' : 'none',
                                     height: '100%'

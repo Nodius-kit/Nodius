@@ -320,7 +320,8 @@ export const DashboardNodeConfigurations = memo(({
                     width: 300,
                     height: 300,
                 },
-                data: undefined
+                data: undefined,
+                process: ""
             }
         };
 
