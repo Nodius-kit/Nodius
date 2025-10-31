@@ -38,6 +38,10 @@ export class InputHandler {
 	private onUserMove: () => void;
 	private onConstrainTransform?: () => void;
 
+	public getIsPanning(): boolean {
+		return this.isPanning;
+	}
+
 	constructor(
 		canvas: HTMLCanvasElement,
 		transform: ViewTransform,

@@ -283,9 +283,6 @@ export const useEdgeHandler = ({
         window.addEventListener('mouseup', mouseUp);
     }
 
-    useEffect(() => {
-        console.log(Project.state.selectedEdge);
-    }, [Project.state.selectedEdge]);
 
     return {
         createATemporaryEdge,

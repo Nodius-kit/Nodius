@@ -303,13 +303,13 @@ export class EdgeRenderer {
 				if (isSelected) {
 					// Create multi-layer glow effect (similar to CSS box-shadow layers)
 					// Outer glow layer (widest, most transparent)
-					this.createGlowLineSegment(sourcePos, targetPos, 8, 0.15, selectedEdgeVertices);
+					this.createGlowLineSegment(sourcePos, targetPos, 8, 0.15/2, selectedEdgeVertices);
 					// Mid glow layer
-					this.createGlowLineSegment(sourcePos, targetPos, 5, 0.3, selectedEdgeVertices);
+					this.createGlowLineSegment(sourcePos, targetPos, 5, 0.3/2, selectedEdgeVertices);
 					// Inner glow layer
-					this.createGlowLineSegment(sourcePos, targetPos, 3, 0.5, selectedEdgeVertices);
+					this.createGlowLineSegment(sourcePos, targetPos, 3, 0.5/2, selectedEdgeVertices);
 					// Core line (brightest)
-					this.createGlowLineSegment(sourcePos, targetPos, 1.5, 0.8, selectedEdgeVertices);
+					this.createGlowLineSegment(sourcePos, targetPos, 1.5, 0.8/2, selectedEdgeVertices);
 				} else {
 					edgeVertices.push(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y);
 				}
@@ -336,10 +336,10 @@ export class EdgeRenderer {
 
 					if (isSelected) {
 						// Create multi-layer glow effect for each segment
-						this.createGlowLineSegment(p1, p2, 8, 0.15, selectedEdgeVertices);
-						this.createGlowLineSegment(p1, p2, 5, 0.3, selectedEdgeVertices);
-						this.createGlowLineSegment(p1, p2, 3, 0.5, selectedEdgeVertices);
-						this.createGlowLineSegment(p1, p2, 1.5, 0.8, selectedEdgeVertices);
+						this.createGlowLineSegment(p1, p2, 8, 0.15/2, selectedEdgeVertices);
+						this.createGlowLineSegment(p1, p2, 5, 0.3/2, selectedEdgeVertices);
+						this.createGlowLineSegment(p1, p2, 3, 0.5/2, selectedEdgeVertices);
+						this.createGlowLineSegment(p1, p2, 1.5, 0.8/2, selectedEdgeVertices);
 					} else {
 						edgeVertices.push(p1.x, p1.y, p2.x, p2.y);
 					}

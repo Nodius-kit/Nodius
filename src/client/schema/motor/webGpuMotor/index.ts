@@ -236,8 +236,25 @@ export class WebGpuMotor implements GraphicalMotor {
 			}
 		});
 
+		// Track if user dragged to prevent click events after pan
+		let didDrag = false;
+		this.canvas.addEventListener("mousedown", () => {
+			didDrag = false;
+		});
+		this.canvas.addEventListener("mousemove", () => {
+			if (this.inputHandler?.getIsPanning()) {
+				didDrag = true;
+			}
+		});
+
 		// Click for selection
 		this.canvas.addEventListener("click", (e) => {
+			// Don't emit click events if user was dragging/panning
+			if (didDrag) {
+				didDrag = false;
+				return;
+			}
+
 			const rect = this.canvas!.getBoundingClientRect();
 			const sx = e.clientX - rect.left;
 			const sy = e.clientY - rect.top;
