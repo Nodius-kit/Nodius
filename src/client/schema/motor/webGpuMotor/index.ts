@@ -556,6 +556,19 @@ export class WebGpuMotor implements GraphicalMotor {
 		};
 	}
 
+	/**
+	 * Convert canvas buffer coordinates to CSS pixel coordinates
+	 * Accounts for browser zoom by scaling based on CSS size vs canvas buffer ratio
+	 */
+	private bufferToCssCoords(bufferX: number, bufferY: number): Point {
+		if (!this.canvas) return { x: bufferX, y: bufferY };
+		const rect = this.canvas.getBoundingClientRect();
+		return {
+			x: bufferX * (rect.width / this.canvas.width),
+			y: bufferY * (rect.height / this.canvas.height)
+		};
+	}
+
 	public screenToWorld(point: Point): Point {
 		return {
 			x: (point.x - this.transform.translateX) / this.transform.scale,
@@ -586,6 +599,23 @@ export class WebGpuMotor implements GraphicalMotor {
 			y: tl.y,
 			width: br.x - tl.x,
 			height: br.y - tl.y,
+		};
+	}
+
+	/**
+	 * Get node screen rectangle in CSS pixel coordinates (for HTML overlays)
+	 * Accounts for browser zoom
+	 */
+	public getNodeScreenRectCss(nodeId: string): { x: number; y: number; width: number; height: number } | undefined {
+		const bufferRect = this.getNodeScreenRect(nodeId);
+		if (!bufferRect) return undefined;
+		const topLeft = this.bufferToCssCoords(bufferRect.x, bufferRect.y);
+		const bottomRight = this.bufferToCssCoords(bufferRect.x + bufferRect.width, bufferRect.y + bufferRect.height);
+		return {
+			x: topLeft.x,
+			y: topLeft.y,
+			width: bottomRight.x - topLeft.x,
+			height: bottomRight.y - topLeft.y,
 		};
 	}
 
