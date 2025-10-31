@@ -259,7 +259,7 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	private isPointNearEdge(point: Point, edge: Edge): boolean {
 		if (!this.scene) return false;
-		const pathPoints = this.edgeRenderer!.getEdgePathPoints(this.scene, edge, this.screenToWorld, 10);
+		const pathPoints = this.edgeRenderer!.getEdgePathPoints(this.scene, edge, this.screenToWorld.bind(this), 10);
 		if (pathPoints.length < 2) return false;
 		const threshold = 5 / this.transform.scale; // 5 pixels in screen space
 		for (let i = 0; i < pathPoints.length - 1; i++) {
@@ -495,7 +495,6 @@ export class WebGpuMotor implements GraphicalMotor {
 	}
 
 	public screenToWorld(point: Point): Point {
-		console.trace();
 		return {
 			x: (point.x - this.transform.translateX) / this.transform.scale,
 			y: (point.y - this.transform.translateY) / this.transform.scale,

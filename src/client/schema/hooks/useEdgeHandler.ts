@@ -89,8 +89,26 @@ export const useEdgeHandler = ({
             let handleInfo = getHandleInfo(node, pointId);
             if(!handleInfo) return;
 
+            if(handleInfo.point.type === "out") {
+                let edges = gpuMotor.getScene()!.edges.get("source-"+nodeId) ?? [];
+                edges = edges.filter((e) => e._key !== temporaryEdge._key);
+                if(edges.length === 0) {
+                    gpuMotor.getScene()!.edges.delete("source-"+nodeId);
+                } else {
+                    gpuMotor.getScene()!.edges.set("source-"+nodeId, edges);
+                }
+            } else {
+                let edges = gpuMotor.getScene()!.edges.get("target-"+nodeId) ?? [];
+                edges = edges.filter((e) => e._key !== temporaryEdge._key);
+                if(edges.length === 0) {
+                    gpuMotor.getScene()!.edges.delete("target-"+nodeId);
+                } else {
+                    gpuMotor.getScene()!.edges.set("target-"+nodeId, edges);
+                }
+            }
 
 
+            gpuMotor.requestRedraw();
 
         }
         window.addEventListener('mousemove', mouseMove);

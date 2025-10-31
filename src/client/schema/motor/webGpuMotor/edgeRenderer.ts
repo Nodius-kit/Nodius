@@ -122,6 +122,7 @@ export class EdgeRenderer {
 		const sourcePos = !sourceNode && isTemporary ? screenToWorld(this.cursorPosition) : getHandlePosition(sourceNode!, edge.sourceHandle);
 		const targetPos = !targetNode && isTemporary && sourceNode ? screenToWorld(this.cursorPosition) : getHandlePosition(targetNode!, edge.targetHandle);
 
+		console.log(sourceNode, targetPos);
 		if (!sourcePos || !targetPos) return [];
 
 		const points: Point[] = [];
