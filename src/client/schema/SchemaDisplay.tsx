@@ -23,7 +23,7 @@
 import {memo, useContext, useEffect, useRef, forwardRef, useCallback} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
-import {Node} from "../../utils/graph/graphType";
+import {Edge, Node} from "../../utils/graph/graphType";
 import {deepCopy, disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
 import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {NodeAnimationManager} from "./nodeAnimations";
@@ -626,8 +626,18 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             overlay.requestUpdate();
         };
 
+        const handleEdgeClick = (edge: Edge, edgeKey: string) => {
+            // Sync motor selection to React context
+            const motorSelected = motor.getSelectedEdges();
+            Project.dispatch({
+                field: "selectedEdge",
+                value: motorSelected
+            });
+        };
+
         motor.on("pan", handlePan);
         motor.on("zoom", handleZoom);
+        motor.on("edgeClick", handleEdgeClick);
 
         return () => {
             motor.off("nodeEnter", nodeEnter);
@@ -635,8 +645,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             motor.off("pan", handlePan);
             motor.off("zoom", handleZoom);
             motor.off("reset", onReset);
+            motor.off("edgeClick", handleEdgeClick);
         };
     }, [nodeEnter, nodeLeave, onReset]);
+
+    // Sync selected edges from context to motor and renderer
+    useEffect(() => {
+        if (!gpuMotor.current) return;
+        gpuMotor.current.setSelectedEdges(Project.state.selectedEdge);
+    }, [Project.state.selectedEdge]);
 
     // Retry pending node enters when nodeTypeConfig changes
     useEffect(() => {

@@ -73,6 +73,8 @@ export class WebGpuMotor implements GraphicalMotor {
 	private prevVisibleNodes: Set<string> = new Set();
 	private relevantEdges: Edge[] = [];
 	private interactiveEnabled: boolean = true;
+	private hoveredEdge: Edge | null = null;
+	private selectedEdges: Set<string> = new Set();
 	private maxZoom: number = 1;
 	private minZoom: number = 1;
 
@@ -207,6 +209,34 @@ export class WebGpuMotor implements GraphicalMotor {
 	private setupClickEvents(): void {
 		if (!this.canvas) return;
 
+		// Mouse move for hover detection
+		this.canvas.addEventListener("mousemove", (e) => {
+			const rect = this.canvas!.getBoundingClientRect();
+			const sx = e.clientX - rect.left;
+			const sy = e.clientY - rect.top;
+			const world = this.screenToWorld({ x: sx, y: sy });
+
+			if (this.scene) {
+				let foundEdge: Edge | null = null;
+
+				// Check edges
+				for (const edge of this.relevantEdges) {
+					if (this.isPointNearEdge(world, edge)) {
+						foundEdge = edge;
+						break;
+					}
+				}
+
+				// Update hover state
+				if (foundEdge !== this.hoveredEdge) {
+					this.hoveredEdge = foundEdge;
+					this.canvas!.style.cursor = foundEdge ? "pointer" : "default";
+					this.requestRedraw();
+				}
+			}
+		});
+
+		// Click for selection
 		this.canvas.addEventListener("click", (e) => {
 			const rect = this.canvas!.getBoundingClientRect();
 			const sx = e.clientX - rect.left;
@@ -219,6 +249,8 @@ export class WebGpuMotor implements GraphicalMotor {
 			if (this.scene) {
 				for (const edge of this.relevantEdges) {
 					if (this.isPointNearEdge(world, edge)) {
+						// Toggle selection
+						this.toggleEdgeSelection(edge._key);
 						this.emit("edgeClick", edge, edge._key);
 						return;
 					}
@@ -538,6 +570,28 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	public isInteractive(): boolean {
 		return this.interactiveEnabled;
+	}
+
+	public setSelectedEdges(edgeKeys: string[]): void {
+		this.selectedEdges = new Set(edgeKeys);
+		this.requestRedraw();
+	}
+
+	public getSelectedEdges(): string[] {
+		return Array.from(this.selectedEdges);
+	}
+
+	public toggleEdgeSelection(edgeKey: string): void {
+		if (this.selectedEdges.has(edgeKey)) {
+			this.selectedEdges.delete(edgeKey);
+		} else {
+			this.selectedEdges.add(edgeKey);
+		}
+		this.requestRedraw();
+	}
+
+	public getHoveredEdge(): Edge | null {
+		return this.hoveredEdge;
 	}
 
 	public resetViewport(): void {

@@ -11,7 +11,7 @@
 
 import {WebGpuMotor} from "../motor/webGpuMotor";
 import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
-import {useContext} from "react";
+import {useContext, useEffect} from "react";
 import {ActionContext, ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {getHandleInfo, getHandlePosition} from "../motor/webGpuMotor/handleUtils";
 import {Edge, Node, handleSide} from "../../../utils/graph/graphType";
@@ -282,6 +282,10 @@ export const useEdgeHandler = ({
         window.addEventListener('mousemove', mouseMove);
         window.addEventListener('mouseup', mouseUp);
     }
+
+    useEffect(() => {
+        console.log(Project.state.selectedEdge);
+    }, [Project.state.selectedEdge]);
 
     return {
         createATemporaryEdge,

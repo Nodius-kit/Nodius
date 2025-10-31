@@ -33,6 +33,8 @@ export class EdgeRenderer {
 	private cursorPosition: Point = {x:0, y:0};
 	private cursorEvent: ((e:MouseEvent) => void);
 	private screenToWorld:((point: Point) => Point );
+	private selectedEdges: Set<string> = new Set();
+	private hoveredEdge: string | null = null;
 
 	constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number, canvas: HTMLCanvasElement, screenToWorld:((point: Point) => Point )) {
 		this.device = device;
@@ -220,6 +222,14 @@ export class EdgeRenderer {
 			passEncoder.setVertexBuffer(0, this.edgeVertexBuffer);
 			passEncoder.draw(this.edgeVertexCount);
 		}
+	}
+
+	public setSelectedEdges(edgeKeys: string[]): void {
+		this.selectedEdges = new Set(edgeKeys);
+	}
+
+	public setHoveredEdge(edgeKey: string | null): void {
+		this.hoveredEdge = edgeKey;
 	}
 
 	public dispose(): void {
