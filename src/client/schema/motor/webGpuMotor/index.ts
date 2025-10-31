@@ -212,9 +212,10 @@ export class WebGpuMotor implements GraphicalMotor {
 		// Mouse move for hover detection
 		this.canvas.addEventListener("mousemove", (e) => {
 			const rect = this.canvas!.getBoundingClientRect();
-			const sx = e.clientX - rect.left;
-			const sy = e.clientY - rect.top;
-			const world = this.screenToWorld({ x: sx, y: sy });
+			const cssX = e.clientX - rect.left;
+			const cssY = e.clientY - rect.top;
+			const bufferCoords = this.cssToBufferCoords(cssX, cssY);
+			const world = this.screenToWorld(bufferCoords);
 
 			if (this.scene) {
 				let foundEdge: Edge | null = null;
@@ -256,9 +257,10 @@ export class WebGpuMotor implements GraphicalMotor {
 			}
 
 			const rect = this.canvas!.getBoundingClientRect();
-			const sx = e.clientX - rect.left;
-			const sy = e.clientY - rect.top;
-			const world = this.screenToWorld({ x: sx, y: sy });
+			const cssX = e.clientX - rect.left;
+			const cssY = e.clientY - rect.top;
+			const bufferCoords = this.cssToBufferCoords(cssX, cssY);
+			const world = this.screenToWorld(bufferCoords);
 
 			this.computeVisibility();
 
@@ -538,6 +540,19 @@ export class WebGpuMotor implements GraphicalMotor {
 		return {
 			x: point.x * this.transform.scale + this.transform.translateX,
 			y: point.y * this.transform.scale + this.transform.translateY,
+		};
+	}
+
+	/**
+	 * Convert CSS pixel coordinates to canvas buffer coordinates
+	 * Accounts for browser zoom by scaling based on canvas buffer vs CSS size ratio
+	 */
+	private cssToBufferCoords(cssX: number, cssY: number): Point {
+		if (!this.canvas) return { x: cssX, y: cssY };
+		const rect = this.canvas.getBoundingClientRect();
+		return {
+			x: cssX * (this.canvas.width / rect.width),
+			y: cssY * (this.canvas.height / rect.height)
 		};
 	}
 

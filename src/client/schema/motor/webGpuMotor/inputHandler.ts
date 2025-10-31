@@ -72,6 +72,18 @@ export class InputHandler {
 		this.interactiveEnabled = enabled;
 	}
 
+	/**
+	 * Get the ratio between canvas buffer size and CSS size
+	 * This accounts for browser zoom
+	 */
+	private getCanvasScale(): { x: number; y: number } {
+		const rect = this.canvas.getBoundingClientRect();
+		return {
+			x: this.canvas.width / rect.width,
+			y: this.canvas.height / rect.height
+		};
+	}
+
 	public setupMouseEvents(): void {
 		this.canvas.addEventListener("mousedown", (e) => {
 			if (!this.interactiveEnabled) return;
@@ -89,8 +101,10 @@ export class InputHandler {
 				return;
 			}
 			if (this.isPanning) {
-				const dx = e.clientX - this.lastMouseX;
-				const dy = e.clientY - this.lastMouseY;
+				// Account for browser zoom when calculating deltas
+				const scale = this.getCanvasScale();
+				const dx = (e.clientX - this.lastMouseX) * scale.x;
+				const dy = (e.clientY - this.lastMouseY) * scale.y;
 				this.transform.translateX += dx;
 				this.transform.translateY += dy;
 				this.lastMouseX = e.clientX;
@@ -112,8 +126,13 @@ export class InputHandler {
 			if (!this.interactiveEnabled) return;
 			e.preventDefault();
 			const rect = this.canvas.getBoundingClientRect();
-			const mouseX = e.clientX - rect.left;
-			const mouseY = e.clientY - rect.top;
+			// Convert CSS coordinates to buffer coordinates
+			const scale = this.getCanvasScale();
+			const cssMouseX = e.clientX - rect.left;
+			const cssMouseY = e.clientY - rect.top;
+			const mouseX = cssMouseX * scale.x;
+			const mouseY = cssMouseY * scale.y;
+			// Calculate world position under mouse
 			const wx = (mouseX - this.transform.translateX) / this.transform.scale;
 			const wy = (mouseY - this.transform.translateY) / this.transform.scale;
 			const delta = -e.deltaY * 0.001;
