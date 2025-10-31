@@ -12,7 +12,7 @@ import {
 import {lintKeymap} from "@codemirror/lint"
 import { ProjectContext } from "../../hooks/contexts/ProjectContext";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import { applyTextChanges, TextChangeInfo } from "../../../utils/objectUtils";
+import {applyTextChanges, deepCopy, TextChangeInfo} from "../../../utils/objectUtils";
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {
@@ -57,6 +57,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
             insert: c.insert || '',
         }));
 
+
         currentEditor.baseText = applyTextChanges(currentEditor.baseText, normalizedChanges)
         Project.dispatch({
             field: "editedCode",
@@ -64,6 +65,8 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         });
 
         if (viewRef.current) {
+            const selection = viewRef.current.state.selection;
+            console.log(selection);
             viewRef.current.dispatch({ changes: cmChanges });
         }
     };
