@@ -335,6 +335,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             openHtmlEditor: Project.state.openHtmlEditor!,
             getHtmlRenderer: Project.state.getHtmlRenderer!,
             initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer!,
+            removeHtmlRenderer: Project.state.removeHtmlRenderer!,
             getHtmlAllRenderer: Project.state.getHtmlAllRenderer!,
             container: nodeHTML,
             overlayContainer: overlay,
@@ -473,6 +474,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     }, [
         Project.state.nodeTypeConfig,
         Project.state.initiateNewHtmlRenderer,
+        Project.state.removeHtmlRenderer,
         Project.state.openHtmlEditor,
         Project.state.getHtmlRenderer,
         Project.state.getHtmlAllRenderer,
@@ -501,6 +503,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             if (!nodeConfig || nodeConfig.alwaysRendered) return;
         }
 
+        if(Project.state.removeHtmlRenderer) {
+            Project.state.removeHtmlRenderer(nodeId, "");
+        }
+
         const schemaNode = inSchemaNode.current.get(nodeId);
         if (schemaNode) {
 
@@ -515,7 +521,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAnimation(nodeId);
             inSchemaNode.current.delete(nodeId);
         }
-    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, cleanupHandleOverlay]);
+    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, cleanupHandleOverlay, Project.state.removeHtmlRenderer]);
 
     // Reset handler
     const onReset = useCallback(() => {
@@ -541,6 +547,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 openHtmlEditor: Project.state.openHtmlEditor,
                 getHtmlRenderer: Project.state.getHtmlRenderer,
                 initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
+                removeHtmlRenderer: Project.state.removeHtmlRenderer,
                 getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
                 container: schemaNode.element,
                 overlayContainer: schemaNode.overElement,
@@ -567,6 +574,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.openHtmlEditor,
         Project.state.getHtmlRenderer,
         Project.state.initiateNewHtmlRenderer,
+        Project.state.removeHtmlRenderer,
         Project.state.getHtmlAllRenderer,
         Project.state.nodeTypeConfig,
         Project.state.editedHtml,

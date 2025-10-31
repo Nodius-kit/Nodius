@@ -11,7 +11,7 @@ import {
     EditedHtmlType,
     EditedNodeTypeConfig,
     getHtmlRendererType,
-    htmlRenderContext, initiateNewHtmlRendererType
+    htmlRenderContext, initiateNewHtmlRendererType, removeHtmlRendererType
 } from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 
@@ -21,6 +21,7 @@ export interface NodeEventContext {
     openHtmlEditor: OpenHtmlEditorFct;
     getHtmlRenderer: getHtmlRendererType;
     initiateNewHtmlRenderer: initiateNewHtmlRendererType;
+    removeHtmlRenderer: removeHtmlRendererType;
     getHtmlAllRenderer: () =>  Record<string, Record<string, htmlRenderContext>>;
     container: HTMLElement;
     overlayContainer: HTMLElement;
@@ -98,6 +99,7 @@ export class NodeEventManager {
                     "openHtmlEditor",
                     "getHtmlRenderer",
                     "initiateNewHtmlRenderer",
+                    "removeHtmlRenderer",
                     "getHtmlAllRenderer",
                     "container",
                     "overlayContainer",
@@ -112,6 +114,7 @@ export class NodeEventManager {
                     this.context.openHtmlEditor,
                     this.context.getHtmlRenderer,
                     this.context.initiateNewHtmlRenderer,
+                    this.context.removeHtmlRenderer,
                     this.context.getHtmlAllRenderer,
                     this.container,
                     this.overlay,

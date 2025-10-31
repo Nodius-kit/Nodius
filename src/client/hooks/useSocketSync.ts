@@ -168,12 +168,40 @@ export const useSocketSync = () => {
         return htmlRenderer.current[node._key][id];
     };
 
+    const removeHtmlRenderer = (nodeId:string, id:string):boolean => {
+        if(!htmlRenderer.current[nodeId]) {
+            console.warn("No html renderer found for node", nodeId);
+            return false;
+        }
+        if(!htmlRenderer.current[nodeId][id]) {
+            console.warn("Html Renderer with id", id, "does not exist on node", nodeId);
+            return false;
+        }
+
+        // Dispose the HTML motor to clean up resources
+        htmlRenderer.current[nodeId][id].htmlMotor.dispose();
+
+        // Remove the renderer from storage
+        delete htmlRenderer.current[nodeId][id];
+
+        // If no more renderers for this node, remove the node entry
+        if(Object.keys(htmlRenderer.current[nodeId]).length === 0) {
+            delete htmlRenderer.current[nodeId];
+        }
+
+        return true;
+    };
+
     const getHtmlRenderer = (node:string|Node<any>) => htmlRenderer.current[typeof node === "string" ? node : node._key];
     const getHtmlAllRenderer = () => htmlRenderer.current;
     useEffect(() => {
         Project.dispatch({
             field: "initiateNewHtmlRenderer",
             value: initiateNewHtmlRenderer,
+        });
+        Project.dispatch({
+            field: "removeHtmlRenderer",
+            value: removeHtmlRenderer,
         });
         Project.dispatch({
             field: "getHtmlAllRenderer",

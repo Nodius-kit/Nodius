@@ -93,6 +93,7 @@ export type DisabledNodeInteractionType = Record<string, Partial<{
 
 export type getHtmlRendererType = (node:string|Node<any>) =>  Record<string, htmlRenderContext>;
 export type initiateNewHtmlRendererType = (node:Node<any>, id:string, container:HTMLElement, pathOfRender:string[]|HtmlObject, options?:HtmlRenderOption) => Promise<htmlRenderContext|undefined>;
+export type removeHtmlRendererType = (nodeId:string, id:string) => boolean;
 
 export interface ProjectContextType {
     loader: {
@@ -117,6 +118,7 @@ export interface ProjectContextType {
     updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 
     initiateNewHtmlRenderer?: initiateNewHtmlRendererType,
+    removeHtmlRenderer?: removeHtmlRendererType,
     getHtmlRenderer?: getHtmlRendererType,
     getHtmlAllRenderer?: () =>  Record<string, Record<string, htmlRenderContext>>,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
