@@ -746,6 +746,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
         if(!handle) return;
         handle.cleanup();
         handle.container.remove();
+        activeOverlays.current.delete(nodeId); // Remove from map so it can be re-created on re-enter
     }, [])
 
 
