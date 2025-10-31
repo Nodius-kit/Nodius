@@ -31,7 +31,7 @@
  * dispatch({ type: 'reset' }); // Reset to initial
  */
 
-import { useMemo, useReducer } from "react";
+import {ActionDispatch, useMemo, useReducer} from "react";
 
 // Creates a union type for each field-value pair in T
 export type ActionType<T> =
@@ -56,10 +56,19 @@ export const useCreateReducer = <T extends Record<string, any>>({
             } as T;
         }
 
+
         throw new Error('Unknown action type');
     };
 
     const [state, dispatch] = useReducer(reducer, initialState);
 
-    return useMemo(() => ({ state, dispatch }), [state]);
+
+    // debug react state management
+    const d: ActionDispatch<any> = (args:any) => {
+        /*console.log(args);
+        console.trace();*/
+        return dispatch(args);
+    }
+
+    return useMemo(() => ({ state, dispatch:d }), [state]);
 };

@@ -269,6 +269,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     });
 
+    useEffect(() => {
+        console.log(Project.state.selectedNode);
+    }, [Project.state.selectedNode]);
+
     // Node enter handler
     const nodeEnter = useCallback(async (node: Node<any>) => {
         if (!Project.state.nodeTypeConfig[node.type]) {
@@ -343,11 +347,28 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             editedHtml: Project.state.editedHtml,
             editedNodeConfig: Project.state.editedNodeConfig,
             addSelectedNode: (nodeId:string, ctrlKey) => {
-                Project.state.selectedNode.push(nodeId);
-                Project.dispatch({
-                    field: "selectedNode",
-                    value: [...Project.state.selectedNode]
-                })
+                if (ctrlKey) {
+                    // Multi-select: toggle the node
+                    if (Project.state.selectedNode.includes(nodeId)) {
+                        // Remove if already selected
+                        Project.dispatch({
+                            field: "selectedNode",
+                            value: Project.state.selectedNode.filter(id => id !== nodeId)
+                        });
+                    } else {
+                        // Add to selection
+                        Project.dispatch({
+                            field: "selectedNode",
+                            value: [...Project.state.selectedNode, nodeId]
+                        });
+                    }
+                } else {
+                    // Single select: replace selection with just this node
+                    Project.dispatch({
+                        field: "selectedNode",
+                        value: [nodeId]
+                    });
+                }
             },
             selectedNode: Project.state.selectedNode
         });
@@ -554,11 +575,29 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 triggerEventOnNode: triggerEventOnNode,
                 editedHtml: Project.state.editedHtml,
                 editedNodeConfig: Project.state.editedNodeConfig,
-                addSelectedNode: (nodeId:string) => {
-                    Project.dispatch({
-                        field: "selectedNode",
-                        value: [...Project.state.selectedNode, nodeId]
-                    })
+                addSelectedNode: (nodeId:string, ctrlKey) => {
+                    if (ctrlKey) {
+                        // Multi-select: toggle the node
+                        if (Project.state.selectedNode.includes(nodeId)) {
+                            // Remove if already selected
+                            Project.dispatch({
+                                field: "selectedNode",
+                                value: Project.state.selectedNode.filter(id => id !== nodeId)
+                            });
+                        } else {
+                            // Add to selection
+                            Project.dispatch({
+                                field: "selectedNode",
+                                value: [...Project.state.selectedNode, nodeId]
+                            });
+                        }
+                    } else {
+                        // Single select: replace selection with just this node
+                        Project.dispatch({
+                            field: "selectedNode",
+                            value: [nodeId]
+                        });
+                    }
                 },
                 selectedNode: Project.state.selectedNode
             });
@@ -626,7 +665,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             overlay.requestUpdate();
         };
 
-        const handleEdgeClick = (edge: Edge, edgeKey: string) => {
+        const handleEdgeClick = (edge: Edge, edgeKey: string, ctrlKey: boolean) => {
+            // If not ctrl, clear node selection when selecting edge
+            if (!ctrlKey) {
+                Project.dispatch({
+                    field: "selectedNode",
+                    value: []
+                });
+            }
+
             // Sync motor selection to React context
             const motorSelected = motor.getSelectedEdges();
             Project.dispatch({
@@ -635,9 +682,35 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             });
         };
 
+        const handleNodeClick = (node: Node<any>, nodeKey: string, ctrlKey: boolean) => {
+            // If not ctrl, clear edge selection when selecting node
+            if (!ctrlKey) {
+                motor.setSelectedEdges([]);
+                Project.dispatch({
+                    field: "selectedEdge",
+                    value: []
+                });
+            }
+        };
+
+        const handleCanvasClickEmpty = () => {
+            // Clear both node and edge selections
+            Project.dispatch({
+                field: "selectedNode",
+                value: []
+            });
+            motor.setSelectedEdges([]);
+            Project.dispatch({
+                field: "selectedEdge",
+                value: []
+            });
+        };
+
         motor.on("pan", handlePan);
         motor.on("zoom", handleZoom);
         motor.on("edgeClick", handleEdgeClick);
+        motor.on("nodeClick", handleNodeClick);
+        motor.on("canvasClick", handleCanvasClickEmpty);
 
         return () => {
             motor.off("nodeEnter", nodeEnter);
@@ -646,6 +719,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             motor.off("zoom", handleZoom);
             motor.off("reset", onReset);
             motor.off("edgeClick", handleEdgeClick);
+            motor.off("nodeClick", handleNodeClick);
+            motor.off("canvasClick", handleCanvasClickEmpty);
         };
     }, [nodeEnter, nodeLeave, onReset]);
 
@@ -761,14 +836,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     }, []);
 
     const handleCanvasMouseUp = useCallback((e: React.MouseEvent) => {
-        // If mouseup without dragging, reset selected nodes
+        // If mouseup without dragging
         if (!dragState.current.isDragging && !Project.state.editedHtml) {
-            if (Project.state.selectedNode.length > 0) {
+            /*if (Project.state.selectedNode.length > 0) {
                 Project.dispatch({
                     field: "selectedNode",
                     value: []
                 });
-            }
+            }*/
         }
         // Reset drag state
         dragState.current.isDragging = false;

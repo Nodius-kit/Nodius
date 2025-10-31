@@ -46,12 +46,13 @@ export interface ViewTransform {
 export type MotorEventMap = {
 	zoom: (transform: ViewTransform) => void;
 	pan: (transform: ViewTransform) => void;
-	nodeClick: (node: Node<any>, nodeId: string) => void;
-	edgeClick: (edge: Edge, edgeId: string) => void;
+	nodeClick: (node: Node<any>, nodeId: string, ctrlKey: boolean) => void;
+	edgeClick: (edge: Edge, edgeId: string, ctrlKey: boolean) => void;
 	nodeChange: (node: Node<any>, nodeId: string) => void;
 	edgeChange: (edge: Edge, edgeId: string) => void;
 	nodeEnter: (node: Node<any>, nodeId: string) => void;
 	nodeLeave: (node: Node<any> | undefined, nodeId: string) => void; // node will be undefined if the node have been removed
+	canvasClick: () => void;
 	reset: () => void;
 };
 

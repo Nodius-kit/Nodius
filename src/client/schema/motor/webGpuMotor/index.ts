@@ -255,7 +255,7 @@ export class WebGpuMotor implements GraphicalMotor {
 						} else {
 							this.setSelectedEdges([edge._key]);
 						}
-						this.emit("edgeClick", edge, edge._key);
+						this.emit("edgeClick", edge, edge._key, e.ctrlKey);
 						return;
 					}
 				}
@@ -270,10 +270,13 @@ export class WebGpuMotor implements GraphicalMotor {
 						world.y >= node.posY &&
 						world.y <= node.posY + node.size.height
 					) {
-						this.emit("nodeClick", node, node._key);
+						this.emit("nodeClick", node, node._key, e.ctrlKey);
 						return;
 					}
 				}
+
+				// If we get here, nothing was clicked - emit canvas click
+				this.emit("canvasClick");
 			}
 		});
 	}
@@ -349,7 +352,7 @@ export class WebGpuMotor implements GraphicalMotor {
 	}
 
 	public resetScene(): void {
-		this.emit("reset", undefined);
+		this.emit("reset");
 		this.scene = undefined;
 		this.visibleNodes = new Set();
 		this.prevVisibleNodes = new Set();
@@ -506,21 +509,11 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	private emit<K extends keyof MotorEventMap>(
 		event: K,
-		arg: Parameters<MotorEventMap[K]>[0]
-	): void;
-	private emit<K extends keyof MotorEventMap>(
-		event: K,
-		arg: Parameters<MotorEventMap[K]>[0],
-		extra: Parameters<MotorEventMap[K]>[1]
-	): void;
-	private emit<K extends keyof MotorEventMap>(
-		event: K,
-		arg: any,
-		extra?: any
+		...args: Parameters<MotorEventMap[K]>
 	): void {
 		const listeners = this.eventListeners[event];
 		if (listeners) {
-			listeners.forEach((cb) => (cb as any)(arg, extra));
+			listeners.forEach((cb) => (cb as any)(...args));
 		}
 	}
 
