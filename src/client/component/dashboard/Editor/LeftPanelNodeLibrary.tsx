@@ -26,6 +26,8 @@ import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {NodeTypeConfig} from "../../../../utils/graph/graphType";
+import {disableTextSelection, enableTextSelection} from "../../../../utils/objectUtils";
+import {createNodeFromConfig} from "../../../../utils/graph/nodeUtils";
 
 interface LeftPanelNodeLibraryProps {
     nodeConfigsList: NodeTypeConfig[] | undefined;
@@ -41,6 +43,7 @@ export const LeftPanelNodeLibrary = memo(({
 
     const Project = useContext(ProjectContext);
     const Theme = useContext(ThemeContext);
+
 
     // Group nodes by category
     const nodesByCategory = useMemo(() => {
@@ -87,7 +90,157 @@ export const LeftPanelNodeLibrary = memo(({
     }, [nodesByCategory, nodeSearch, categoryFilter]);
 
     const handleMouseDown = async (e:React.MouseEvent, nodeConfig: NodeTypeConfig) => {
-        
+        let haveMoved = false;
+
+        const container = e.currentTarget as HTMLElement;
+        if(!container) return;
+        const containerSize = container.getBoundingClientRect();
+
+        const overlayContainer = document.createElement("div");
+        overlayContainer.style.position = "absolute";
+        overlayContainer.style.left = (e.clientX-(containerSize.width/2))+"px";
+        overlayContainer.style.top = (e.clientY - (containerSize.height / 2))+"px";
+        overlayContainer.style.width = containerSize.width+"px";
+        overlayContainer.style.height = containerSize.height+"px";
+        overlayContainer.style.zIndex = "10000000";
+        overlayContainer.style.display = "flex";
+        overlayContainer.style.flexDirection = "column";
+        overlayContainer.style.justifyContent = "center";
+        overlayContainer.style.alignItems = "center";
+        overlayContainer.style.transition = "box-shadow 300ms ease-in-out";
+
+
+        const toCopyStyle = getComputedStyle(container);
+        overlayContainer.style.border = toCopyStyle.border;
+        overlayContainer.style.borderRadius = toCopyStyle.borderRadius;
+        overlayContainer.style.boxShadow = toCopyStyle.boxShadow;
+
+        overlayContainer.style.backgroundColor = "var(--nodius-background-default)";
+        overlayContainer.innerHTML = container.innerHTML;
+
+        disableTextSelection();
+
+        let lastX = e.clientX;
+        let velocityX = 0;
+        let velocityXAdd = 0;
+        let rotationAngle = 0;
+        let animationId = 0;
+        const whileSwingAnimation = () => {
+            let diff = 0.4;
+            if(velocityXAdd > diff) {
+                velocityXAdd -= diff;
+            } else if(velocityXAdd < -diff) {
+                velocityXAdd += diff;
+            } else {
+                velocityXAdd = 0;
+            }
+            velocityXAdd = Math.max(-45, Math.min(45, velocityXAdd));
+            rotationAngle = Math.max(-45, Math.min(45, velocityXAdd*0.2));
+            overlayContainer.style.transform = `rotate(${rotationAngle}deg)`;
+            animationId = requestAnimationFrame(whileSwingAnimation);
+        }
+
+        animationId = requestAnimationFrame(whileSwingAnimation);
+
+        const hoverCanvas = (posX:number, posY:number) => {
+            const hoverElements = document.elementsFromPoint(posX, posY) as HTMLElement[];
+            const canvasIndex = hoverElements.findIndex((el) => el.tagName.toLowerCase() === "canvas"  && el.hasAttribute("data-graph-motor"))
+            return canvasIndex >= 0 && canvasIndex < 4;
+        }
+
+        const mouseMove = async (event: MouseEvent) => {
+            if(!haveMoved) {
+                document.body.appendChild(overlayContainer);
+                haveMoved = true;
+            }
+            overlayContainer.style.left = `${event.clientX - (containerSize.width / 2)}px`;
+            overlayContainer.style.top = `${event.clientY - (containerSize.height / 2)}px`;
+
+            velocityX = event.clientX - lastX;
+            lastX = event.clientX;
+
+            velocityXAdd += velocityX;
+
+            const isHoverCanvas = hoverCanvas(event.clientX, event.clientY);
+            if(isHoverCanvas) {
+                overlayContainer.style.boxShadow = "var(--nodius-primary-main) 0px 0px 4px 0px, var(--nodius-primary-main) 0px 2px 16px 0px";
+                //Theme.state.changeColor(Theme.state.shadow[Theme.state.theme]["2"], "var(--nodius-primary-main)");
+            } else {
+                if(overlayContainer.style.boxShadow != undefined) {
+                    overlayContainer.style.boxShadow = "";
+                }
+            }
+        };
+
+        const mouseUp = async (evt:MouseEvent) => {
+            overlayContainer.remove();
+            window.removeEventListener("mouseleave", mouseUp);
+            window.removeEventListener("mouseup", mouseUp);
+            window.removeEventListener("mousemove", mouseMove);
+            cancelAnimationFrame(animationId);
+            enableTextSelection();
+
+            if(!haveMoved) {
+                //  click without drag
+            } else {
+                const isHoverCanvas = hoverCanvas(evt.clientX, evt.clientY);
+                // ho boy, it's time to do some crazy stuff here
+
+                if(!Project.state.graph || !Project.state.generateUniqueId || !Project.state.selectedSheetId) return; // look dumb, but hey, my code can run on the moon now
+                if(isHoverCanvas) {
+                    const newNodeId = await Project.state.generateUniqueId(1);
+                    if(!newNodeId) return;
+                    const nodeKey = newNodeId[0];
+                    const nodeType = createNodeFromConfig<any>(
+                        nodeConfig,
+                        nodeKey,
+                        Project.state.graph._key,
+                        Project.state.selectedSheetId
+                    );
+
+
+
+                    /*
+                    const uniqueId = await Project.state.generateUniqueId!(2);
+            if(!uniqueId) return;
+
+            const nodeKey = uniqueId[0];
+            const edgeKey = uniqueId[1];
+
+            const height = 500;
+            const width = 300;
+            nodeType = createNodeFromConfig<NodeTypeEntryType>(
+                NodeTypeEntryTypeConfig,
+                nodeKey,
+                Project.state.graph._key,
+                nodeRoot.sheet
+            );
+            nodeType.posX = nodeRoot.posX - (width+100);
+            nodeType.posY = (nodeRoot.size.height/2)-(height/2);
+            nodeType.data!._key = dataType._key
+
+            const edge:Edge = {
+                _key: edgeKey,
+                source: nodeKey,
+                target: nodeRoot._key,
+                sheet: nodeType.sheet,
+                graphKey: Project.state.graph._key,
+                sourceHandle: "0",
+                undeletable: true,
+                targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
+                style: "curved"
+            }
+
+            const output = await Project.state.batchCreateElements!([nodeType], [edge]);
+                     */
+                }
+            }
+
+        }
+
+        window.addEventListener("mouseleave", mouseUp);
+        window.addEventListener("mousemove", mouseMove);
+        window.addEventListener("mouseup", mouseUp);
     }
 
     const classSearchContainer = useDynamicClass(`
@@ -244,7 +397,6 @@ export const LeftPanelNodeLibrary = memo(({
                     ))}
                 </select>
             </div>
-
             <div style={{flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: "8px"}}>
                 {!hasNodes ? (
                     <div className={classEmptyState}>
@@ -284,7 +436,7 @@ export const LeftPanelNodeLibrary = memo(({
                                                 <div
                                                     key={nodeConfig._key}
                                                     className={classNodeCard}
-                                                    onClick={(e) => handleMouseDown(e, nodeConfig)}
+                                                    onMouseDown={(e) => handleMouseDown(e, nodeConfig)}
                                                     title={nodeConfig.description || nodeConfig.displayName}
                                                 >
                                                     <div className={classNodeName}>

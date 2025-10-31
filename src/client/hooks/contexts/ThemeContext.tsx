@@ -102,7 +102,8 @@ export interface ThemeContextType {
     },
     reverseHexColor: (hex: string, opacity?: number) => string,
     changeOpacity: (color: string, opacity: number) => string,
-    changeBrightness: (color: string, percentage: number, type: "positive" | "negative") => string
+    changeBrightness: (color: string, percentage: number, type: "positive" | "negative") => string,
+    changeColor: (css:string, toNewColor:string) => string, // detect color in a css rule, and change it to "toNewColor"
 }
 
 export const ThemeContextDefaultValue: ThemeContextType = {
@@ -606,5 +607,13 @@ export const ThemeContextDefaultValue: ThemeContextType = {
             const toHex = (val: number) => val.toString(16).padStart(2, "0");
             return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
         }
+    },
+    changeColor: (css: string, toNewColor: string) => {
+        // Match rgb(), rgba(), hsl(), hsla(), or hex colors
+        const colorRegex =
+            /rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-fA-F]{3,8}\b/g;
+
+        // Replace all detected color instances with the new color
+        return css.replace(colorRegex, toNewColor);
     }
 }

@@ -732,6 +732,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     filter: `invert(${Theme.state.theme === "dark" ? 1 : 0})`,
                     transition: "all 0.25s ease-in-out"
                 }}
+                data-graph-motor=""
                 onDoubleClick={onDoubleClick}
                 onClick={handleCanvasClick}
                 onMouseDown={handleCanvasMouseDown}
