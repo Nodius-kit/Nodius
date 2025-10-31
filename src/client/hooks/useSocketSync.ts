@@ -858,9 +858,9 @@ export const useSocketSync = () => {
     }, [Project.state.graph, Project.state.editedHtml, Project.state.selectedSheetId]);
 
 
-    const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+    const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>, fromOutside:boolean = false):Promise<string|undefined> => { // if return undefined -> it's good
 
-        const instructionOutput = await handleIntructionToGraph(instructions.filter((i) => !i.dontApplyToMySelf),(currentGraphInstrution, objectBeingApplied) => {
+        const instructionOutput = await handleIntructionToGraph(fromOutside ? instructions : instructions.filter((i) => !i.dontApplyToMySelf),(currentGraphInstrution, objectBeingApplied) => {
             if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                 const object:HtmlObject = objectBeingApplied;
                 if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
@@ -871,7 +871,6 @@ export const useSocketSync = () => {
             }
             return true;
         });
-        console.log(instructionOutput, instructions);
         if(instructionOutput.status) {
             Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
@@ -1000,10 +999,10 @@ export const useSocketSync = () => {
         }
     }, []);
 
-    const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+    const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>, fromOutside:boolean = false):Promise<string|undefined> => { // if return undefined -> it's good
         if(!currentEditConfig.current) return;
 
-        const instructionOutput = await handleInstructionToNodeConfig(instructions.filter((i) => !i.dontApplyToMySelf), (instruction, objectBeingApplied) => {
+        const instructionOutput = await handleInstructionToNodeConfig(fromOutside ? instructions : instructions.filter((i) => !i.dontApplyToMySelf), (instruction, objectBeingApplied) => {
             if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                 const object:HtmlObject = objectBeingApplied;
                 if(object.identifier !== instruction.targetedIdentifier) {
@@ -1027,7 +1026,6 @@ export const useSocketSync = () => {
                 node: nodeConfig.node as Node<any>,
                 config: nodeConfig
             };
-            console.log(deepCopy(currentEditConfig.current));
 
             // Dispatch editedNodeConfig update
             Project.dispatch({
@@ -1557,7 +1555,7 @@ export const useSocketSync = () => {
     const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
         if(packet.type === "applyInstructionToGraph") {
             const message = packet as WSMessage<WSApplyInstructionToGraph>;
-            await applyGraphInstructions(message.instructions);
+            await applyGraphInstructions(message.instructions, true);
         } else if(packet.type === "batchCreateElements") {
             const message = packet as WSMessage<WSBatchCreateElements>;
             await applyBatchCreate(message.nodes, message.edges);
@@ -1566,7 +1564,7 @@ export const useSocketSync = () => {
             await applyBatchDelete(message.nodeKeys, message.edgeKeys);
         } else if(packet.type === "applyInstructionToNodeConfig") {
             const message = packet as WSMessage<WSApplyInstructionToNodeConfig>;
-            await applyNodeConfigInstructions(message.instructions);
+            await applyNodeConfigInstructions(message.instructions, true);
         }
     }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions]);
 

@@ -83,7 +83,7 @@ export class InputHandler {
 			}
 		});
 
-		this.canvas.addEventListener("mousemove", (e) => {
+		window.addEventListener("mousemove", (e) => {
 			if (!this.interactiveEnabled) {
 				this.isPanning = false;
 				return;
