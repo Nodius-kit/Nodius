@@ -14,7 +14,8 @@ import {disableTextSelection, enableTextSelection} from "../../../utils/objectUt
 import {useContext} from "react";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {getHandleInfo} from "../motor/webGpuMotor/handleUtils";
-import {Edge} from "../../../utils/graph/graphType";
+import {Edge, Node} from "../../../utils/graph/graphType";
+import {HandleInfo} from "../motor/webGpuMotor/types";
 
 interface useEdgeHandlerOptions {
     gpuMotor: WebGpuMotor;
@@ -25,6 +26,14 @@ export const useEdgeHandler = ({
 }:useEdgeHandlerOptions) => {
 
     const Project = useContext(ProjectContext);
+
+    const isValidConnection = (sourceNode:Node<any>, sourceHandle:HandleInfo, targetNode:Node<any>, targetHandle:HandleInfo) => {
+        if(sourceNode._key === targetNode._key) return false; // obviously ...
+
+        if(sourceHandle.point.accept !== targetHandle.point.accept) return false; // must accept the same type
+
+        return true;
+    }
 
     const createATemporaryEdge = async (e:MouseEvent, nodeId:string, pointId:string) => {
         if(!Project.state.generateUniqueId || !Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;

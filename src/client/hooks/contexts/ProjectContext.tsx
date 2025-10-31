@@ -149,6 +149,7 @@ export interface ProjectContextType {
     }>
 
     selectedNode: string[],
+    selectedEdge: string[],
 
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
@@ -163,5 +164,6 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     },
     disabledNodeInteraction: {},
     selectedNode: [],
+    selectedEdge: [],
     editedCode: []
 }

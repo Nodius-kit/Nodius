@@ -108,16 +108,16 @@ export function getHandlePosition(node: Node<any>, handleId: string): Point | un
  * @param side - The side of the handle (T, D, L, R, 0)
  * @returns Direction vector with dx and dy components
  */
-export function getDir(side: handleSide): { dx: number; dy: number } {
+export function getDir(side: handleSide, type: "in"|"out"): { dx: number; dy: number } {
 	switch (side) {
 		case "L":
-			return { dx: -1, dy: 0 };
+			return { dx: type === "out" ? -1 : 1, dy: 0 };
 		case "R":
-			return { dx: 1, dy: 0 };
+			return { dx: type === "out" ? 1 : -1, dy: 0 };
 		case "T":
-			return { dx: 0, dy: -1 };
+			return { dx: 0, dy: type === "out" ? -1 : 1 };
 		case "D":
-			return { dx: 0, dy: 1 };
+			return { dx: 0, dy: type === "out" ? 1 : -1 };
 		case "0":
 			return { dx: 0, dy: 0 };
 	}

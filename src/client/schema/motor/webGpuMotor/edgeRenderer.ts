@@ -136,8 +136,8 @@ export class EdgeRenderer {
 			const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
 			const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
 			const curveStrength = dist * 0.4;
-			const sourceDir = sourceInfo ? getDir(sourceInfo.side) : {dx: 0, dy: 0};
-			const targetDir = targetInfo ? getDir(targetInfo.side) : {dx: 0, dy: 0};;
+			const sourceDir = sourceInfo ? getDir(sourceInfo.side, sourceInfo.point.type) : {dx: 0, dy: 0};
+			const targetDir = targetInfo ? getDir(targetInfo.side, targetInfo.point.type) : {dx: 0, dy: 0};
 			const control1 = {
 				x: sourcePos.x + sourceDir.dx * curveStrength,
 				y: sourcePos.y + sourceDir.dy * curveStrength,
@@ -180,8 +180,8 @@ export class EdgeRenderer {
 				const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
 				const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
 				const curveStrength = dist * 0.4;
-				const sourceDir = sourceInfo ? getDir(sourceInfo.side) : {dx: 0, dy: 0};
-				const targetDir = targetInfo ? getDir(targetInfo.side) : {dx: 0, dy: 0};
+				const sourceDir = sourceInfo ? getDir(sourceInfo.side, sourceInfo.point.type) : {dx: 0, dy: 0};
+				const targetDir = targetInfo ? getDir(targetInfo.side, targetInfo.point.type) : {dx: 0, dy: 0};
 				const control1 = {
 					x: sourcePos.x + sourceDir.dx * curveStrength,
 					y: sourcePos.y + sourceDir.dy * curveStrength,

@@ -189,6 +189,9 @@ export const App = () => {
                             await Project.state.updateHtml(instruction.instruction);
                         }
                     }
+                } else if(Project.state.selectedEdge.length > 0 || Project.state.selectedNode.length > 0 && Project.state.batchDeleteElements) {
+
+                    await Project.state.batchDeleteElements!(Project.state.selectedNode.filter((n) => n !== "root"),Project.state.selectedEdge );
                 }
             }
         }
@@ -196,7 +199,7 @@ export const App = () => {
         return () => {
             document.removeEventListener("keydown", keyDown);
         }
-    }, [Project.state.editedHtml, Project.state.updateHtml]);
+    }, [Project.state.editedHtml, Project.state.updateHtml, Project.state.selectedNode, Project.state.batchDeleteElements]);
 
     const returnToMenu = useCallback(() => {
         setActiveWindow(0);

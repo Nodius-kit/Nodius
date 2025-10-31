@@ -36,8 +36,6 @@ export interface Edge {
 
     _key: string,
 
-    undeletable?: boolean,
-
     graphKey: string,
     sheet:string,
 
@@ -54,8 +52,6 @@ export interface Edge {
 export interface Node<T> {
     _key: string,
     graphKey: string,
-
-    undeletable?: boolean,
 
     type: NodeType,
     sheet:string,
@@ -92,7 +88,6 @@ export function cleanEdge(obj: any): Edge {
         "targetHandle",
         "style",
         "label",
-        "undeletable"
     ]);
 
     // If _from and _to exist (from ArangoDB), extract source and target from them
