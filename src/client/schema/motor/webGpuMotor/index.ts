@@ -250,7 +250,11 @@ export class WebGpuMotor implements GraphicalMotor {
 				for (const edge of this.relevantEdges) {
 					if (this.isPointNearEdge(world, edge)) {
 						// Toggle selection
-						this.toggleEdgeSelection(edge._key);
+						if(e.ctrlKey) {
+							this.toggleEdgeSelection(edge._key);
+						} else {
+							this.setSelectedEdges([edge._key]);
+						}
 						this.emit("edgeClick", edge, edge._key);
 						return;
 					}

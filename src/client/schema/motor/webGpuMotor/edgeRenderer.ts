@@ -143,9 +143,8 @@ export class EdgeRenderer {
 
       @fragment
       fn fs(input: VertexOutput) -> @location(0) vec4<f32> {
-        // Primary blue color (similar to --nodius-primary #3b82f6)
         // Alpha varies based on distance from center for glow effect
-        return vec4<f32>(0.231, 0.510, 0.965, input.alpha);
+        return vec4<f32>(0.2, 0.2, 0.2, input.alpha);
       }
     `;
 		const shadowModule = this.device.createShaderModule({ code: shadowShaderCode });

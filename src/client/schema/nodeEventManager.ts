@@ -29,7 +29,7 @@ export interface NodeEventContext {
     editedHtml: EditedHtmlType;
     editedNodeConfig: EditedNodeTypeConfig;
     selectedNode: string[],
-    addSelectedNode: (nodeId:string) => void;
+    addSelectedNode: (nodeId:string, ctrlKey:boolean) => void;
 
 }
 
@@ -136,10 +136,10 @@ export class NodeEventManager {
 
         const list = this.eventListeners.get("click") ?? [];
 
-        const selectNode = () => {
+        const selectNode = (e:MouseEvent) => {
             const node = this.context.getNode();
             if(!node) return;
-            this.context.addSelectedNode(node._key);
+            this.context.addSelectedNode(node._key, e.ctrlKey);
         }
 
         list.push(selectNode);

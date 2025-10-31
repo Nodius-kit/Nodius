@@ -342,7 +342,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             triggerEventOnNode: triggerEventOnNode,
             editedHtml: Project.state.editedHtml,
             editedNodeConfig: Project.state.editedNodeConfig,
-            addSelectedNode: (nodeId:string) => {
+            addSelectedNode: (nodeId:string, ctrlKey) => {
                 Project.state.selectedNode.push(nodeId);
                 Project.dispatch({
                     field: "selectedNode",
@@ -555,10 +555,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 editedHtml: Project.state.editedHtml,
                 editedNodeConfig: Project.state.editedNodeConfig,
                 addSelectedNode: (nodeId:string) => {
-                    Project.state.selectedNode.push(nodeId);
                     Project.dispatch({
                         field: "selectedNode",
-                        value: [...Project.state.selectedNode]
+                        value: [...Project.state.selectedNode, nodeId]
                     })
                 },
                 selectedNode: Project.state.selectedNode
@@ -580,6 +579,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         Project.state.editedHtml,
         Project.state.editedNodeConfig,
         Project.state.selectedNode,
+        Project.state.selectedEdge,
         getNode,
         triggerEventOnNode
     ]);
