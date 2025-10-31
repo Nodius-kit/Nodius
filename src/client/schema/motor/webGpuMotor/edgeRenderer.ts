@@ -113,18 +113,19 @@ export class EdgeRenderer {
 	}
 
 	public getEdgePathPoints(scene: MotorScene, edge: Edge, segments: number = 10): Point[] {
-		const sourceNode = scene.nodes.get(edge.source);
-		const targetNode = scene.nodes.get(edge.target);
+		const sourceNode = edge.source !== undefined ? scene.nodes.get(edge.source) : undefined;
+		const targetNode = edge.target !== undefined ? scene.nodes.get(edge.target) : undefined;
 
 		const isTemporary = edge.source === undefined || edge.target === undefined;
 
-		// if edge.source or edge.target is null, so a the edge is a temporary one (dragged by user) and a point is the cursor position
+		// if edge.source or edge.target is undefined, the edge is temporary (dragged by user) and missing end uses cursor position
+		const sourcePos = !sourceNode && isTemporary
+			? this.screenToWorld(this.cursorPosition)
+			: (sourceNode ? getHandlePosition(sourceNode, edge.sourceHandle) : null);
+		const targetPos = !targetNode && isTemporary
+			? this.screenToWorld(this.cursorPosition)
+			: (targetNode ? getHandlePosition(targetNode, edge.targetHandle) : null);
 
-
-		const sourcePos = !sourceNode && isTemporary ? this.screenToWorld(this.cursorPosition) : getHandlePosition(sourceNode!, edge.sourceHandle);
-		const targetPos = !targetNode && isTemporary && sourceNode ? this.screenToWorld(this.cursorPosition) : getHandlePosition(targetNode!, edge.targetHandle);
-
-		console.log(sourceNode, targetPos);
 		if (!sourcePos || !targetPos) return [];
 
 		const points: Point[] = [];
@@ -157,22 +158,30 @@ export class EdgeRenderer {
 		const edgeVertices: number[] = [];
 		const segments = 20;
 		for (const edge of relevantEdges) {
-			const sourceNode = scene.nodes.get(edge.source);
-			const targetNode = scene.nodes.get(edge.target);
-			if (!sourceNode || !targetNode) continue;
-			const sourcePos = getHandlePosition(sourceNode, edge.sourceHandle);
-			const targetPos = getHandlePosition(targetNode, edge.targetHandle);
+			const sourceNode = edge.source !== undefined ? scene.nodes.get(edge.source) : undefined;
+			const targetNode = edge.target !== undefined ? scene.nodes.get(edge.target) : undefined;
+
+			const isTemporary = edge.source === undefined || edge.target === undefined;
+
+			// Handle temporary edges (one end is undefined, using cursor position)
+			const sourcePos = !sourceNode && isTemporary
+				? this.screenToWorld(this.cursorPosition)
+				: (sourceNode ? getHandlePosition(sourceNode, edge.sourceHandle) : null);
+			const targetPos = !targetNode && isTemporary
+				? this.screenToWorld(this.cursorPosition)
+				: (targetNode ? getHandlePosition(targetNode, edge.targetHandle) : null);
+
 			if (!sourcePos || !targetPos) continue;
 
 			if (edge.style === "straight") {
 				edgeVertices.push(sourcePos.x, sourcePos.y, targetPos.x, targetPos.y);
 			} else {
-				const sourceInfo = getHandleInfo(sourceNode, edge.sourceHandle)!;
-				const targetInfo = getHandleInfo(targetNode, edge.targetHandle)!;
+				const sourceInfo = sourceNode ? getHandleInfo(sourceNode, edge.sourceHandle)! : undefined;
+				const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
 				const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
 				const curveStrength = dist * 0.4;
-				const sourceDir = getDir(sourceInfo.side);
-				const targetDir = getDir(targetInfo.side);
+				const sourceDir = sourceInfo ? getDir(sourceInfo.side) : {dx: 0, dy: 0};
+				const targetDir = targetInfo ? getDir(targetInfo.side) : {dx: 0, dy: 0};
 				const control1 = {
 					x: sourcePos.x + sourceDir.dx * curveStrength,
 					y: sourcePos.y + sourceDir.dy * curveStrength,

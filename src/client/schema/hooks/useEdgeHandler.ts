@@ -73,8 +73,12 @@ export const useEdgeHandler = ({
 
         gpuMotor.requestRedraw();
 
+        let frameId:number|undefined = undefined;
         const mouseMove = (e:MouseEvent) => {
-
+            if(frameId) cancelAnimationFrame(frameId);
+            frameId = requestAnimationFrame(() => {
+                gpuMotor.requestRedraw();
+            });
         }
         const mouseUp = (e:MouseEvent) => {
             if(!Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
