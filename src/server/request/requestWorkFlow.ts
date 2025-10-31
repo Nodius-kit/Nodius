@@ -311,7 +311,7 @@ export class RequestWorkFlow {
 
                 const nodeRoot = createNodeFromConfig<any>(
                     NodeTypeHtmlConfig,
-                    "root",
+                    token_graph+"-root",
                     token_graph,
                     "0"
                 );
@@ -396,7 +396,13 @@ export class RequestWorkFlow {
                         RETURN n
                       `;
                     const nodesCursor = await db.query(nodesQuery);
-                    const allNodes: Node<any>[] = await nodesCursor.all();
+                    const allNodes = (await nodesCursor.all() as Node<any>[]).map((node) => {
+                        const splittedKey = node._key.split("-");
+                        return {
+                            ...node,
+                            _key: splittedKey.length > 1 ? splittedKey[1] : splittedKey[0],
+                        }
+                    });
 
                     const edgesQuery = aql`
                         FOR e IN nodius_edges
@@ -404,7 +410,13 @@ export class RequestWorkFlow {
                         RETURN e
                       `;
                     const edgesCursor = await db.query(edgesQuery);
-                    const allEdges: Edge[] = await edgesCursor.all();
+                    const allEdges = (await edgesCursor.all() as Edge[]).map((edge) => {
+                        const splittedKey = edge._key.split("-");
+                        return {
+                            ...edge,
+                            _key: splittedKey.length > 1 ? splittedKey[1] : splittedKey[0],
+                        }
+                    });
 
                     graphData._sheets[sheetId] = {
                         nodes: allNodes.map((node) => cleanNode(node)),

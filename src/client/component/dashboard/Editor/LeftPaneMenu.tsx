@@ -150,9 +150,10 @@ export const LeftPaneMenu = memo((
                         setEditingPanel(editingPanel === "nodeLibrary" ? "" : "nodeLibrary");
                     },
                     selected: editingPanel === "nodeLibrary",
+                    hided: Project.state.editedNodeConfig != undefined,
                     disabled: false
                 }
-            ]
+            ],
         },
         {
             name: "Connect",
@@ -192,7 +193,7 @@ export const LeftPaneMenu = memo((
                 <Frame style={{color:iconColor, cursor:"pointer"}} width={iconSize} height={iconSize} onClick={returnToMenu} />
             </div>
             {
-                iconActionList.map((category, i) => (
+                iconActionList.filter((list) => !list.actions.every((a) => a.hided)).map((category, i) => (
                     <div key={i} style={{borderTop:border, display:"flex", flexDirection:"column", alignItems:"center", gap:"2px", marginTop: i > 0 ? "8px" : undefined}}>
                         <p style={{fontSize:"12px", color:iconColor, paddingTop: (iconGap/2)+"px", paddingBottom:(iconGap/2)+"px"}}>{category.name}</p>
                         {category.actions.map((action, i2) => (

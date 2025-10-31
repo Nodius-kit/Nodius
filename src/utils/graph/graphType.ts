@@ -113,6 +113,7 @@ export function cleanNode<T>(obj: any): Node<T> {
     return pickKeys<Node<T>>(obj, [
         "_key",
         "graphKey",
+        "process",
         "type",
         "sheet",
         "size",

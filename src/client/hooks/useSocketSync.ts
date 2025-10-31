@@ -1699,12 +1699,23 @@ export const useSocketSync = () => {
         Object.values(htmlRenderer.current ?? {}).forEach(node =>
             Object.values(node).forEach(item => item.htmlMotor?.dispose())
         );
-        if(Project.state.editedHtml) {
-            Project.dispatch({
-                field: "editedHtml",
-                value: undefined
-            });
-        }
+
+        Project.dispatch({
+            field: "editedHtml",
+            value: undefined
+        });
+        Project.dispatch({
+            field: "editedNodeConfig",
+            value: undefined
+        });
+        Project.dispatch({
+            field: "editedCode",
+            value: []
+        });
+        Project.dispatch({
+            field: "editedNodeHandle",
+            value: undefined
+        });
         Project.dispatch({
             field: "graph",
             value: undefined

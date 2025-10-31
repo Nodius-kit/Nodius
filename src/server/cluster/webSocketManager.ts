@@ -1215,26 +1215,36 @@ export class WebSocketManager {
                 const edgeToArangoFormat = (edge: Edge): any => {
                     return {
                         ...edge,
-                        _from: `nodius_nodes/${edge.source}`,
-                        _to: `nodius_nodes/${edge.target}`
+                        _key: edge.graphKey+"-"+edge._key,
+                        _from: `nodius_nodes/${edge.graphKey+"-"+edge.source}`,
+                        _to: `nodius_nodes/${edge.graphKey+"-"+edge.target}`
                         // Keep source and target as well for compatibility
                     };
                 };
 
+                const nodeToArangoFormat = (node:Node<any>):Node<any> => {
+                    return {
+                        ...node,
+                        _key: node.graphKey+"-"+node._key,
+                    }
+                }
+
                 // Execute database operations
                 // Create new nodes
                 for (const node of nodesToCreate) {
-                    await node_collection.save(node);
+                    const arangoNode = nodeToArangoFormat(node);
+                    await node_collection.save(arangoNode);
                 }
 
                 // Update existing nodes
                 for (const node of nodesToUpdate) {
-                    await node_collection.replace(node._key, node);
+                    const arangoNode = nodeToArangoFormat(node);
+                    await node_collection.replace(arangoNode._key, arangoNode);
                 }
 
                 // Delete removed nodes
                 for (const nodeKey of nodesToDelete) {
-                    await node_collection.remove(nodeKey);
+                    await node_collection.remove(graphKey+"-"+nodeKey);
                 }
 
                 // Create new edges
@@ -1251,7 +1261,7 @@ export class WebSocketManager {
 
                 // Delete removed edges
                 for (const edgeKey of edgesToDelete) {
-                    await edge_collection.remove(edgeKey);
+                    await edge_collection.remove(graphKey+"-"+edgeKey);
                 }
 
                 // Update the original state after successful save

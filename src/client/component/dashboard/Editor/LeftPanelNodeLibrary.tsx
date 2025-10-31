@@ -86,11 +86,9 @@ export const LeftPanelNodeLibrary = memo(({
         return filtered;
     }, [nodesByCategory, nodeSearch, categoryFilter]);
 
-    const handleNodeClick = (nodeConfig: NodeTypeConfig) => {
-        // TODO: Implement node placement on canvas
-        // This will create a new node instance from the config
-        console.log("Place node:", nodeConfig.displayName);
-    };
+    const handleMouseDown = async (e:React.MouseEvent, nodeConfig: NodeTypeConfig) => {
+        
+    }
 
     const classSearchContainer = useDynamicClass(`
         & {
@@ -286,7 +284,7 @@ export const LeftPanelNodeLibrary = memo(({
                                                 <div
                                                     key={nodeConfig._key}
                                                     className={classNodeCard}
-                                                    onClick={() => handleNodeClick(nodeConfig)}
+                                                    onClick={(e) => handleMouseDown(e, nodeConfig)}
                                                     title={nodeConfig.description || nodeConfig.displayName}
                                                 >
                                                     <div className={classNodeName}>
