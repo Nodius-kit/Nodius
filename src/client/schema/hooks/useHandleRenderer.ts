@@ -245,6 +245,12 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                             nodeId: node._key,
                             i: instruction.instruction,
                         }]);
+
+                        // Recreate the menu to show the delete button
+                        if (activeSideConfigPanel.current) {
+                            activeSideConfigPanel.current.container.remove();
+                            activeSideConfigPanel.current = undefined;
+                        }
                     })
 
                     container.appendChild(addButton);

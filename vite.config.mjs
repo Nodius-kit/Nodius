@@ -9,4 +9,7 @@ export default defineConfig({
         outDir: "export"
     },
     publicDir: "src/client/public",
+    server: {
+        host: "0.0.0.0",
+    }
 });
