@@ -335,7 +335,6 @@ export const LeftPanelEntryTypeSelect = memo((
                 sheet: nodeType.sheet,
                 graphKey: Project.state.graph._key,
                 sourceHandle: "0",
-                undeletable: true,
                 targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
                 style: "curved"
             }

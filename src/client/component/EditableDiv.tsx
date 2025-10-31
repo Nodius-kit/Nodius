@@ -19,21 +19,28 @@
  */
 
 import React, {CSSProperties, memo, useEffect, useRef, useState} from 'react';
+import { GripVertical } from 'lucide-react';
 
 interface EditableDivProps {
     value: string;
     onChange?: (value: string) => Promise<void>;
-    style: CSSProperties;
+    onFocusOut?: () => void;
+    style?: CSSProperties;
     completion?: string[];
     minimalLengthBeforeCompletion?: number;
+    resizable?: boolean;
+    placeholder?: string;
 }
 
 export const EditableDiv = memo(({
                                      value,
                                      onChange,
+                                     onFocusOut,
                                      style,
                                      completion,
                                      minimalLengthBeforeCompletion = 2,
+                                     resizable = false,
+                                     placeholder = '',
                                  }: EditableDivProps) => {
     const divRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -41,6 +48,10 @@ export const EditableDiv = memo(({
 
     const [focused, setFocused] = useState<boolean>(false);
     const [currentCompletion, setCurrentCompletion] = useState<string>('');
+
+    const resizeStartY = useRef<number>(0);
+    const resizeStartHeight = useRef<number>(0);
+    const [isResizing, setIsResizing] = useState(false);
 
     // Update internal div content when `value` changes from parent
     useEffect(() => {
@@ -100,6 +111,31 @@ export const EditableDiv = memo(({
         }
     }, [value, focused, completion, minimalLengthBeforeCompletion]);
 
+    // Handle resizing events
+    useEffect(() => {
+        if (isResizing) {
+            const handleMouseMove = (e: MouseEvent) => {
+                const delta = e.clientY - resizeStartY.current;
+                const newHeight = Math.max(50, resizeStartHeight.current + delta);
+                if (containerRef.current) {
+                    containerRef.current.style.height = `${newHeight}px`;
+                }
+            };
+
+            const handleMouseUp = () => {
+                setIsResizing(false);
+            };
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isResizing]);
+
     // Handle user input
     const handleInput = async () => {
         if (onChange && divRef.current) {
@@ -133,29 +169,57 @@ export const EditableDiv = memo(({
         }
     };
 
-    const onFocus = () => {
+    const _onFocus = () => {
         setFocused(true);
     };
 
-    const onFocusOut = () => {
+    const _onFocusOut = () => {
         setFocused(false);
         setCurrentCompletion('');
+        onFocusOut?.();
     };
 
     const handleContainerClick = () => {
         divRef.current?.focus();
     };
 
+    const handleResizeStart = (e: React.MouseEvent<SVGSVGElement>) => {
+        e.stopPropagation();
+        if (containerRef.current) {
+            resizeStartY.current = e.clientY;
+            resizeStartHeight.current = containerRef.current.clientHeight;
+            setIsResizing(true);
+        }
+    };
+
+    const containerStyle: CSSProperties = {
+        ...style,
+        position: 'relative',
+        display: 'inline-block',
+        cursor: 'text',
+    };
+
+    if (resizable) {
+        containerStyle.overflow = 'auto';
+        if (style?.height === '100%') {
+            containerStyle.height = '100px'; // Fixed initial height if parent prop was 100%
+        }
+    }
+
+    const innerStyle: CSSProperties = {
+        outline: 'none',
+        display: resizable ? 'block' : 'inline',
+        height: '100%',
+        minWidth: '12px',
+    };
+
+    const showPlaceholder = placeholder && !focused && (!value || value.trim() === '');
+
     return (
         <div
             ref={containerRef}
             onClick={handleContainerClick}
-            style={{
-                ...style,
-                position: 'relative',
-                display: 'inline-block',
-                cursor: "text",
-            }}
+            style={containerStyle}
         >
             <div
                 ref={divRef}
@@ -163,15 +227,29 @@ export const EditableDiv = memo(({
                 suppressContentEditableWarning
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
-                style={{
-                    outline: 'none',
-                    display: 'inline',
-                    height:"100%",
-                    minWidth:"12px"
-                }}
-                onFocus={onFocus}
-                onBlur={onFocusOut}
+                style={innerStyle}
+                onFocus={_onFocus}
+                onBlur={_onFocusOut}
             />
+            {showPlaceholder && (
+                <span
+                    style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        color: 'gray',
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                        whiteSpace: 'pre-wrap',
+                        overflow: 'hidden',
+                        width: '100%',
+                        height: '100%',
+                        display: resizable ? 'block' : 'inline',
+                    }}
+                >
+                    {placeholder}
+                </span>
+            )}
             {currentCompletion && (
                 <span
                     ref={completionRef}
@@ -185,6 +263,19 @@ export const EditableDiv = memo(({
                 >
                     {currentCompletion}
                 </span>
+            )}
+            {resizable && (
+                <GripVertical
+                    size={12}
+                    style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        right: 0,
+                        cursor: 'ns-resize',
+                        color: 'gray',
+                    }}
+                    onMouseDown={handleResizeStart}
+                />
             )}
         </div>
     );

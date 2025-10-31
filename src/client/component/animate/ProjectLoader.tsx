@@ -28,6 +28,8 @@ const object:HtmlObject = {
     tag: "div",
     name:"loader",
     css: [],
+    domEvents: [],
+    workflowEvents: [],
     identifier: "0",
     type: "html",
     content: `

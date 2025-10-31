@@ -372,7 +372,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 }
             }) | undefined;
             if (!updatedNode) {
-                console.log("aaaaaaaaaaa");
                 return;
             };
 

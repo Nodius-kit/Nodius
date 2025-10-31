@@ -107,15 +107,14 @@ export const LeftPaneMenu = memo((
                                 value: Project.state.editedCode.filter((e) => e.nodeId !== Project.state.editedNodeConfig!.node._key)
                             });
                         } else {
-                            Project.state.editedCode.push({
-                                path:["process"],
-                                title: "Node Logic #"+Project.state.editedNodeConfig.node._key,
-                                nodeId:Project.state.editedNodeConfig.node._key,
-                                baseText:Project.state.editedNodeConfig.node.process ?? ""
-                            })
                             Project.dispatch({
                                 field: "editedCode",
-                                value: [...Project.state.editedCode]
+                                value: [...Project.state.editedCode, {
+                                    path:["process"],
+                                    title: "Node Logic #"+Project.state.editedNodeConfig.node._key,
+                                    nodeId:Project.state.editedNodeConfig.node._key,
+                                    baseText:Project.state.editedNodeConfig.node.process ?? ""
+                                }]
                             })
                         }
                     },

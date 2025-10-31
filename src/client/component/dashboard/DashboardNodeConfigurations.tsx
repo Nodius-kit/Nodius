@@ -289,6 +289,8 @@ export const DashboardNodeConfigurations = memo(({
                 name: "Container",
                 delimiter: true,
                 tag: "div",
+                domEvents: [],
+                workflowEvents: [],
                 css: [
                     {
                         selector: "&",

@@ -24,9 +24,9 @@ import {CSSProperties, memo, useCallback, useContext, useEffect, useMemo, useSta
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
-import {EditableCss, RightPanelCssEditor} from "./RightPanelCssEditor";
+import {EditableCss, EditableEvents, RightPanelStyleEditor} from "./RightPanelStyleEditor";
 import {searchElementWithIdentifier} from "../../../../utils/html/htmlUtils";
-import {CSSBlock} from "../../../../utils/html/HtmlCss";
+import {HTMLDomEvent} from "../../../../utils/html/htmlType";
 import {deepCopy} from "../../../../utils/objectUtils";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
@@ -57,15 +57,30 @@ export const RightPanelComponentEditor = memo(({
     }
 
 
-    const currentCss:EditableCss|undefined = useMemo(() => {
+    const currentCss: EditableCss | undefined = useMemo(() => {
         if(selectedIdentifier && Project.state.editedHtml) {
             const instruction = new InstructionBuilder();
             const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
             if(object) {
                 return {
-                    css:object.css ?? [],
+                    css: object.css ?? [],
                     instruction: instruction
-                }
+                };
+            }
+        }
+        return undefined;
+    }, [Project.state.editedHtml, selectedIdentifier]);
+
+    const currentEvents: EditableEvents | undefined = useMemo(() => {
+        if(selectedIdentifier && Project.state.editedHtml) {
+            const instruction = new InstructionBuilder();
+            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
+            console.log(Project.state.editedHtml.html);
+            if(object) {
+                return {
+                    events: (object.domEvents ?? []) as Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
+                    instruction: instruction
+                };
             }
         }
         return undefined;
@@ -75,7 +90,13 @@ export const RightPanelComponentEditor = memo(({
         if(currentCss) {
             await Project.state.updateHtml!(cssInstruction.instruction);
         }
-    }, [currentCss, Project.state.updateHtml]);
+    }, [currentCss, Project.state]);
+
+    const updateEvents = useCallback(async (eventsInstruction: InstructionBuilder) => {
+        if(currentEvents) {
+            await Project.state.updateHtml!(eventsInstruction.instruction);
+        }
+    }, [currentEvents, Project.state]);
 
     useEffect(() => {
         if(Project.state.editedHtml) {
@@ -182,13 +203,18 @@ export const RightPanelComponentEditor = memo(({
 
             {/* Content */}
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
-                {currentCss ? (
-                    <RightPanelCssEditor css={currentCss} onUpdate={updateCss} />
+                {(currentCss && currentEvents) ? (
+                    <RightPanelStyleEditor
+                        css={currentCss}
+                        events={currentEvents}
+                        onUpdateCss={updateCss}
+                        onUpdateEvents={updateEvents}
+                    />
                 ) : (
                     <div className={emptyStateClass}>
                         <Paintbrush height={48} width={48} style={{margin:"0 auto 16px", opacity:0.6}}/>
                         <h5>No Component Selected</h5>
-                        <p>Select a component from the canvas to edit its styles</p>
+                        <p>Select a component from the canvas to edit its styles and events</p>
                     </div>
                 )}
             </div>

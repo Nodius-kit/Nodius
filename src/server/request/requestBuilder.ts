@@ -73,6 +73,8 @@ export class RequestBuilder {
                 htmlKeyLinked: "0",
                 object: {
                     type: "block",
+                    domEvents: [],
+                    workflowEvents: [],
                     name: "Container",
                     identifier: "0",
                     delimiter: true,
@@ -98,6 +100,8 @@ export class RequestBuilder {
                 htmlKeyLinked: "0",
                 object: {
                     type: "text",
+                    domEvents: [],
+                    workflowEvents: [],
                     name: "Text",
                     identifier: "0",
                     delimiter: true,
@@ -118,6 +122,8 @@ export class RequestBuilder {
                 object: {
                     type: "list",
                     identifier: "0",
+                    domEvents: [],
+                    workflowEvents: [],
                     tag: "div",
                     name: "Column",
                     delimiter: true,
@@ -147,6 +153,8 @@ export class RequestBuilder {
                     type: "list",
                     identifier: "0",
                     tag: "div",
+                    domEvents: [],
+                    workflowEvents: [],
                     name:"Row",
                     delimiter: true,
                     css: [

@@ -854,7 +854,7 @@ export const useSocketSync = () => {
 
     const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
 
-        const instructionOutput = await handleIntructionToGraph(instructions,(currentGraphInstrution, objectBeingApplied) => {
+        const instructionOutput = await handleIntructionToGraph(instructions.filter((i) => !i.dontApplyToMySelf),(currentGraphInstrution, objectBeingApplied) => {
             if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
                 const object:HtmlObject = objectBeingApplied;
                 if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
@@ -912,7 +912,6 @@ export const useSocketSync = () => {
 
                     // if instruction (coming from another user) include current editing node, apply instruction to the edited html
                     if(Project.state.editedHtml && Project.state.editedHtml.targetType === "node" && instruction.nodeId === Project.state.editedHtml.target._key) {
-
                         let objectHtml: any = newNode;
                         Project.state.editedHtml.pathOfRender.forEach((path) => {
                             objectHtml = objectHtml[path];
@@ -1057,7 +1056,7 @@ export const useSocketSync = () => {
 
         if(response && response._response) {
             if(response._response.status) {
-                const output = await applyNodeConfigInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
+                const output = await applyNodeConfigInstructions(response.instructions);
                 if(output) {
                     return {
                         reason: output,
@@ -1131,8 +1130,8 @@ export const useSocketSync = () => {
 
         if(response && response._response) {
             if(response._response.status) {
-                const output = await applyGraphInstructions(response.instructions.filter((i) => !i.dontApplyToMySelf));
-                if(output) {
+                const output = await applyGraphInstructions(response.instructions);
+                if (output) {
                     return {
                         reason: output,
                         timeTaken: Date.now() - start,
