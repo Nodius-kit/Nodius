@@ -253,7 +253,10 @@ export const SchemaEditor = memo(({returnToMenu, getMotor}:SchemaEditorProps) =>
                 transition: "var(--nodius-transition-default)",
                 pointerEvents:"all",
             }}>
-                <RightPanelComponentEditor componentsList={componentsList} />
+                <RightPanelComponentEditor
+                    componentsList={componentsList}
+                    getMotor={getMotor}
+                />
             </div>
 
             {/* Right panel for handle configuration */}

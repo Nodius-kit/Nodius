@@ -33,6 +33,9 @@ import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {HTMLDomEvent} from "../../../../utils/html/htmlType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import {generateUniqueHandlePointId} from "../../../schema/hooks/useHandleRenderer";
+import {WebGpuMotor} from "../../../schema/motor/webGpuMotor";
+import {getHandlePosition} from "../../../schema/motor/webGpuMotor/handleUtils";
 
 // ============================================================================
 // INTERFACES
@@ -45,6 +48,7 @@ interface RightPanelStyleEditorProps {
     onUpdateCss: (cssInstruction: InstructionBuilder) => Promise<void>;
     onUpdateEvents: (eventsInstruction: InstructionBuilder) => Promise<void>;
     onUpdateContent?: (contentInstruction: InstructionBuilder) => Promise<void>;
+    getMotor: () => (WebGpuMotor | undefined);
 }
 
 export interface EditableCss {
@@ -90,6 +94,7 @@ interface EventEditorProps {
     index: number;
     baseInstruction: InstructionBuilder;
     onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    getMotor: () => (WebGpuMotor | undefined);
 }
 
 // ============================================================================
@@ -432,7 +437,7 @@ CssEditor.displayName = 'CssEditor';
 /**
  * Individual event editor
  */
-const EventEditor = memo(({ event, index, baseInstruction, onUpdate }: EventEditorProps) => {
+const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getMotor }: EventEditorProps) => {
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
     const [isExpanded, setIsExpanded] = useState(true);
@@ -546,6 +551,104 @@ const EventEditor = memo(({ event, index, baseInstruction, onUpdate }: EventEdit
         });
     }
 
+    const switchToNode = async () => {
+        if(!Project.state.editedHtml||!Project.state.graph||!Project.state.selectedSheetId||!Project.state.updateGraph) return;
+        let nodeId:string|undefined = undefined;
+        if(Project.state.editedHtml.targetType === "node") {
+            nodeId = Project.state.editedHtml.target._key;
+        } else {
+            nodeId = "0";
+        }
+
+        if(!nodeId) return;
+
+        let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+        if(!node) return;
+
+        const handlePointId = generateUniqueHandlePointId(node);
+        const instructionHandle = new InstructionBuilder();
+        instructionHandle.key("handles").key("R");
+        if(!node.handles["R"]) {
+            instructionHandle.set({
+                position: "separate",
+                point: [{
+                    type: "out",
+                    id:handlePointId,
+                    accept: "HtmlEvent",
+                    display: ""
+                }]
+            });
+        } else {
+            instructionHandle.key("point").arrayAdd({
+                type: "out",
+                id:handlePointId,
+                accept: "HtmlEvent",
+                display: ""
+            });
+        }
+        const output = await Project.state.updateGraph([{
+            nodeId: nodeId,
+            i: instructionHandle.instruction,
+        }]);
+        if(output.status) {
+
+            const newInstruction = baseInstruction.clone();
+            newInstruction.key("domEvents").index(index).key("call").set("[!]CALL-HANDLE-"+handlePointId);
+            await onUpdate(newInstruction);
+
+            let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+            if(!node) return;
+
+            const handleInfoPoint = getHandlePosition(node, handlePointId);
+            console.log(handleInfoPoint);
+            if(!handleInfoPoint) return;
+            getMotor()!.smoothFitToArea({
+               maxX: handleInfoPoint.x+20,
+                minX: handleInfoPoint.x-20,
+                maxY: handleInfoPoint.y+20,
+                minY: handleInfoPoint.y-20
+            }, {
+                duration: 1000,
+                padding: 200
+            });
+        }
+
+    }
+
+    const switchToCode = async () => {
+        if(!Project.state.editedHtml||!Project.state.graph||!Project.state.selectedSheetId||!Project.state.updateGraph) return;
+
+        let nodeId:string|undefined = undefined;
+        if(Project.state.editedHtml.targetType === "node") {
+            nodeId = Project.state.editedHtml.target._key;
+        } else {
+            nodeId = "0";
+        }
+
+        if(!nodeId) return;
+
+        const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+        if(!node) return;
+
+
+        const handlePointId = event.call.substring("[!]CALL-HANDLE-".length);
+        const handlePointIndex = node.handles["R"]!.point.findIndex((p) => p.id === handlePointId);
+        if(handlePointIndex === -1) return;
+
+        const instructionHandle = new InstructionBuilder();
+        instructionHandle.key("handles").key("R").key("point").arrayRemoveIndex(handlePointIndex);
+        const output = await Project.state.updateGraph([{
+            nodeId: nodeId,
+            i: instructionHandle.instruction,
+        }]);
+        if(output.status) {
+
+            const newInstruction = baseInstruction.clone();
+            newInstruction.key("domEvents").index(index).key("call").set("");
+            await onUpdate(newInstruction);
+        }
+    }
+
     return (
         <div className={eventContainerClass}>
             <div className={eventHeaderClass}>
@@ -559,16 +662,14 @@ const EventEditor = memo(({ event, index, baseInstruction, onUpdate }: EventEdit
             </div>
             <Collapse in={isExpanded}>
                 <div className={eventContentClass}>
-                    <EditableDiv
-                        value={event.call}
-                        placeholder={`// Event handler code&#10;console.log('Event triggered');`}
-                        onChange={(e) => updateEventCode(e)} resizable={true}
-                        style={{
-                            width:"100%",
-                            minHeight:"100px"
-                        }}
-                    />
-                    <button onClick={editInCodeEditor}>Edit in code editor</button>
+                    {event.call.startsWith("[!]CALL-HANDLE-") ? (
+                        <button onClick={switchToCode}>Switch to code editor</button>
+                    ) : (
+                        <>
+                            <button onClick={editInCodeEditor}>Edit in code editor</button>
+                            <button onClick={switchToNode}>Switch to node</button>
+                        </>
+                    )}
                 </div>
             </Collapse>
         </div>
@@ -579,7 +680,7 @@ EventEditor.displayName = 'EventEditor';
 /**
  * Events Editor - Manages all DOM events
  */
-const EventsEditor = memo(({ events, onUpdate }: { events: EditableEvents; onUpdate: (instr: InstructionBuilder) => Promise<void> }) => {
+const EventsEditor = memo(({ events, onUpdate, getMotor }: { events: EditableEvents; onUpdate: (instr: InstructionBuilder) => Promise<void>, getMotor: () => (WebGpuMotor | undefined) }) => {
     const Theme = useContext(ThemeContext);
 
     const newEventButtonClass = useDynamicClass(`
@@ -630,6 +731,7 @@ const EventsEditor = memo(({ events, onUpdate }: { events: EditableEvents; onUpd
                     index={i}
                     baseInstruction={events.instruction}
                     onUpdate={onUpdate}
+                    getMotor={getMotor}
                 />
             ))}
             <div className={newEventButtonClass} onClick={newEvent}>
@@ -739,7 +841,8 @@ export const RightPanelStyleEditor = memo(({
     content,
     onUpdateCss,
     onUpdateEvents,
-    onUpdateContent
+    onUpdateContent,
+    getMotor
 }: RightPanelStyleEditorProps) => {
     const [activeTab, setActiveTab] = useState<'css' | 'events' | 'content'>(() => {
         // Default to content tab if it's a text component
@@ -803,7 +906,7 @@ export const RightPanelStyleEditor = memo(({
 
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
                 {activeTab === 'css' && <CssEditor css={css} onUpdate={onUpdateCss} />}
-                {activeTab === 'events' && <EventsEditor events={events} onUpdate={onUpdateEvents} />}
+                {activeTab === 'events' && <EventsEditor events={events} onUpdate={onUpdateEvents} getMotor={getMotor}/>}
             </div>
         </div>
     );

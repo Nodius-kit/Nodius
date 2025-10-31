@@ -56,6 +56,16 @@ interface sideConfigPane {
 /**
  * Hook for rendering handles in DOM overlay
  */
+export const generateUniqueHandlePointId = (node: Node<any>): string => {
+    // Gather all IDs from every handle side
+    const allIds = Object.values(node.handles || {})
+        .flatMap(handle => handle.point.map(p => parseInt(p.id)))
+        .filter(id => !isNaN(id));
+
+    const maxId = allIds.length > 0 ? Math.max(...allIds) : -1;
+    return (maxId + 1).toString();
+};
+
 export function useHandleRenderer(options: useHandleRendererOptions) {
 
     const activeOverlays = useRef<Map<string, HandleOverlay>>(new Map());
@@ -137,15 +147,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
     `);
 
 
-    const generateUniqueId = (node: Node<any>): string => {
-        // Gather all IDs from every handle side
-        const allIds = Object.values(node.handles || {})
-            .flatMap(handle => handle.point.map(p => parseInt(p.id)))
-            .filter(id => !isNaN(id));
-
-        const maxId = allIds.length > 0 ? Math.max(...allIds) : -1;
-        return (maxId + 1).toString();
-    };
 
     const lastFrameId = useRef<number>(undefined);
     const mouseMove = useCallback((evt:MouseEvent) => {
@@ -225,7 +226,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                         if (_node.handles[direction!]) {
                             instruction.key("handles").key(direction!).key("point").arrayAdd({
-                                id: generateUniqueId(_node),
+                                id: generateUniqueHandlePointId(_node),
                                 type: "in",
                                 accept: "any",
                             });
@@ -233,7 +234,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                             const handle = {
                                 position: "separate" as const,
                                 point: [{
-                                    id: generateUniqueId(_node),
+                                    id: generateUniqueHandlePointId(_node),
                                     type: "in" as const,
                                     accept: "any",
                                 }]
@@ -659,7 +660,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 .map(point => {
 
                     const handleEl = document.createElement("div");
-                    handleEl.addEventListener("mousedown", (e) =>  createATemporaryEdge(e, nodeId, point.id));
+                    handleEl.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
 
                     const moveableContainer = optionsRef.current.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
@@ -685,6 +686,9 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     y: absolute_pos.y - node!.posY,
                 }
                 if(!handleInfo || !pos) return;
+
+                console.log("update", node._key);
+                point.element.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
 
                 // Update text content if it changed
                 if(point.textElement) {

@@ -11,7 +11,7 @@
 
 import {WebGpuMotor} from "../motor/webGpuMotor";
 import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
-import {useContext, useEffect} from "react";
+import {useCallback, useContext, useEffect} from "react";
 import {ActionContext, ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {getHandleInfo, getHandlePosition} from "../motor/webGpuMotor/handleUtils";
 import {Edge, Node, handleSide} from "../../../utils/graph/graphType";
@@ -38,7 +38,7 @@ export const useEdgeHandler = ({
     const isValidConnection = (sourceNode:Node<any>, sourceHandle:HandleInfo, targetNode:Node<any>, targetHandle:HandleInfo) => {
         if(sourceNode._key === targetNode._key) return false; // obviously ...
 
-        if(sourceHandle.point.accept !== targetHandle.point.accept) return false; // must accept the same type
+        if((sourceHandle.point.accept != "any" && targetHandle.point.accept != "any") && (sourceHandle.point.accept !== targetHandle.point.accept)) return false; // must accept the same type
 
         return true;
     }
@@ -53,7 +53,7 @@ export const useEdgeHandler = ({
      * @param maxDistance - Maximum search distance in world units (default: 150)
      * @returns ClosestHandleResult or null if no valid handle found
      */
-    const findClosestValidHandle = (
+    const findClosestValidHandle = useCallback((
         cursorWorldPos: Point,
         baseNode: Node<any>,
         baseHandleInfo: HandleInfo,
@@ -148,9 +148,10 @@ export const useEdgeHandler = ({
         }
 
         return closestResult;
-    }
+    }, [Project.state.graph, Project.state.selectedSheetId]);
 
-    const createATemporaryEdge = async (e:MouseEvent, nodeId:string, pointId:string) => {
+    const createATemporaryEdge = useCallback(async (e:MouseEvent, nodeId:string, pointId:string) => {
+
         if(!Project.state.generateUniqueId || !Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
 
         let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
@@ -273,6 +274,7 @@ export const useEdgeHandler = ({
 
             if(previousFound) {
                 const output = await Project.state.batchCreateElements([], [temporaryEdge as Edge]);
+                console.log(output);
             }
 
 
@@ -281,7 +283,7 @@ export const useEdgeHandler = ({
         }
         window.addEventListener('mousemove', mouseMove);
         window.addEventListener('mouseup', mouseUp);
-    }
+    }, [Project.state.generateUniqueId,Project.state.graph,Project.state.selectedSheetId,Project.state.batchCreateElements, findClosestValidHandle]);
 
 
     return {

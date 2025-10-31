@@ -32,14 +32,17 @@ import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {Paintbrush, Info} from "lucide-react";
+import {WebGpuMotor} from "../../../schema/motor/webGpuMotor";
 
 interface RightPanelComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
+    getMotor: () => (WebGpuMotor | undefined);
 }
 
 
 export const RightPanelComponentEditor = memo(({
     componentsList,
+    getMotor
 }: RightPanelComponentEditorProps) => {
 
     const Project = useContext(ProjectContext);
@@ -209,6 +212,7 @@ export const RightPanelComponentEditor = memo(({
                         events={currentEvents}
                         onUpdateCss={updateCss}
                         onUpdateEvents={updateEvents}
+                        getMotor={getMotor}
                     />
                 ) : (
                     <div className={emptyStateClass}>
