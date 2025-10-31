@@ -358,6 +358,8 @@ export class WebGpuMotor implements GraphicalMotor {
 			return;
 		}
 		this.computeVisibility();
+		this.edgeRenderer!.setHoveredEdge(this.hoveredEdge?._key ?? null);
+		this.edgeRenderer!.setSelectedEdges(Array.from(this.selectedEdges));
 		if(this.scene) {
 			this.nodeRenderer!.buildNodeBuffer(this.visibleNodes, this.scene!.nodes);
 			this.edgeRenderer!.buildEdgeBuffer(this.scene!, this.relevantEdges);
