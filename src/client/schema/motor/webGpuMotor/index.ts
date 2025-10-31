@@ -310,7 +310,6 @@ export class WebGpuMotor implements GraphicalMotor {
 				}
 			}
 		}
-		console.log("current edge:", deepCopy(this.relevantEdges));
 	}
 
 	public resetScene(): void {

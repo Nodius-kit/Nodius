@@ -431,12 +431,14 @@ export const useSocketSync = () => {
 
         if(response.missingMessages.length > 0) {
             response.missingMessages.forEach((m) => {
-                for(const i of m.instructions) {
-                    if(i.animatePos) {
-                        delete i.animatePos; // no need animation when try to caught up the current graph
-                    }
-                    if(i.animateSize) {
-                        delete i.animateSize; // no need animation when try to caught up the current graph
+                if(m.instructions) {
+                    for (const i of m.instructions) {
+                        if (i.animatePos) {
+                            delete i.animatePos; // no need animation when try to caught up the current graph
+                        }
+                        if (i.animateSize) {
+                            delete i.animateSize; // no need animation when try to caught up the current graph
+                        }
                     }
                 }
             })
@@ -631,12 +633,14 @@ export const useSocketSync = () => {
 
         if(response.missingMessages.length > 0) {
             response.missingMessages.forEach((m) => {
-                for(const i of m.instructions) {
-                    if(i.animatePos) {
-                        delete i.animatePos; // no need animation when try to caught up the current graph
-                    }
-                    if(i.animateSize) {
-                        delete i.animateSize; // no need animation when try to caught up the current graph
+                if(m.instructions) {
+                    for (const i of m.instructions) {
+                        if (i.animatePos) {
+                            delete i.animatePos; // no need animation when try to caught up the current graph
+                        }
+                        if (i.animateSize) {
+                            delete i.animateSize; // no need animation when try to caught up the current graph
+                        }
                     }
                 }
             })
