@@ -647,9 +647,6 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 .map(point => {
 
                     const handleEl = document.createElement("div");
-                    handleEl.dataset.handleId = point.id;
-                    handleEl.dataset.nodeId = nodeId;
-                    handleEl.dataset.side = side;
 
                     const moveableContainer = optionsRef.current.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 

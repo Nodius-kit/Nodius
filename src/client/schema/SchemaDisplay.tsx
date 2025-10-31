@@ -72,6 +72,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const gpuMotor = useRef<WebGpuMotor>(undefined);
     const zIndex = useRef<number>(1);
     const inSchemaNode = useRef<Map<string, SchemaNodeInfo>>(new Map());
+    const pendingNodeEnters = useRef<Map<string, Node<any>>>(new Map());
 
     // Managers
     const animationManager = useRef<NodeAnimationManager>(undefined);
@@ -271,11 +272,15 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Node enter handler
     const nodeEnter = useCallback(async (node: Node<any>) => {
         if (!Project.state.nodeTypeConfig[node.type]) {
-            console.error("Node type", node.type, "can't be processed");
+            console.warn("Node type", node.type, "config not loaded yet, adding to pending queue");
+            pendingNodeEnters.current.set(node._key, node);
             return;
         }
         if (!nodeDisplayContainer.current || !gpuMotor.current || !overlayManager.current) return;
         if (inSchemaNode.current.has(node._key)) return;
+
+        // Remove from pending if it was there
+        pendingNodeEnters.current.delete(node._key);
 
         const nodeHTML = document.createElement('div');
         nodeHTML.setAttribute("data-node-key", node._key);
@@ -488,6 +493,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
         onNodeLeave?.(node, nodeId);
 
+        // Remove from pending queue if it was there
+        pendingNodeEnters.current.delete(nodeId);
+
         if (node) {
             const nodeConfig = Project.state.nodeTypeConfig[node.type];
             if (!nodeConfig || nodeConfig.alwaysRendered) return;
@@ -518,6 +526,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             schemaNode.eventManager.dispose();
         });
         inSchemaNode.current.clear();
+        pendingNodeEnters.current.clear();
         nodeRenderer.clearAllRenderers();
         overlayManager.current?.clearOverlays();
         animationManager.current?.stopAllAnimations();
@@ -620,6 +629,28 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             motor.off("reset", onReset);
         };
     }, [nodeEnter, nodeLeave, onReset]);
+
+    // Retry pending node enters when nodeTypeConfig changes
+    useEffect(() => {
+        if (pendingNodeEnters.current.size === 0) return;
+
+        const nodesToRetry: Array<Node<any>> = [];
+
+        // Check which pending nodes now have their config loaded
+        pendingNodeEnters.current.forEach((node, nodeKey) => {
+            if (Project.state.nodeTypeConfig[node.type]) {
+                nodesToRetry.push(node);
+            }
+        });
+
+        // Retry entering nodes that now have their config
+        if (nodesToRetry.length > 0) {
+            console.log(`Retrying nodeEnter for ${nodesToRetry.length} nodes with newly loaded configs`);
+            nodesToRetry.forEach(node => {
+                nodeEnter(node);
+            });
+        }
+    }, [Project.state.nodeTypeConfig, nodeEnter]);
 
     // Global trigger function
     useEffect(() => {
