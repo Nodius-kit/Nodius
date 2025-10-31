@@ -32,9 +32,8 @@ export class EdgeRenderer {
 	private canvas: HTMLCanvasElement;
 	private cursorPosition: Point = {x:0, y:0};
 	private cursorEvent: ((e:MouseEvent) => void);
-	private screenToWorld:((point: Point) => Point );
 
-	constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number, canvas: HTMLCanvasElement, screenToWorld:((point: Point) => Point )) {
+	constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number, canvas: HTMLCanvasElement) {
 		this.device = device;
 		this.format = format;
 		this.sampleCount = sampleCount;
@@ -48,7 +47,6 @@ export class EdgeRenderer {
 		}
 
 		this.canvas.addEventListener("mousemove",this.cursorEvent);
-		this.screenToWorld = screenToWorld;
 	}
 
 	public init(bindGroupLayout: GPUBindGroupLayout): void {
@@ -112,7 +110,7 @@ export class EdgeRenderer {
 		};
 	}
 
-	public getEdgePathPoints(scene: MotorScene, edge: Edge, segments: number = 10): Point[] {
+	public getEdgePathPoints(scene: MotorScene, edge: Edge, screenToWorld:((point: Point) => Point ), segments: number = 10): Point[] {
 		const sourceNode = scene.nodes.get(edge.source);
 		const targetNode = scene.nodes.get(edge.target);
 
@@ -120,8 +118,9 @@ export class EdgeRenderer {
 
 		// if edge.source or edge.target is null, so a the edge is a temporary one (dragged by user) and a point is the cursor position
 
-		const sourcePos = !sourceNode && isTemporary ? this.screenToWorld(this.cursorPosition) : getHandlePosition(sourceNode!, edge.sourceHandle);
-		const targetPos = !targetNode && isTemporary && sourceNode ? this.screenToWorld(this.cursorPosition) : getHandlePosition(targetNode!, edge.targetHandle);
+
+		const sourcePos = !sourceNode && isTemporary ? screenToWorld(this.cursorPosition) : getHandlePosition(sourceNode!, edge.sourceHandle);
+		const targetPos = !targetNode && isTemporary && sourceNode ? screenToWorld(this.cursorPosition) : getHandlePosition(targetNode!, edge.targetHandle);
 
 		if (!sourcePos || !targetPos) return [];
 

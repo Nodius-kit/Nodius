@@ -49,6 +49,7 @@ import { BackgroundRenderer } from "./backgroundRenderer";
 import { InputHandler } from "./inputHandler";
 import { CameraAnimator } from "./cameraAnimator";
 import { getHandlePosition } from "./handleUtils";
+import {deepCopy} from "../../../../utils/objectUtils";
 
 /**
  * WebGPU-based graph rendering motor with modular architecture
@@ -150,7 +151,7 @@ export class WebGpuMotor implements GraphicalMotor {
 		this.nodeRenderer = new NodeRenderer(this.device, this.format, this.sampleCount);
 		this.nodeRenderer.init(bindGroupLayout);
 
-		this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount, this.canvas, this.screenToWorld);
+		this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount, this.canvas);
 		this.edgeRenderer.init(bindGroupLayout);
 
 		this.backgroundRenderer = new BackgroundRenderer(this.device, this.format, this.sampleCount, backgroundType);
@@ -258,7 +259,7 @@ export class WebGpuMotor implements GraphicalMotor {
 
 	private isPointNearEdge(point: Point, edge: Edge): boolean {
 		if (!this.scene) return false;
-		const pathPoints = this.edgeRenderer!.getEdgePathPoints(this.scene, edge, 10);
+		const pathPoints = this.edgeRenderer!.getEdgePathPoints(this.scene, edge, this.screenToWorld, 10);
 		if (pathPoints.length < 2) return false;
 		const threshold = 5 / this.transform.scale; // 5 pixels in screen space
 		for (let i = 0; i < pathPoints.length - 1; i++) {
@@ -309,6 +310,7 @@ export class WebGpuMotor implements GraphicalMotor {
 				}
 			}
 		}
+		console.log("current edge:", deepCopy(this.relevantEdges));
 	}
 
 	public resetScene(): void {
@@ -493,6 +495,7 @@ export class WebGpuMotor implements GraphicalMotor {
 	}
 
 	public screenToWorld(point: Point): Point {
+		console.trace();
 		return {
 			x: (point.x - this.transform.translateX) / this.transform.scale,
 			y: (point.y - this.transform.translateY) / this.transform.scale,

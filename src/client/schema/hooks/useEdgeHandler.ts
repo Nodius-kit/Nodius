@@ -1,0 +1,103 @@
+
+
+
+/*
+ create at 5 am, don't ask me what im doing here, you need a beer and multiple hour to work on it
+
+ update: 6am, it's even worse...
+
+ ho btw, this handle dragged new edge to connect handle to another one
+ */
+
+import {WebGpuMotor} from "../motor/webGpuMotor";
+import {disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
+import {useContext} from "react";
+import {ProjectContext} from "../../hooks/contexts/ProjectContext";
+import {getHandleInfo} from "../motor/webGpuMotor/handleUtils";
+import {Edge} from "../../../utils/graph/graphType";
+
+interface useEdgeHandlerOptions {
+    gpuMotor: WebGpuMotor;
+}
+
+export const useEdgeHandler = ({
+    gpuMotor
+}:useEdgeHandlerOptions) => {
+
+    const Project = useContext(ProjectContext);
+
+    const createATemporaryEdge = async (e:MouseEvent, nodeId:string, pointId:string) => {
+        if(!Project.state.generateUniqueId || !Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
+
+        let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+        if(!node) return;
+
+        let handleInfo = getHandleInfo(node, pointId);
+        if(!handleInfo) return;
+
+
+        e.stopPropagation();
+        disableTextSelection();
+
+        const uniqId = await Project.state.generateUniqueId(1);
+        if(!uniqId) return;
+
+        const temporaryEdge:Partial<Edge> = {
+            _key: uniqId[0],
+            graphKey: node.graphKey,
+            sheet: node.sheet,
+        }
+
+        if(handleInfo.point.type === "out") {
+            temporaryEdge.source = nodeId;
+            temporaryEdge.sourceHandle = pointId;
+            temporaryEdge.target = undefined;
+            temporaryEdge.targetHandle = undefined;
+
+            const edges = gpuMotor.getScene()!.edges.get("source-"+nodeId) ?? [];
+            edges.push(temporaryEdge as Edge);
+            gpuMotor.getScene()!.edges.set("source-"+nodeId, edges);
+
+        } else {
+            temporaryEdge.source = undefined;
+            temporaryEdge.sourceHandle = undefined;
+            temporaryEdge.target = nodeId;
+            temporaryEdge.targetHandle = pointId;
+
+            const edges = gpuMotor.getScene()!.edges.get("target-"+nodeId) ?? [];
+            edges.push(temporaryEdge as Edge);
+            gpuMotor.getScene()!.edges.set("target-"+nodeId, edges);
+        }
+
+        console.log("created", temporaryEdge);
+
+        gpuMotor.requestRedraw();
+
+        const mouseMove = (e:MouseEvent) => {
+
+        }
+        const mouseUp = (e:MouseEvent) => {
+            if(!Project.state.graph || !Project.state.selectedSheetId || !gpuMotor.getScene()?.edges) return;
+
+            window.removeEventListener('mousemove', mouseMove);
+            window.removeEventListener('mouseup', mouseUp);
+            enableTextSelection();
+
+            let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+            if(!node) return;
+
+            let handleInfo = getHandleInfo(node, pointId);
+            if(!handleInfo) return;
+
+
+
+
+        }
+        window.addEventListener('mousemove', mouseMove);
+        window.addEventListener('mouseup', mouseUp);
+    }
+
+    return {
+        createATemporaryEdge
+    }
+}

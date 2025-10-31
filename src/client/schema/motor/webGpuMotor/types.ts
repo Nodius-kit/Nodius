@@ -18,7 +18,7 @@ import { handleSide } from "../../../../utils/graph/graphType";
 export interface HandleInfo {
 	side: handleSide;
 	offset: number;
-	point: { id: string; offset?: number; display?: string; type?: "in" | "out", accept:string };
+	point: { id: string; offset?: number; display?: string; type: "in" | "out", accept:string };
 	position: "fix" | "separate",
 	index: number;
 }

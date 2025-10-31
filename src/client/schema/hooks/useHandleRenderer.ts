@@ -20,6 +20,7 @@ import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {deepCopy, disableTextSelection, enableTextSelection} from "../../../utils/objectUtils";
 import {Point} from "../motor/webGpuMotor/types";
+import {useEdgeHandler} from "./useEdgeHandler";
 
 
 export const rectangleWidth = 13;
@@ -59,6 +60,10 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
     const activeOverlays = useRef<Map<string, HandleOverlay>>(new Map());
     const activeSideConfigPanel = useRef<sideConfigPane>(undefined);
+
+    const {createATemporaryEdge} = useEdgeHandler({
+        gpuMotor: options.gpuMotor,
+    });
 
     // Store latest options in ref so event handlers always use fresh values
     const optionsRef = useRef(options);
@@ -648,6 +653,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 .map(point => {
 
                     const handleEl = document.createElement("div");
+                    handleEl.addEventListener("mousedown", (e) =>  createATemporaryEdge(e, nodeId, point.id));
 
                     const moveableContainer = optionsRef.current.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
@@ -739,7 +745,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
             })
         }
 
-    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, handleTextClass, createMoveableHandle]);
+    }, [classHandleContainer, classCircleHandleClass, classRectHandleClass, handleTextClass, createMoveableHandle, createATemporaryEdge]);
 
     const cleanupHandleOverlay = useCallback((nodeId:string) => {
         const handle = activeOverlays.current.get(nodeId);
