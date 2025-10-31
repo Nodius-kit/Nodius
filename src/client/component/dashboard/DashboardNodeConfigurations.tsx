@@ -326,7 +326,7 @@ export const DashboardNodeConfigurations = memo(({
         };
 
         try {
-            const response = await fetch('http://localhost:8426/api/nodeconfig/create', {
+            const response = await fetch('/api/nodeconfig/create', {
                 method: "POST",
                 signal: abortControllers.current.createNodeConfig.signal,
                 headers: {
@@ -377,7 +377,7 @@ export const DashboardNodeConfigurations = memo(({
         abortControllers.current.deleteNodeConfig = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/nodeconfig/delete', {
+            const response = await fetch('/api/nodeconfig/delete', {
                 method: "POST",
                 signal: abortControllers.current.deleteNodeConfig.signal,
                 headers: {

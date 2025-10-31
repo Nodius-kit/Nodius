@@ -281,7 +281,7 @@ export const DashboardHtmlWorkflow = memo(({
         abortControllers.current.createHtml = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/graph/create', {
+            const response = await fetch('/api/graph/create', {
                 method: "POST",
                 signal: abortControllers.current.createHtml.signal,
                 headers: {
@@ -348,7 +348,7 @@ export const DashboardHtmlWorkflow = memo(({
         abortControllers.current.deleteHtml = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/graph/delete', {
+            const response = await fetch('/api/graph/delete', {
                 method: "POST",
                 signal: abortControllers.current.deleteHtml.signal,
                 headers: {

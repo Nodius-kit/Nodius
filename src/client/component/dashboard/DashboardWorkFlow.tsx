@@ -91,7 +91,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         abortControllers.current.categoriesHtml = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/category/list', {
+            const response = await fetch('/api/category/list', {
                 method: "POST",
                 signal: abortControllers.current.categoriesHtml.signal,
                 headers: {
@@ -124,7 +124,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         abortControllers.current.categoriesNodeConfig = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/category/list', {
+            const response = await fetch('/api/category/list', {
                 method: "POST",
                 signal: abortControllers.current.categoriesNodeConfig.signal,
                 headers: {
@@ -158,7 +158,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         abortControllers.current.htmlClasses = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/graph/get', {
+            const response = await fetch('/api/graph/get', {
                 method: "POST",
                 signal: abortControllers.current.htmlClasses.signal,
                 headers: {
@@ -195,7 +195,7 @@ export const DashboardWorkFlow = memo(({}: DashboardWorkFlowProps) => {
         abortControllers.current.nodeConfigs = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/nodeconfig/list', {
+            const response = await fetch('/api/nodeconfig/list', {
                 method: "POST",
                 signal: abortControllers.current.nodeConfigs.signal,
                 headers: {

@@ -95,7 +95,7 @@ export const LeftPanelTypeEditor = memo((
             workspace: "root",
             description: "",
         }
-        const response = await fetch(`http://localhost:8426/api/type/create`, {
+        const response = await fetch(`/api/type/create`, {
             method: "POST",
             signal: addTypePromptAbortController.current.signal,
             headers: { "Content-Type": "application/json" },
@@ -140,7 +140,7 @@ export const LeftPanelTypeEditor = memo((
             const fixedClass = deepCopy(newEditingClass);
             const abort = new AbortController();
             nextClassUpdateExecution.current[newEditingClass._key] = {timeout: setTimeout(async () => {
-                const response = await fetch(`http://localhost:8426/api/type/update`, {
+                const response = await fetch(`/api/type/update`, {
                     method: "POST",
                     signal: abort.signal,
                     headers: { "Content-Type": "application/json" },
@@ -164,7 +164,7 @@ export const LeftPanelTypeEditor = memo((
             workspace: "root",
         }
 
-        const response = await fetch(`http://localhost:8426/api/type/delete`, {
+        const response = await fetch(`/api/type/delete`, {
             method: "POST",
             signal: deleteClassAbortController.current.signal,
             headers: { "Content-Type": "application/json" },

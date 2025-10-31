@@ -84,7 +84,7 @@ export const SchemaEditor = memo(({returnToMenu, getMotor}:SchemaEditorProps) =>
         }
 
         retrieveComponentListAbortController.current = new AbortController();
-        const response = await fetch('http://localhost:8426/api/builder/components', {
+        const response = await fetch('/api/builder/components', {
             method: "POST",
             signal: retrieveComponentListAbortController.current.signal,
             headers: {
@@ -122,7 +122,7 @@ export const SchemaEditor = memo(({returnToMenu, getMotor}:SchemaEditorProps) =>
 
         retrieveNodeConfigsAbortController.current = new AbortController();
         try {
-            const response = await fetch('http://localhost:8426/api/nodeconfig/list', {
+            const response = await fetch('/api/nodeconfig/list', {
                 method: "POST",
                 signal: retrieveNodeConfigsAbortController.current.signal,
                 headers: {

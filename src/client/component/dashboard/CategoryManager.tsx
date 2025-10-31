@@ -256,7 +256,7 @@ export const CategoryManager = memo(({
         abortControllers.current.createCategory = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/category/create', {
+            const response = await fetch('/api/category/create', {
                 method: "POST",
                 signal: abortControllers.current.createCategory.signal,
                 headers: {
@@ -308,7 +308,7 @@ export const CategoryManager = memo(({
         abortControllers.current.deleteCategory = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/category/delete', {
+            const response = await fetch('/api/category/delete', {
                 method: "POST",
                 signal: abortControllers.current.deleteCategory.signal,
                 headers: {
@@ -352,7 +352,7 @@ export const CategoryManager = memo(({
         abortControllers.current.renameCategory = new AbortController();
 
         try {
-            const response = await fetch('http://localhost:8426/api/category/rename', {
+            const response = await fetch('/api/category/rename', {
                 method: "POST",
                 signal: abortControllers.current.renameCategory.signal,
                 headers: {

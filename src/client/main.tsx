@@ -19,6 +19,9 @@
 import "./public/css/theme.css"
 import "@fontsource/roboto";
 
+// Initialize fetch middleware to auto-prepend API base URL
+import {initializeFetchMiddleware} from "./utils/fetchMiddleware";
+initializeFetchMiddleware();
 
 import {useCreateReducer} from "./hooks/useCreateReducer";
 import {

@@ -282,7 +282,7 @@ export const useSocketSync = () => {
             initWebSocketAbortController.current.abort();
         }
         initWebSocketAbortController.current = new AbortController();
-        const response = await fetch('http://localhost:8426/api/sync', {
+        const response = await fetch('/api/sync', {
             method: "POST",
             signal: initWebSocketAbortController.current.signal,
             headers: {
@@ -320,7 +320,7 @@ export const useSocketSync = () => {
                 openHtmlClassAbortController.current.abort();
             }
             openHtmlClassAbortController.current = new AbortController();
-            const response = await fetch('http://localhost:8426/api/graph/get', {
+            const response = await fetch('/api/graph/get', {
                 method: "POST",
                 signal: openHtmlClassAbortController.current.signal,
                 headers: {
@@ -527,7 +527,7 @@ export const useSocketSync = () => {
         let nodeConfig:NodeTypeConfig|undefined;
 
         openNodeConfigAbortController.current = new AbortController();
-        const request = await fetch('http://localhost:8426/api/nodeconfig/get', {
+        const request = await fetch('/api/nodeconfig/get', {
             method: "POST",
             signal: openNodeConfigAbortController.current.signal,
             headers: {
@@ -1640,7 +1640,7 @@ export const useSocketSync = () => {
             retrieveDataTypeAbordController.current.abort();
         }
         retrieveDataTypeAbordController.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/type/list`, {
+        const response = await fetch('/api/type/list', {
             method: "POST",
             signal: retrieveDataTypeAbordController.current.signal,
             headers: { "Content-Type": "application/json" },
@@ -1668,7 +1668,7 @@ export const useSocketSync = () => {
             retrieveEnumAbordController.current.abort();
         }
         retrieveEnumAbordController.current = new AbortController();
-        const response = await fetch(`http://localhost:8426/api/enum/list`, {
+        const response = await fetch('/api/enum/list', {
             method: "POST",
             signal: retrieveEnumAbordController.current.signal,
             headers: { "Content-Type": "application/json" },

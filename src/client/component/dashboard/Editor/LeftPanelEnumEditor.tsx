@@ -74,7 +74,7 @@ export const LeftPanelEnumEditor = memo((
             workspace: "root",
             description: "",
         }
-        const response = await fetch(`http://localhost:8426/api/enum/create`, {
+        const response = await fetch(`/api/enum/create`, {
             method: "POST",
             signal: addEnumPromptAbortController.current.signal,
             headers: { "Content-Type": "application/json" },
@@ -119,7 +119,7 @@ export const LeftPanelEnumEditor = memo((
             const fixedClass = deepCopy(newEditingClass);
             const abort = new AbortController();
             nextClassUpdateExecution.current[newEditingClass._key] = {timeout: setTimeout(async () => {
-                    const response = await fetch(`http://localhost:8426/api/enum/update`, {
+                    const response = await fetch(`/api/enum/update`, {
                         method: "POST",
                         signal: abort.signal,
                         headers: { "Content-Type": "application/json" },
@@ -143,7 +143,7 @@ export const LeftPanelEnumEditor = memo((
             workspace: "root",
         }
 
-        const response = await fetch(`http://localhost:8426/api/enum/delete`, {
+        const response = await fetch(`/api/enum/delete`, {
             method: "POST",
             signal: deleteClassAbortController.current.signal,
             headers: { "Content-Type": "application/json" },
