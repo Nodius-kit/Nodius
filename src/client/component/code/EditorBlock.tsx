@@ -118,13 +118,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
             for (const path of currentEditor.path) {
                 instruction.key(path);
             }
-            if(node.process) {
-                instruction.insertString(change.from, change.insert, change.to);
-                node.process = newBaseText
-            } else {
-                instruction.set(change.insert);
-                node.process = change.insert;
-            }
+            instruction.insertString(change.from, change.insert, change.to);
             return {
                 nodeId: currentEditor.nodeId,
                 i: instruction.instruction,
