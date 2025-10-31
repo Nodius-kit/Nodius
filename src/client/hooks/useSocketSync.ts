@@ -865,7 +865,7 @@ export const useSocketSync = () => {
             }
             return true;
         });
-
+        console.log(instructionOutput, instructions);
         if(instructionOutput.status) {
             Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
@@ -967,84 +967,124 @@ export const useSocketSync = () => {
     useEffect(() => {
         currentEditConfig.current = Project.state.editedNodeConfig;
     }, [Project.state.editedNodeConfig]);
-    const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
-        if(!currentEditConfig.current) return;
+    const handleInstructionToNodeConfig = useCallback(async (instructions:Array<nodeConfigInstructions>, beforeApply?: (instruction: nodeConfigInstructions, objectBeingApplied: any) => boolean):Promise<{status:boolean, error?:string, config?: NodeTypeConfig}> => {
+        if(!currentEditConfig.current) return {
+            status: false,
+            error: "No node config being edited"
+        };
+
         let nodeConfig = deepCopy(currentEditConfig.current.config);
 
-        let redrawGraph = false;
         for(const instruction of instructions) {
-            const newNodeConfig = applyInstruction(nodeConfig, instruction.i, (objectBeingApplied) => {
-                const currentGraphInstrution = instruction;
-                if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
-                    const object:HtmlObject = objectBeingApplied;
-                    if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
-                        console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
-                        return false;
-                    }
-                    return true;
-                }
-                return true;
-            });
+            const newNodeConfig = applyInstruction(nodeConfig, instruction.i, beforeApply ? ((objectBeingApplied) => beforeApply(instruction, objectBeingApplied)) : undefined);
+
             if(newNodeConfig.success) {
                 nodeConfig = newNodeConfig.value;
-                Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.set((nodeConfig.node as Node<any>)._key, nodeConfig.node as Node<any>);
-
-                currentEditConfig.current = {
-                    ...currentEditConfig.current,
-                    config: nodeConfig
+            } else {
+                return {
+                    status: false,
+                    error: newNodeConfig.error ?? "Unknown error"
                 };
+            }
+        }
+
+        return {
+            status: true,
+            config: nodeConfig
+        }
+    }, [currentEditConfig]);
+
+    const applyNodeConfigInstructions= useCallback(async (instructions:Array<nodeConfigInstructions>):Promise<string|undefined> => { // if return undefined -> it's good
+        if(!currentEditConfig.current) return;
+
+        const instructionOutput = await handleInstructionToNodeConfig(instructions.filter((i) => !i.dontApplyToMySelf), (instruction, objectBeingApplied) => {
+            if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+                const object:HtmlObject = objectBeingApplied;
+                if(object.identifier !== instruction.targetedIdentifier) {
+                    console.error("wrong action, target:", instruction.targetedIdentifier, "found:", object.identifier);
+                    return false;
+                }
+                return true;
+            }
+            return true;
+        });
+
+        if(instructionOutput.status && instructionOutput.config) {
+            const nodeConfig = instructionOutput.config;
+            let redrawGraph = false;
+
+            // Update the node in the graph
+            Project.state.graph!.sheets[Project.state.selectedSheetId!].nodeMap.set((nodeConfig.node as Node<any>)._key, nodeConfig.node as Node<any>);
+
+            // Update current edit config
+            currentEditConfig.current = {
+                ...currentEditConfig.current,
+                config: nodeConfig
+            };
+
+            // Dispatch editedNodeConfig update
+            Project.dispatch({
+                field: "editedNodeConfig",
+                value: currentEditConfig.current
+            });
+
+            // Update edited code if applicable
+            const editeCode = Project.state.editedCode.find((e) => e.nodeId === currentEditConfig.current!.node._key);
+            if(editeCode && editeCode.applyChange) {
+                let newText = nodeConfig.node as any;
+                for(const path of editeCode.path) {
+                    newText = newText[path];
+                }
+                const diff = getTextChanges(editeCode.baseText, newText);
+                if(diff.length > 0) {
+                    editeCode.applyChange(diff);
+                }
+            }
+
+            // Update edited HTML if applicable
+            if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
+                let object = nodeConfig as any;
+
+                for(const key of Project.state.editedHtml.pathOfRender) {
+                    object = object[key];
+                }
+
+                Project.state.editedHtml.html = object;
+                Project.state.editedHtml.target = nodeConfig;
+
                 Project.dispatch({
-                    field: "editedNodeConfig",
-                    value: currentEditConfig.current
+                    field: "editedHtml",
+                    value: {...Project.state.editedHtml}
                 });
 
-                const editeCode = Project.state.editedCode.find((e) => e.nodeId === currentEditConfig.current!.node._key);
-                if(editeCode && editeCode.applyChange) {
-                    let newText = nodeConfig.node as any;
-                    for(const path of editeCode.path) {
-                        newText = newText[path];
-                    }
-                    const diff = getTextChanges(editeCode.baseText, newText);
-                    if(diff.length > 0) {
-                        editeCode.applyChange(diff);
-                    }
+                // Check if any instruction requires redraw
+                const needsRedraw = instructions.some(instruction => !instruction.noRedraw);
+                if(needsRedraw) {
+                    await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                 }
+            }
 
-                if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
+            // Trigger node update
+            (window as any).triggerNodeUpdate?.((nodeConfig.node as Node<any>)._key);
 
-                    let object = nodeConfig as any;
-
-                    for(const key of Project.state.editedHtml.pathOfRender) {
-                        object = object[key];
-                    }
-
-                    Project.state.editedHtml.html = object;
-                    Project.state.editedHtml.target = nodeConfig;
-
-
-                    Project.dispatch({
-                        field: "editedHtml",
-                        value: {...Project.state.editedHtml}
-                    });
-
-                    if (!instruction.noRedraw) {
-                        await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
-                    }
+            // Check if redraw is needed
+            for(const instruction of instructions) {
+                if(!instruction.noRedraw) {
+                    redrawGraph = true;
+                    break;
                 }
-                (window as any).triggerNodeUpdate?.((nodeConfig.node as Node<any>)._key);
-            }else {
-                return newNodeConfig.error ?? "Unknown error"
             }
-            if(!instruction.noRedraw) {
-                redrawGraph = true;
+
+            if(redrawGraph) {
+                gpuMotor.current!.requestRedraw();
             }
+
+            return undefined;
+        } else {
+            return instructionOutput.error ?? "Unknown error"
         }
 
-        if(redrawGraph) {
-            gpuMotor.current!.requestRedraw();
-        }
-
-    }, [Project.state.editedNodeConfig, Project.state.editedHtml, Project.state.editedCode]);
+    }, [handleInstructionToNodeConfig, Project.state.editedHtml, Project.state.editedCode, Project.state.graph, currentEditConfig]);
 
     const updateNodeConfig = useCallback(async (instructions:Array<nodeConfigInstructions>): Promise<ActionContext> => {
         const start = Date.now();
