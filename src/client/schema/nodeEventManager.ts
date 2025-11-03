@@ -2,6 +2,9 @@
  * @file nodeEventManager.ts
  * @description Manages DOM event listeners for graph nodes with dynamic updates
  * @module schema
+ *
+ * REFACTORED: Now uses a context getter function instead of copying context values.
+ * This prevents stale closures and eliminates the need to call updateContext() frequently.
  */
 
 import { AsyncFunction } from "../../process/html/HtmlRender";
@@ -33,6 +36,22 @@ export interface NodeEventContext {
 
 }
 
+/**
+ * Stable context for NodeEventManager - only contains functions and elements that don't change
+ */
+export interface NodeEventStableContext {
+    gpuMotor: WebGpuMotor;
+    getNode: () => Node<any> | undefined;
+    container: HTMLElement;
+    overlayContainer: HTMLElement;
+    triggerEventOnNode: (nodeId: string, eventName: string) => void;
+}
+
+/**
+ * Getter function type - returns fresh context on each call
+ */
+export type NodeEventContextGetter = () => NodeEventContext;
+
 export interface DomEventConfig {
     name: string;
     call: string;
@@ -40,21 +59,27 @@ export interface DomEventConfig {
 
 /**
  * Manages event listeners for a single node with proper cleanup and re-attachment
+ *
+ * REFACTORED: Uses a getter function for context to avoid stale closures.
+ * The getter is called each time an event fires, ensuring fresh state.
  */
 export class NodeEventManager {
     private eventListeners = new Map<string, ((event: any) => void)[]>();
     private container: HTMLElement;
     private overlay: HTMLElement;
-    private context: NodeEventContext;
+    private getContext: NodeEventContextGetter;
+    private stableContext: NodeEventStableContext;
 
     constructor(
         container: HTMLElement,
         overlay: HTMLElement,
-        context: NodeEventContext
+        getContext: NodeEventContextGetter,
+        stableContext: NodeEventStableContext
     ) {
         this.container = container;
         this.overlay = overlay;
-        this.context = context;
+        this.getContext = getContext;
+        this.stableContext = stableContext;
     }
 
     /**
@@ -64,14 +89,17 @@ export class NodeEventManager {
         // Reset cursor
         this.container.style.cursor = "default";
 
+        // Get fresh context for event setup
+        const context = this.getContext();
 
-        if(this.context.editedNodeConfig && this.context.editedNodeConfig.node._key === this.context.getNode()?._key) {
+        if(context.editedNodeConfig && context.editedNodeConfig.node._key === this.stableContext.getNode()?._key) {
             const triggerNodeConfig = () => {
-                const htmlRenderer = this.context.getHtmlRenderer(this.context.getNode()?._key!);
+                // Always get fresh context when event fires
+                const ctx = this.getContext();
+                const htmlRenderer = ctx.getHtmlRenderer(this.stableContext.getNode()?._key!);
                 if(htmlRenderer && htmlRenderer[""]) {
                     htmlRenderer[""].htmlMotor.setBuildingMode(true);
-                    this.context.openHtmlEditor(this.context.getNode()?._key!, htmlRenderer[""], () => {
-
+                    ctx.openHtmlEditor(this.stableContext.getNode()?._key!, htmlRenderer[""], () => {
                         htmlRenderer[""].htmlMotor.setBuildingMode(false);
                     })
                 }
@@ -89,8 +117,11 @@ export class NodeEventManager {
             }
 
             const eventHandler = async (event: any) => {
-                const currentNode = this.context.getNode();
+                // Get fresh context every time the event fires
+                const currentNode = this.stableContext.getNode();
                 if (!currentNode) return;
+
+                const ctx = this.getContext();
 
                 const fct = new AsyncFunction(
                     "event",
@@ -109,16 +140,16 @@ export class NodeEventManager {
 
                 await fct(
                     event,
-                    this.context.gpuMotor,
+                    this.stableContext.gpuMotor,
                     currentNode,
-                    this.context.openHtmlEditor,
-                    this.context.getHtmlRenderer,
-                    this.context.initiateNewHtmlRenderer,
-                    this.context.removeHtmlRenderer,
-                    this.context.getHtmlAllRenderer,
+                    ctx.openHtmlEditor,
+                    ctx.getHtmlRenderer,
+                    ctx.initiateNewHtmlRenderer,
+                    ctx.removeHtmlRenderer,
+                    ctx.getHtmlAllRenderer,
                     this.container,
                     this.overlay,
-                    this.context.triggerEventOnNode
+                    this.stableContext.triggerEventOnNode
                 );
             };
 
@@ -137,9 +168,11 @@ export class NodeEventManager {
         const list = this.eventListeners.get("click") ?? [];
 
         const selectNode = (e:MouseEvent) => {
-            const node = this.context.getNode();
+            // Get fresh context when click fires
+            const node = this.stableContext.getNode();
             if(!node) return;
-            this.context.addSelectedNode(node._key, e.ctrlKey);
+            const ctx = this.getContext();
+            ctx.addSelectedNode(node._key, e.ctrlKey);
         }
 
         list.push(selectNode);
@@ -168,13 +201,6 @@ export class NodeEventManager {
     updateEvents(domEvents: DomEventConfig[]): void {
         this.removeEvents();
         this.attachEvents(domEvents);
-    }
-
-    /**
-     * Update context (useful when callbacks need to reference latest state)
-     */
-    updateContext(context: Partial<NodeEventContext>): void {
-        this.context = { ...this.context, ...context };
     }
 
     /**

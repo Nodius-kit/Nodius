@@ -312,11 +312,12 @@ export const RightPanelHandleConfig = memo(() => {
         instruction.key("handles")
             .key(editedHandle.side)
             .key("point")
-            .arrayRemoveIndex(handleInfo.index);
+            .index(handleInfo.index).remove();
 
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
-            i: instruction.instruction
+            i: instruction.instruction,
+            targetedIdentifier: handleInfo.point.id
         }]);
         retrieveNode();
 

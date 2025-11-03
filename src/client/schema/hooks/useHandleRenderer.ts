@@ -28,13 +28,12 @@ export const rectangleHeight = 5;
 export const handleOffset = 2;
 export const circleWidth = 10;
 
+import {ProjectContextProps} from "../../hooks/contexts/ProjectContext";
+
 export interface useHandleRendererOptions {
     gpuMotor: WebGpuMotor;
-    getNode: (nodeKey: string) => Node<any> | undefined;
-    setSelectedHandle: (handle:EditedNodeHandle) => void;
-    editedNodeConfig: EditedNodeTypeConfig | undefined;
-    onClickOnHandle: (editedHandle:EditedNodeHandle) => void,
-    updateGraph: (instructions:Array<GraphInstructions>) => Promise<ActionContext>;
+    getNode: (nodeKey: string) => (Node<any> | undefined);
+    getProjectRef: () => ProjectContextProps; // Stable getter for fresh Project state
 }
 
 interface HandleOverlay {
@@ -71,15 +70,22 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
     const activeOverlays = useRef<Map<string, HandleOverlay>>(new Map());
     const activeSideConfigPanel = useRef<sideConfigPane>(undefined);
 
-    const {createATemporaryEdge} = useEdgeHandler({
+    // Destructure stable references
+    const { getProjectRef } = options;
+
+    const volatileOptions = useRef<{gpuMotor: WebGpuMotor, getNode:(nodeKey: string) => (Node<any> | undefined)}>({
         gpuMotor: options.gpuMotor,
+        getNode: options.getNode,
     });
 
-    // Store latest options in ref so event handlers always use fresh values
-    const optionsRef = useRef(options);
+    const {createATemporaryEdge} = useEdgeHandler({
+        gpuMotor: volatileOptions.current.gpuMotor,
+    });
+
     useEffect(() => {
-        optionsRef.current = options;
-    }, [options]);
+        volatileOptions.current.gpuMotor = options.gpuMotor;
+        volatileOptions.current.getNode = options.getNode;
+    }, [options.getNode, options.gpuMotor]);
 
     // Menu container for horizontal sides (T, D)
     const menuContainerHorizontal = useDynamicClass(`
@@ -155,12 +161,13 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
         lastFrameId.current = requestAnimationFrame(() => {
 
-            if (!optionsRef.current.editedNodeConfig?.node) return;
+            const Project = getProjectRef();
+            if (!Project.state.editedNodeConfig?.node) return;
 
             const posX = evt.clientX;
             const posY = evt.clientY;
 
-            const nodeOverlay = document.querySelector('[data-node-overlay-key="' + optionsRef.current.editedNodeConfig.node._key + '"]');
+            const nodeOverlay = document.querySelector('[data-node-overlay-key="' + Project.state.editedNodeConfig.node._key + '"]');
             if (!nodeOverlay) return;
 
             const rect = nodeOverlay.getBoundingClientRect();
@@ -193,7 +200,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     activeSideConfigPanel.current = undefined;
                 }
                 if (!activeSideConfigPanel.current) {
-                    const node = optionsRef.current.getNode(optionsRef.current.editedNodeConfig.node._key);
+                    const node = volatileOptions.current.getNode(Project.state.editedNodeConfig.node._key);
                     if(!node) return;
 
                     const container = document.createElement("div");
@@ -219,7 +226,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     addButton.addEventListener("click", async (e:MouseEvent) => {
                         e.stopPropagation();
 
-                        const _node = optionsRef.current.getNode(node._key)!;
+                        const _node = volatileOptions.current.getNode(node._key)!;
                         if(!_node) return;
 
                         const instruction = new InstructionBuilder();
@@ -242,7 +249,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                             instruction.key("handles").key(direction!).set(handle);
                         }
 
-                        await optionsRef.current.updateGraph([{
+                        await getProjectRef().state.updateGraph!([{
                             nodeId: node._key,
                             i: instruction.instruction,
                         }]);
@@ -269,11 +276,11 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                             const instruction = new InstructionBuilder();
                             instruction.key("handles").key(direction!).remove();
 
-                            await optionsRef.current.updateGraph([{
+                            await getProjectRef().state.updateGraph!([{
                                 nodeId: node._key,
                                 i: instruction.instruction,
                             }]);
-                            optionsRef.current.gpuMotor.requestRedraw();
+                            volatileOptions.current.gpuMotor.requestRedraw();
 
                         })
                         container.appendChild(removeButton);
@@ -296,7 +303,8 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
 
     useEffect(() => {
-        if(optionsRef.current.editedNodeConfig) {
+        const Project = getProjectRef();
+        if(Project.state.editedNodeConfig) {
             window.addEventListener("mousemove", mouseMove);
         } else if(activeSideConfigPanel.current) {
             activeSideConfigPanel.current.container.remove();
@@ -305,7 +313,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
         return () => {
             window.removeEventListener("mousemove", mouseMove);
         }
-    }, [options.editedNodeConfig, mouseMove]);
+    }, [getProjectRef().state.editedNodeConfig, mouseMove, getProjectRef]);
 
 
     const classHandleContainer = useDynamicClass(`
@@ -375,21 +383,24 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
         container.addEventListener("click", (evt:MouseEvent)  => {
             evt.stopPropagation();
-            const node = optionsRef.current.getNode(nodeId);
+            const node = volatileOptions.current.getNode(nodeId);
             if(!node) return;
             const handleInfo = getHandleInfo(node, pointId);
             if(!handleInfo) return;
-            optionsRef.current.setSelectedHandle({
-                nodeId: node._key,
-                side:  handleInfo.side,
-                pointId: handleInfo.point.id
+            getProjectRef().dispatch({
+                field: "editedNodeHandle",
+                value: {
+                    nodeId: node._key,
+                    side: handleInfo.side,
+                    pointId: handleInfo.point.id
+                }
             });
         });
 
         const handleMouseDown = (e: MouseEvent) => {
             e.stopPropagation();
 
-            const node = optionsRef.current.getNode(nodeId);
+            const node = volatileOptions.current.getNode(nodeId);
             if(!node) return;
             let handleInfo = getHandleInfo(node, pointId);
             if(!handleInfo) return;
@@ -415,7 +426,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                 lastFrameId = requestAnimationFrame(async () => {
 
-                    const node = optionsRef.current.getNode(nodeId)!;
+                    const node = volatileOptions.current.getNode(nodeId)!;
                     if (!node) return;
 
                     const nodeOverlay = document.querySelector('[data-node-overlay-key="' +node._key + '"]');
@@ -436,7 +447,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
                     if (!isDragging) return;
 
-                    const scale = optionsRef.current.gpuMotor.getTransform().scale;
+                    const scale = volatileOptions.current.gpuMotor.getTransform().scale;
                     let newOffset = startOffset;
 
                     const changeSideThreeshold = 5;
@@ -525,7 +536,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                                 position: "fix"
                             });
                         }
-                        await optionsRef.current.updateGraph([
+                        await getProjectRef().state.updateGraph!([
                             {
                                 nodeId: nodeId,
                                 i: instructionRemove.instruction
@@ -541,7 +552,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                         startY = e.clientY;
 
                         // Re-query handle info after mutation
-                        const updatedNode = optionsRef.current.getNode(nodeId);
+                        const updatedNode = volatileOptions.current.getNode(nodeId);
                         if (!updatedNode) return;
 
                         const newHandleInfo = getHandleInfo(updatedNode, pointId);
@@ -567,7 +578,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 window.removeEventListener('mousemove', handleMouseMove);
                 window.removeEventListener('mouseup', handleMouseUp);
 
-                const node = optionsRef.current.getNode(nodeId);
+                const node = volatileOptions.current.getNode(nodeId);
                 if(!node) return;
                 const handleInfo = getHandleInfo(node, pointId);
                 if(!handleInfo) return;
@@ -575,8 +586,8 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                 if (isDragging) {
                     const instruction = new InstructionBuilder();
                     instruction.key("handles").key(handleInfo.side).key("point").index(handleInfo.index).key("offset").set(handleInfo.offset);
-                    await optionsRef.current.updateGraph([{ nodeId, i: instruction.instruction }]);
-                    optionsRef.current.gpuMotor.requestRedraw();
+                    await getProjectRef().state.updateGraph!([{ nodeId, i: instruction.instruction }]);
+                    volatileOptions.current.gpuMotor.requestRedraw();
                 }
 
                 enableTextSelection();
@@ -596,7 +607,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
 
     const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement) => {
 
-        const node = typeof based_node === "string" ? optionsRef.current.getNode(based_node) : based_node;
+        const node = typeof based_node === "string" ? volatileOptions.current.getNode(based_node) : based_node;
         if(!node) return;
         const nodeId = node._key;
 
@@ -661,7 +672,7 @@ export function useHandleRenderer(options: useHandleRendererOptions) {
                     const handleEl = document.createElement("div");
                     handleEl.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
 
-                    const moveableContainer = optionsRef.current.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
+                    const moveableContainer = getProjectRef().state.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
                     // Create text element for accept string
                     const textEl = document.createElement("div");

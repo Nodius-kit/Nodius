@@ -67,10 +67,11 @@ export interface Node<T> {
         position: "separate" | "fix",
         point: Array<{
             id: string,
-            offset?:number,
+            offset?: number,
             display?: string,
             type: "in" | "out",
             accept: string,
+            linkedHtmlId?: string,
         }>
     }>>,
     data?: T

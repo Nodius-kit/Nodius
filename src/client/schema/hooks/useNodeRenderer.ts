@@ -2,11 +2,14 @@
  * @file useNodeRenderer.ts
  * @description Hook for managing HTML renderers for nodes with proper dependency tracking
  * @module schema/hooks
+ *
+ * REFACTORED: Now uses ref pattern for dependencies to prevent callback recreations
  */
 
 import { useRef, useCallback, useEffect } from "react";
 import { htmlRenderContext } from "../../hooks/contexts/ProjectContext";
 import {deepCopy} from "../../../utils/objectUtils";
+import {useStableProjectRef} from "../../hooks/useStableProjectRef";
 
 export interface RendererDependencies {
     currentEntryDataType?: any;
@@ -21,17 +24,24 @@ export interface NodeRendererInfo {
 
 export interface UseNodeRendererOptions {
     dependencies: RendererDependencies;
-    getNodeConfig: (nodeType: string) => any;
 }
 
 /**
  * Hook for managing HTML renderers with proper dependency tracking
+ * Uses ref pattern to avoid recreating callbacks on every dependency change
  */
 export function useNodeRenderer(options: UseNodeRendererOptions) {
-    const { dependencies, getNodeConfig } = options;
+    const { dependencies } = options;
 
     const nodeRenderers = useRef<Map<string, NodeRendererInfo>>(new Map());
     const previousDependencies = useRef<RendererDependencies>({});
+    const projectRef = useStableProjectRef();
+
+    // Store current dependencies in ref for stable callback access
+    const dependenciesRef = useRef<RendererDependencies>(dependencies);
+    useEffect(() => {
+        dependenciesRef.current = dependencies;
+    }, [dependencies]);
 
     /**
      * Register a new renderer for a node
@@ -39,13 +49,14 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
     const registerRenderer = useCallback((nodeKey: string, htmlRenderer?: htmlRenderContext) => {
         nodeRenderers.current.set(nodeKey, { nodeKey, htmlRenderer });
 
-        // Set initial dependencies
+        // Set initial dependencies using ref for fresh values
         if (htmlRenderer) {
-            htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", dependencies.dataTypes);
-            htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", dependencies.enumTypes);
-            htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", dependencies.currentEntryDataType);
+            const deps = dependenciesRef.current;
+            htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", deps.dataTypes);
+            htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", deps.enumTypes);
+            htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", deps.currentEntryDataType);
         }
-    }, [dependencies]);
+    }, []); // No dependencies - stable callback
 
     /**
      * Unregister a renderer
@@ -75,32 +86,34 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
         const info = nodeRenderers.current.get(nodeKey);
         if (!info?.htmlRenderer) return;
 
-        // Update global storage variables
-        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", dependencies.dataTypes);
-        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", dependencies.enumTypes);
-        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", dependencies.currentEntryDataType);
+        // Update global storage variables using ref for fresh values
+        const deps = dependenciesRef.current;
+        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", deps.dataTypes);
+        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", deps.enumTypes);
+        info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", deps.currentEntryDataType);
 
         // Trigger re-render with updated config
-        const nodeConfig = getNodeConfig(nodeType);
+        const nodeConfig = projectRef.current.state.nodeTypeConfig[nodeType];
         if (nodeConfig?.content) {
             await info.htmlRenderer.htmlMotor.render(nodeConfig.content);
         }
-    }, [dependencies, getNodeConfig]);
+    }, []); // Only getNodeConfig dependency
 
     /**
      * Update dependencies for all renderers
      */
     const updateAllRendererDependencies = useCallback(async (): Promise<void> => {
+        const deps = dependenciesRef.current;
         const updates = Array.from(nodeRenderers.current.values()).map(async (info) => {
             if (!info.htmlRenderer) return;
 
-            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", dependencies.dataTypes);
-            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", dependencies.enumTypes);
-            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", dependencies.currentEntryDataType);
+            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allDataTypes", deps.dataTypes);
+            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("allEnumTypes", deps.enumTypes);
+            info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("globalCurrentEntryDataType", deps.currentEntryDataType);
         });
 
         await Promise.all(updates);
-    }, [dependencies]);
+    }, []); // No dependencies - stable callback
 
     /**
      * Clear all renderers
@@ -132,7 +145,7 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
 
             updateAllRendererDependencies();
         }
-    }, [dependencies, updateAllRendererDependencies]);
+    }, [dependencies]); // updateAllRendererDependencies is stable, no need in deps
 
     return {
         registerRenderer,

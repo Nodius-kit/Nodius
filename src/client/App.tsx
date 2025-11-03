@@ -26,11 +26,12 @@ import {DashboardWorkFlow} from "./component/dashboard/DashboardWorkFlow";
 import {SchemaEditor} from "./component/dashboard/SchemaEditor";
 import {useSocketSync} from "./hooks/useSocketSync";
 import {useCallback, useContext, useEffect, useRef} from "react";
-import {Node} from "../utils/graph/graphType";
+import {handleSide, Node} from "../utils/graph/graphType";
 import {EditedHtmlType, htmlRenderContext, ProjectContext} from "./hooks/contexts/ProjectContext";
 import {documentHaveActiveElement} from "../utils/objectUtils";
-import {getInverseInstruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
+import {getInverseInstruction, Instruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
+import {GraphInstructions} from "../utils/sync/wsObject";
 
 
 export const App = () => {
@@ -133,6 +134,7 @@ export const App = () => {
 
     useEffect(() => {
         const keyDown = async (event:KeyboardEvent) => {
+            if(!Project.state.graph || !Project.state.selectedSheetId) return;
             // Normalize key detection
             const key = event.key.toLowerCase();
 
@@ -178,6 +180,10 @@ export const App = () => {
                 if(Project.state.editedHtml != undefined && Project.state.updateHtml != undefined) {
                     // in html
                     const selectedObject = Project.state.editedHtml.htmlRender.getSelectedObject();
+
+                    const instructionsGraph: GraphInstructions[] = [];
+                    const intructionsHtml:Instruction[] = [];
+
                     if (selectedObject && selectedObject.identifier !== "root") {
                         const instruction = new InstructionBuilder();
                         let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.html, instruction);
@@ -186,8 +192,43 @@ export const App = () => {
                             const reverseInstruction = getInverseInstruction(Project.state.editedHtml.html, instruction.instruction);
                             // used later for CTRL + Z / CTRL + Y
 
-                            await Project.state.updateHtml(instruction.instruction);
+                            intructionsHtml.push(instruction.instruction);
+
+                            // now check that there is no handle related in the node and edge
+                            const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(Project.state.editedHtml.targetType === "node" ? Project.state.editedHtml.target._key : "0");
+                            if(!node) return;
+                            for (const [handleSide, handleData] of Object.entries(node.handles)) {
+                                if (!handleData?.point?.length) continue;
+
+                                const points = handleData.point;
+
+                                // Iterate backwards since you might be removing elements
+                                for (let i = points.length - 1; i >= 0; i--) {
+                                    const point = points[i];
+
+                                    if (point.linkedHtmlId === selectedObject.identifier) {
+                                        const instruction = new InstructionBuilder()
+                                            .key("handles")
+                                            .key(handleSide)
+                                            .key("point")
+                                            .index(i)
+                                            .remove();
+
+                                        instructionsGraph.push({
+                                            nodeId: node._key!,
+                                            i: instruction,
+                                            targetedIdentifier: point.id
+                                        });
+                                    }
+                                }
+                            }
                         }
+                    }
+                    if(intructionsHtml.length > 0) {
+                        const output = await Project.state.updateHtml(intructionsHtml);
+                    }
+                    if(instructionsGraph.length > 0) {
+                        const output = await Project.state.updateGraph!(instructionsGraph);
                     }
                 } else if(Project.state.selectedEdge.length > 0 || Project.state.selectedNode.length > 0 && Project.state.batchDeleteElements) {
 
@@ -199,7 +240,7 @@ export const App = () => {
         return () => {
             document.removeEventListener("keydown", keyDown);
         }
-    }, [Project.state.editedHtml, Project.state.updateHtml, Project.state.selectedNode, Project.state.batchDeleteElements]);
+    }, [Project.state.editedHtml, Project.state.updateHtml, Project.state.selectedNode, Project.state.batchDeleteElements, Project.state.graph, Project.state.selectedSheetId]);
 
     const returnToMenu = useCallback(() => {
         setActiveWindow(0);

@@ -20,7 +20,7 @@
  * - Node event handlers for hover/selection
  */
 
-import {memo, useContext, useEffect, useRef, forwardRef, useCallback} from "react";
+import {memo, useContext, useEffect, useRef, forwardRef, useCallback, useMemo} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {Edge, Node} from "../../utils/graph/graphType";
@@ -34,6 +34,7 @@ import {useNodeRenderer} from "./hooks/useNodeRenderer";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
 import {useHandleRenderer} from "./hooks/useHandleRenderer";
+import {useStableProjectRef} from "../hooks/useStableProjectRef";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -63,6 +64,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 }, motorRef) => {
 
     const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef(); // Stable ref for DOM events and callbacks
     const Theme = useContext(ThemeContext);
 
     const canvasRef = useRef<HTMLCanvasElement|null>(null);
@@ -151,7 +153,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
         gpuMotor.current = motor;
 
-        // Initialize managers
+        // Initialize managers (created once, stored in refs for stability)
         animationManager.current = new NodeAnimationManager({
             springStiffness: 100,
             damping: 2 * Math.sqrt(100)
@@ -183,14 +185,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             enumTypes: Project.state.enumTypes,
             dataTypes: Project.state.dataTypes,
         },
-        getNodeConfig: (nodeType) => Project.state.nodeTypeConfig[nodeType]
     });
 
 
-    // Helper functions
+    // Helper functions - Using projectRef for stable callbacks without recreating on every state change
     const getNode = useCallback((nodeKey: string) => {
-        return Project.state.graph?.sheets[Project.state.selectedSheetId!]?.nodeMap.get(nodeKey);
-    }, [Project.state.graph, Project.state.selectedSheetId]);
+        return projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId!]?.nodeMap.get(nodeKey);
+    }, []); // Empty deps - always use fresh ref
 
     const updateZIndex = useCallback((element: HTMLElement, overlay: HTMLElement, currentZIndex: number) => {
         const currentZ = overlay.style.zIndex === "" ? 0 : parseInt(overlay.style.zIndex);
@@ -200,7 +201,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             return zIndex.current;
         }
         return currentZ;
-    }, []);
+    }, []); // No deps - pure DOM manipulation
 
     const triggerEventOnNode = useCallback((nodeId: string, eventName: string) => {
         const nodeElement = document.querySelector(`[data-node-key="${nodeId}"]`);
@@ -208,28 +209,20 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             const updateEvent = new CustomEvent(eventName, { bubbles: false });
             nodeElement.dispatchEvent(updateEvent);
         }
-    }, []);
+    }, []); // No deps - pure DOM manipulation
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
         getNode: getNode,
         gpuMotor: gpuMotor.current!,
-        setSelectedHandle: (handle:EditedNodeHandle) => Project.dispatch({
-            field: "editedNodeHandle",
-            value: handle
-        }),
-        editedNodeConfig: Project.state.editedNodeConfig,
-        onClickOnHandle: (editedHandle:EditedNodeHandle) => Project.dispatch({field:"editedNodeHandle", value: editedHandle}),
-        updateGraph: Project.state.updateGraph!
+        getProjectRef: () => projectRef.current, // Pass getter instead of individual state pieces
     });
 
 
-    // Drag and drop hook
+    // Drag and drop hook - Using projectRef for stable reference
     const { createDragHandler } = useNodeDragDrop({
         gpuMotor: gpuMotor.current!,
         getNode: getNode,
-        updateGraph: Project.state.updateGraph!,
-        isNodeInteractionDisabled: (nodeKey) =>
-            Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false,
+        getProjectRef: () => projectRef.current,
         isNodeAnimating: (nodeKey) => {
             const node = getNode(nodeKey) as any;
             return node && ("toPosX" in node || "toPosY" in node);
@@ -240,13 +233,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     });
 
-    // Resize hook
+    // Resize hook - Using projectRef for stable reference
     const { createResizeHandler } = useNodeResize({
         gpuMotor: gpuMotor.current!,
         getNode: getNode,
-        updateGraph: Project.state.updateGraph!,
-        isNodeInteractionDisabled: (nodeKey) =>
-            (Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false) && (!Project.state.editedNodeConfig || Project.state.editedNodeConfig.node._key !== nodeKey),
+        getProjectRef: () => projectRef.current,
         updateZIndex: updateZIndex,
         config: {
             sizeAnimationDelay: 200,
@@ -258,7 +249,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     // Node enter handler
     const nodeEnter = useCallback(async (node: Node<any>) => {
-        if (!Project.state.nodeTypeConfig[node.type]) {
+        // Use projectRef for all Project.state accesses to avoid stale closures
+        const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
+
+        if (!nodeConfig) {
             console.warn("Node type", node.type, "config not loaded yet, adding to pending queue");
             pendingNodeEnters.current.set(node._key, node);
             return;
@@ -281,8 +275,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         overlay.style.pointerEvents = 'none';
         overlay.style.cursor = "pointer";
         overlay.style.transition = "outline ease-in-out 0.3s";
-
-        const nodeConfig = Project.state.nodeTypeConfig[node.type];
 
         overlay.style.borderRadius = nodeConfig.border.radius + "px";
         nodeHTML.style.borderRadius = nodeConfig.border.radius + "px";
@@ -315,46 +307,59 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         const dragHandler = createDragHandler(node._key, overlay, nodeHTML);
         nodeHTML.addEventListener("mousedown", dragHandler);
 
-        // Create event manager
-        const eventManager = new NodeEventManager(nodeHTML, overlay, {
-            gpuMotor: gpuMotor.current,
-            getNode: () => getNode(node._key),
-            openHtmlEditor: Project.state.openHtmlEditor!,
-            getHtmlRenderer: Project.state.getHtmlRenderer!,
-            initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer!,
-            removeHtmlRenderer: Project.state.removeHtmlRenderer!,
-            getHtmlAllRenderer: Project.state.getHtmlAllRenderer!,
-            container: nodeHTML,
-            overlayContainer: overlay,
-            triggerEventOnNode: triggerEventOnNode,
-            editedHtml: Project.state.editedHtml,
-            editedNodeConfig: Project.state.editedNodeConfig,
-            addSelectedNode: (nodeId:string, ctrlKey) => {
-                if (ctrlKey) {
-                    if (Project.state.selectedNode.includes(nodeId)) {
-                        Project.dispatch({
-                            field: "selectedNode",
-                            value: Project.state.selectedNode.filter(id => id !== nodeId)
-                        });
+        // Create event manager - using getter for fresh context
+        const eventManager = new NodeEventManager(
+            nodeHTML,
+            overlay,
+            // Context getter - returns fresh state on each call
+            () => ({
+                gpuMotor: gpuMotor.current!,
+                getNode: () => getNode(node._key),
+                openHtmlEditor: projectRef.current.state.openHtmlEditor!,
+                getHtmlRenderer: projectRef.current.state.getHtmlRenderer!,
+                initiateNewHtmlRenderer: projectRef.current.state.initiateNewHtmlRenderer!,
+                removeHtmlRenderer: projectRef.current.state.removeHtmlRenderer!,
+                getHtmlAllRenderer: projectRef.current.state.getHtmlAllRenderer!,
+                container: nodeHTML,
+                overlayContainer: overlay,
+                triggerEventOnNode: triggerEventOnNode,
+                editedHtml: projectRef.current.state.editedHtml,
+                editedNodeConfig: projectRef.current.state.editedNodeConfig,
+                addSelectedNode: (nodeId:string, ctrlKey) => {
+                    if (ctrlKey) {
+                        if (projectRef.current.state.selectedNode.includes(nodeId)) {
+                            projectRef.current.dispatch({
+                                field: "selectedNode",
+                                value: projectRef.current.state.selectedNode.filter(id => id !== nodeId)
+                            });
+                        } else {
+                            projectRef.current.dispatch({
+                                field: "selectedNode",
+                                value: [...projectRef.current.state.selectedNode, nodeId]
+                            });
+                        }
                     } else {
-                        Project.dispatch({
+                        projectRef.current.dispatch({
                             field: "selectedNode",
-                            value: [...Project.state.selectedNode, nodeId]
+                            value: [nodeId]
+                        });
+                        projectRef.current.dispatch({
+                            field: "selectedEdge",
+                            value: []
                         });
                     }
-                } else {
-                    Project.dispatch({
-                        field: "selectedNode",
-                        value: [nodeId]
-                    });
-                    Project.dispatch({
-                        field: "selectedEdge",
-                        value: []
-                    });
-                }
-            },
-            selectedNode: Project.state.selectedNode
-        });
+                },
+                selectedNode: projectRef.current.state.selectedNode
+            }),
+            // Stable context - values that don't change
+            {
+                gpuMotor: gpuMotor.current!,
+                getNode: () => getNode(node._key),
+                container: nodeHTML,
+                overlayContainer: overlay,
+                triggerEventOnNode: triggerEventOnNode
+            }
+        );
 
         // Attach events
         if (nodeConfig.domEvents) {
@@ -375,7 +380,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 return;
             };
 
-            const updatedConfig = Project.state.nodeTypeConfig[updatedNode.type];
+            // Get fresh config via projectRef
+            const updatedConfig = projectRef.current.state.nodeTypeConfig[updatedNode.type];
             if (!updatedConfig) return;
 
             // Update events with latest config
@@ -419,7 +425,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         // Initialize HTML renderer
         let htmlRenderer: htmlRenderContext | undefined;
         if (nodeConfig.content) {
-            htmlRenderer = await Project.state.initiateNewHtmlRenderer!(
+            // Use projectRef for fresh initiateNewHtmlRenderer
+            htmlRenderer = await projectRef.current.state.initiateNewHtmlRenderer!(
                 node,
                 "",
                 nodeHTML,
@@ -475,21 +482,16 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
 
     }, [
-        Project.state.nodeTypeConfig,
-        Project.state.initiateNewHtmlRenderer,
-        Project.state.removeHtmlRenderer,
-        Project.state.openHtmlEditor,
-        Project.state.getHtmlRenderer,
-        Project.state.getHtmlAllRenderer,
-        Project.state.editedNodeConfig,
-        createDragHandler,
-        createResizeHandler,
-        resizeHandleClass,
-        getNode,
-        nodeRenderer,
-        onNodeEnter,
-        triggerEventOnNode,
-        updateHandleOverlay
+        // Removed all Project.state dependencies - now using projectRef
+        // Only stable dependencies remain
+        createDragHandler,       // Stable (uses projectRef internally)
+        createResizeHandler,     // Stable (uses projectRef internally)
+        resizeHandleClass,       // Stable CSS class
+        getNode,                 // Stable callback
+        nodeRenderer,            // Hook instance
+        onNodeEnter,             // Prop callback
+        triggerEventOnNode,      // Stable callback
+        updateHandleOverlay      // Stable callback
     ]);
 
     // Node leave handler
@@ -502,12 +504,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         pendingNodeEnters.current.delete(nodeId);
 
         if (node) {
-            const nodeConfig = Project.state.nodeTypeConfig[node.type];
+            // Use projectRef for fresh nodeTypeConfig
+            const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
             if (!nodeConfig || nodeConfig.alwaysRendered) return;
         }
 
-        if(Project.state.removeHtmlRenderer) {
-            Project.state.removeHtmlRenderer(nodeId, "");
+        // Use projectRef for fresh removeHtmlRenderer
+        if(projectRef.current.state.removeHtmlRenderer) {
+            projectRef.current.state.removeHtmlRenderer(nodeId, "");
         }
 
         const schemaNode = inSchemaNode.current.get(nodeId);
@@ -524,7 +528,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAnimation(nodeId);
             inSchemaNode.current.delete(nodeId);
         }
-    }, [onNodeLeave, Project.state.nodeTypeConfig, nodeRenderer, cleanupHandleOverlay, Project.state.removeHtmlRenderer]);
+    }, [onNodeLeave, nodeRenderer, cleanupHandleOverlay]); // Removed Project.state dependencies
 
     // Reset handler
     const onReset = useCallback(() => {
@@ -541,69 +545,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         animationManager.current?.stopAllAnimations();
     }, [nodeRenderer]);
 
-    // Update context for all event managers when dependencies change
+    // Update event listeners when nodeTypeConfig changes (only update events, not context)
+    // Context is now fetched fresh via getter on each event, so no need to update it
     useEffect(() => {
         inSchemaNode.current.forEach(schemaNode => {
-            schemaNode.eventManager.updateContext({
-                gpuMotor: gpuMotor.current!,
-                getNode: () => getNode(schemaNode.node._key),
-                openHtmlEditor: Project.state.openHtmlEditor,
-                getHtmlRenderer: Project.state.getHtmlRenderer,
-                initiateNewHtmlRenderer: Project.state.initiateNewHtmlRenderer,
-                removeHtmlRenderer: Project.state.removeHtmlRenderer,
-                getHtmlAllRenderer: Project.state.getHtmlAllRenderer,
-                container: schemaNode.element,
-                overlayContainer: schemaNode.overElement,
-                triggerEventOnNode: triggerEventOnNode,
-                editedHtml: Project.state.editedHtml,
-                editedNodeConfig: Project.state.editedNodeConfig,
-                addSelectedNode: (nodeId:string, ctrlKey) => {
-                    if (ctrlKey) {
-                        if (Project.state.selectedNode.includes(nodeId)) {
-                            Project.dispatch({
-                                field: "selectedNode",
-                                value: Project.state.selectedNode.filter(id => id !== nodeId)
-                            });
-                        } else {
-                            Project.dispatch({
-                                field: "selectedNode",
-                                value: [...Project.state.selectedNode, nodeId]
-                            });
-                        }
-                    } else {
-                        Project.dispatch({
-                            field: "selectedNode",
-                            value: [nodeId]
-                        });
-                        Project.dispatch({
-                            field: "selectedEdge",
-                            value: []
-                        });
-                    }
-                },
-                selectedNode: Project.state.selectedNode
-            });
-
-            const nodeConfig = Project.state.nodeTypeConfig[schemaNode.node.type];
+            const nodeConfig = projectRef.current.state.nodeTypeConfig[schemaNode.node.type];
             schemaNode.eventManager.removeEvents();
-            if(nodeConfig.domEvents) {
+            if(nodeConfig?.domEvents) {
                 schemaNode.eventManager.attachEvents(nodeConfig.domEvents);
             }
         });
-    }, [
-        Project.state.openHtmlEditor,
-        Project.state.getHtmlRenderer,
-        Project.state.initiateNewHtmlRenderer,
-        Project.state.removeHtmlRenderer,
-        Project.state.getHtmlAllRenderer,
-        Project.state.nodeTypeConfig,
-        Project.state.editedHtml,
-        Project.state.editedNodeConfig,
-        Project.state.selectedNode,
-        Project.state.selectedEdge,
-        getNode,
-        triggerEventOnNode
-    ]);
+    }, [Project.state.nodeTypeConfig]); // Only dependency: nodeTypeConfig
 
     // Update drag and resize handlers when handlers change (e.g., when updateGraph changes)
     useEffect(() => {

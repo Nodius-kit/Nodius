@@ -49,6 +49,7 @@ interface RightPanelStyleEditorProps {
     onUpdateEvents: (eventsInstruction: InstructionBuilder) => Promise<void>;
     onUpdateContent?: (contentInstruction: InstructionBuilder) => Promise<void>;
     getMotor: () => (WebGpuMotor | undefined);
+    selectedIdentifier?: string
 }
 
 export interface EditableCss {
@@ -95,6 +96,7 @@ interface EventEditorProps {
     baseInstruction: InstructionBuilder;
     onUpdate: (instr: InstructionBuilder) => Promise<void>;
     getMotor: () => (WebGpuMotor | undefined);
+    selectedIdentifier?: string
 }
 
 // ============================================================================
@@ -437,7 +439,7 @@ CssEditor.displayName = 'CssEditor';
 /**
  * Individual event editor
  */
-const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getMotor }: EventEditorProps) => {
+const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getMotor, selectedIdentifier }: EventEditorProps) => {
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
     const [isExpanded, setIsExpanded] = useState(true);
@@ -575,7 +577,8 @@ const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getMotor }:
                     type: "out",
                     id:handlePointId,
                     accept: "HtmlEvent",
-                    display: ""
+                    display: "",
+                    linkedHtmlId: selectedIdentifier
                 }]
             });
         } else {
@@ -583,7 +586,8 @@ const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getMotor }:
                 type: "out",
                 id:handlePointId,
                 accept: "HtmlEvent",
-                display: ""
+                display: "",
+                linkedHtmlId: selectedIdentifier
             });
         }
         const output = await Project.state.updateGraph([{
@@ -680,7 +684,7 @@ EventEditor.displayName = 'EventEditor';
 /**
  * Events Editor - Manages all DOM events
  */
-const EventsEditor = memo(({ events, onUpdate, getMotor }: { events: EditableEvents; onUpdate: (instr: InstructionBuilder) => Promise<void>, getMotor: () => (WebGpuMotor | undefined) }) => {
+const EventsEditor = memo(({ events, onUpdate, getMotor, selectedIdentifier }: { events: EditableEvents; onUpdate: (instr: InstructionBuilder) => Promise<void>, getMotor: () => (WebGpuMotor | undefined), selectedIdentifier:string|undefined }) => {
     const Theme = useContext(ThemeContext);
 
     const newEventButtonClass = useDynamicClass(`
@@ -732,6 +736,7 @@ const EventsEditor = memo(({ events, onUpdate, getMotor }: { events: EditableEve
                     baseInstruction={events.instruction}
                     onUpdate={onUpdate}
                     getMotor={getMotor}
+                    selectedIdentifier={selectedIdentifier}
                 />
             ))}
             <div className={newEventButtonClass} onClick={newEvent}>
@@ -842,7 +847,8 @@ export const RightPanelStyleEditor = memo(({
     onUpdateCss,
     onUpdateEvents,
     onUpdateContent,
-    getMotor
+    getMotor,
+    selectedIdentifier
 }: RightPanelStyleEditorProps) => {
     const [activeTab, setActiveTab] = useState<'css' | 'events' | 'content'>(() => {
         // Default to content tab if it's a text component
@@ -906,7 +912,7 @@ export const RightPanelStyleEditor = memo(({
 
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
                 {activeTab === 'css' && <CssEditor css={css} onUpdate={onUpdateCss} />}
-                {activeTab === 'events' && <EventsEditor events={events} onUpdate={onUpdateEvents} getMotor={getMotor}/>}
+                {activeTab === 'events' && <EventsEditor events={events} onUpdate={onUpdateEvents} getMotor={getMotor} selectedIdentifier={selectedIdentifier}/>}
             </div>
         </div>
     );

@@ -78,7 +78,6 @@ export const RightPanelComponentEditor = memo(({
         if(selectedIdentifier && Project.state.editedHtml) {
             const instruction = new InstructionBuilder();
             const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
-            console.log(Project.state.editedHtml.html);
             if(object) {
                 return {
                     events: (object.domEvents ?? []) as Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
@@ -213,6 +212,7 @@ export const RightPanelComponentEditor = memo(({
                         onUpdateCss={updateCss}
                         onUpdateEvents={updateEvents}
                         getMotor={getMotor}
+                        selectedIdentifier={selectedIdentifier}
                     />
                 ) : (
                     <div className={emptyStateClass}>

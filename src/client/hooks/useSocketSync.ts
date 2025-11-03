@@ -487,6 +487,7 @@ export const useSocketSync = () => {
             });
         });
         const rootNode = findFirstNodeWithId(htmlGraph, "root");
+        gpuMotor.current.removeCameraAreaLock();
         if(rootNode) {
             gpuMotor.current.smoothFitToNode(rootNode._key, {
                 padding: 100
@@ -861,9 +862,9 @@ export const useSocketSync = () => {
     const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>, fromOutside:boolean = false):Promise<string|undefined> => { // if return undefined -> it's good
 
         const instructionOutput = await handleIntructionToGraph(fromOutside ? instructions : instructions.filter((i) => !i.dontApplyToMySelf),(currentGraphInstrution, objectBeingApplied) => {
-            if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+            if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && ("identifier" in objectBeingApplied || "id" in objectBeingApplied)) {
                 const object:HtmlObject = objectBeingApplied;
-                if(object.identifier !== currentGraphInstrution.targetedIdentifier) {
+                if(object.identifier !== currentGraphInstrution.targetedIdentifier && object.id !== currentGraphInstrution.targetedIdentifier) {
                     console.error("wrong action, target:", currentGraphInstrution.targetedIdentifier, "found:", object.identifier);
                     return false;
                 }
@@ -1003,9 +1004,9 @@ export const useSocketSync = () => {
         if(!currentEditConfig.current) return;
 
         const instructionOutput = await handleInstructionToNodeConfig(fromOutside ? instructions : instructions.filter((i) => !i.dontApplyToMySelf), (instruction, objectBeingApplied) => {
-            if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {
+            if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && ("identifier" in objectBeingApplied || "id" in objectBeingApplied)) {
                 const object:HtmlObject = objectBeingApplied;
-                if(object.identifier !== instruction.targetedIdentifier) {
+                if(object.identifier !== instruction.targetedIdentifier && object.id !== instruction.targetedIdentifier) {
                     console.error("wrong action, target:", instruction.targetedIdentifier, "found:", object.identifier);
                     return false;
                 }
@@ -1033,6 +1034,14 @@ export const useSocketSync = () => {
                 value: currentEditConfig.current
             });
 
+            Project.state.nodeTypeConfig[nodeConfig._key] = nodeConfig;
+            Project.dispatch({
+                field: "nodeTypeConfig",
+                value: {
+                    ...Project.state.nodeTypeConfig,
+                }
+            });
+
             // Update edited code if applicable
             const editeCode = Project.state.editedCode.find((e) => e.nodeId === currentEditConfig.current!.node._key);
             if(editeCode && editeCode.applyChange) {
@@ -1046,6 +1055,7 @@ export const useSocketSync = () => {
                 }
             }
 
+            console.log(Project.state.editedHtml);
             // Update edited HTML if applicable
             if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
                 let object = nodeConfig as any;
@@ -1055,6 +1065,7 @@ export const useSocketSync = () => {
                 }
 
                 Project.state.editedHtml.html = object;
+                console.log("new object", deepCopy(object));
                 Project.state.editedHtml.target = nodeConfig;
 
                 Project.dispatch({
@@ -1064,6 +1075,7 @@ export const useSocketSync = () => {
 
                 // Check if any instruction requires redraw
                 const needsRedraw = instructions.some(instruction => !instruction.noRedraw);
+                console.log(needsRedraw);
                 if(needsRedraw) {
                     await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                 }

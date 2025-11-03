@@ -10,6 +10,7 @@ import { WebGpuMotor } from "../motor/webGpuMotor/index";
 import { disableTextSelection, enableTextSelection } from "../../../utils/objectUtils";
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import { GraphInstructions } from "../../../utils/sync/wsObject";
+import { ProjectContextProps } from "../../hooks/contexts/ProjectContext";
 
 export interface NodeResizeConfig {
     sizeAnimationDelay?: number;
@@ -20,8 +21,7 @@ export interface NodeResizeConfig {
 export interface UseNodeResizeOptions {
     gpuMotor: WebGpuMotor;
     getNode: (nodeKey: string) => Node<any> | undefined;
-    updateGraph: (insts: GraphInstructions[]) => Promise<{ status: boolean; reason?: string }>;
-    isNodeInteractionDisabled: (nodeKey: string) => boolean;
+    getProjectRef: () => ProjectContextProps; // Stable getter for fresh Project state
     config?: NodeResizeConfig;
     updateZIndex: (element: HTMLElement, overlay: HTMLElement, currentZIndex: number) => number;
 }
@@ -33,8 +33,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
     const {
         gpuMotor,
         getNode,
-        updateGraph,
-        isNodeInteractionDisabled,
+        getProjectRef,
         updateZIndex,
         config = {}
     } = options;
@@ -53,8 +52,11 @@ export function useNodeResize(options: UseNodeResizeOptions) {
             const currentNode = getNode(nodeKey);
             if (!currentNode) return;
 
+            const Project = getProjectRef();
+            const isDisabled = (Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false) &&
+                              (!Project.state.editedNodeConfig || Project.state.editedNodeConfig.node._key !== nodeKey);
 
-            if (!gpuMotor.isInteractive() || isNodeInteractionDisabled(nodeKey)) {
+            if (!gpuMotor.isInteractive() || isDisabled) {
                 return;
             }
 
@@ -110,7 +112,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     }
                 );
 
-                output = await updateGraph(insts);
+                output = await getProjectRef().state.updateGraph!(insts);
                 if (!output.status) {
                     // Restore old size on failure
                     node.size.width = oldWidth;
@@ -199,7 +201,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
             window.addEventListener("mouseup", mouseUp);
             window.addEventListener("mousemove", mouseMove);
         };
-    }, [gpuMotor, getNode, updateGraph, isNodeInteractionDisabled, sizeAnimationDelay, minWidth, minHeight, config]);
+    }, [gpuMotor, getNode, getProjectRef, sizeAnimationDelay, minWidth, minHeight]);
 
     return { createResizeHandler };
 }

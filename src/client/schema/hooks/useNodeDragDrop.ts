@@ -10,6 +10,7 @@ import { WebGpuMotor } from "../motor/webGpuMotor/index";
 import { disableTextSelection, enableTextSelection } from "../../../utils/objectUtils";
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import { GraphInstructions } from "../../../utils/sync/wsObject";
+import { ProjectContextProps } from "../../hooks/contexts/ProjectContext";
 
 export interface NodeDragDropConfig {
     posAnimationDelay?: number;
@@ -18,8 +19,7 @@ export interface NodeDragDropConfig {
 export interface UseNodeDragDropOptions {
     gpuMotor: WebGpuMotor;
     getNode: (nodeKey: string) => Node<any> | undefined;
-    updateGraph: (insts: GraphInstructions[]) => Promise<{ status: boolean; reason?: string }>;
-    isNodeInteractionDisabled: (nodeKey: string) => boolean;
+    getProjectRef: () => ProjectContextProps; // Stable getter for fresh Project state
     isNodeAnimating: (nodeKey: string) => boolean;
     updateZIndex: (element: HTMLElement, overlay: HTMLElement, currentZIndex: number) => number;
     config?: NodeDragDropConfig;
@@ -32,8 +32,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
     const {
         gpuMotor,
         getNode,
-        updateGraph,
-        isNodeInteractionDisabled,
+        getProjectRef,
         isNodeAnimating,
         updateZIndex,
         config = {}
@@ -50,7 +49,10 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
             const currentNode = getNode(nodeKey);
             if (!currentNode) return;
 
-            if (!gpuMotor.isInteractive() || isNodeInteractionDisabled(nodeKey)) {
+            const Project = getProjectRef();
+            const isDisabled = Project.state.disabledNodeInteraction[nodeKey]?.moving ?? false;
+
+            if (!gpuMotor.isInteractive() || isDisabled) {
                 return;
             }
 
@@ -110,7 +112,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     }
                 );
 
-                const output = await updateGraph(insts);
+                const output = await getProjectRef().state.updateGraph!(insts);
                 if (!output.status) {
                     // Restore old position on failure
                     node.posX = oldPosX;
@@ -197,7 +199,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
             window.addEventListener("mouseup", mouseUp);
             window.addEventListener("mousemove", mouseMove);
         };
-    }, [gpuMotor, getNode, updateGraph, isNodeInteractionDisabled, isNodeAnimating, updateZIndex, posAnimationDelay, config]);
+    }, [gpuMotor, getNode, getProjectRef, isNodeAnimating, updateZIndex, posAnimationDelay]);
 
     return { createDragHandler };
 }
