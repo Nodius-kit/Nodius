@@ -24,7 +24,7 @@ import {CSSProperties, memo, useCallback, useContext, useEffect, useMemo, useSta
 import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
-import {EditableCss, EditableEvents, RightPanelStyleEditor} from "./RightPanelStyleEditor";
+import {EditableCss, EditableEvents, EditableContent, EditableTag, RightPanelStyleEditor} from "./RightPanelStyleEditor";
 import {searchElementWithIdentifier} from "../../../../utils/html/htmlUtils";
 import {HTMLDomEvent} from "../../../../utils/html/htmlType";
 import {deepCopy} from "../../../../utils/objectUtils";
@@ -60,45 +60,75 @@ export const RightPanelComponentEditor = memo(({
     }
 
 
-    const currentCss: EditableCss | undefined = useMemo(() => {
-        if(selectedIdentifier && Project.state.editedHtml) {
-            const instruction = new InstructionBuilder();
-            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
-            if(object) {
-                return {
-                    css: object.css ?? [],
-                    instruction: instruction
-                };
-            }
+    const currentEditables = useMemo(() => {
+        if(!selectedIdentifier || !Project.state.editedHtml) {
+            return {
+                css: undefined,
+                events: undefined,
+                tag: undefined,
+                content: undefined
+            };
         }
-        return undefined;
-    }, [Project.state.editedHtml, selectedIdentifier]);
 
-    const currentEvents: EditableEvents | undefined = useMemo(() => {
-        if(selectedIdentifier && Project.state.editedHtml) {
-            const instruction = new InstructionBuilder();
-            const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
-            if(object) {
-                return {
-                    events: (object.domEvents ?? []) as Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
-                    instruction: instruction
-                };
-            }
+        const instruction = new InstructionBuilder();
+        const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.html, instruction);
+
+        if(!object) {
+            return {
+                css: undefined,
+                events: undefined,
+                tag: undefined,
+                content: undefined
+            };
         }
-        return undefined;
+
+        const css: EditableCss = {
+            css: object.css ?? [],
+            instruction: instruction.clone()
+        };
+
+        const events: EditableEvents = {
+            events: (object.domEvents ?? []) as Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
+            instruction: instruction.clone()
+        };
+
+        const tag: EditableTag = {
+            tag: object.tag,
+            instruction: instruction.clone()
+        };
+
+        const content: EditableContent | undefined = object.type === "text" ? {
+            content: object.content,
+            instruction: instruction.clone(),
+            isTextType: true
+        } : undefined;
+
+        return { css, events, tag, content };
     }, [Project.state.editedHtml, selectedIdentifier]);
 
     const updateCss = useCallback(async (cssInstruction: InstructionBuilder) => {
-        if(currentCss) {
+        if(currentEditables.css) {
             await Project.state.updateHtml!(cssInstruction.instruction);
         }
-    }, [currentCss, Project.state]);
+    }, [currentEditables.css, Project.state]);
 
     const updateEvents = useCallback(async (eventsInstruction: InstructionBuilder) => {
-        if(currentEvents) {
+        if(currentEditables.events) {
             await Project.state.updateHtml!(eventsInstruction.instruction);
         }
-    }, [currentEvents, Project.state]);
+    }, [currentEditables.events, Project.state]);
+
+    const updateTag = useCallback(async (tagInstruction: InstructionBuilder) => {
+        if(currentEditables.tag) {
+            await Project.state.updateHtml!(tagInstruction.instruction);
+        }
+    }, [currentEditables.tag, Project.state]);
+
+    const updateContent = useCallback(async (contentInstruction: InstructionBuilder) => {
+        if(currentEditables.content) {
+            await Project.state.updateHtml!(contentInstruction.instruction);
+        }
+    }, [currentEditables.content, Project.state]);
 
     useEffect(() => {
         if(Project.state.editedHtml) {
@@ -205,12 +235,16 @@ export const RightPanelComponentEditor = memo(({
 
             {/* Content */}
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
-                {(currentCss && currentEvents) ? (
+                {(currentEditables.css && currentEditables.events && currentEditables.tag) ? (
                     <RightPanelStyleEditor
-                        css={currentCss}
-                        events={currentEvents}
+                        css={currentEditables.css}
+                        events={currentEditables.events}
+                        content={currentEditables.content}
+                        tag={currentEditables.tag}
                         onUpdateCss={updateCss}
                         onUpdateEvents={updateEvents}
+                        onUpdateContent={updateContent}
+                        onUpdateTag={updateTag}
                         getMotor={getMotor}
                         selectedIdentifier={selectedIdentifier}
                     />

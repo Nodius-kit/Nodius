@@ -15,12 +15,13 @@
  */
 
 import {memo, useContext, useState} from "react";
-import {Code, MousePointer} from "lucide-react";
+import {Code, MousePointer, Type} from "lucide-react";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {CssEditor} from "./CssEditor";
 import {EventsEditor} from "./EventsEditor";
 import {ContentEditor} from "./ContentEditor";
+import {TagEditor} from "./TagEditor";
 import {RightPanelStyleEditorProps} from "./types";
 
 // Re-export types for external use
@@ -28,7 +29,8 @@ export type {
     RightPanelStyleEditorProps,
     EditableCss,
     EditableEvents,
-    EditableContent
+    EditableContent,
+    EditableTag
 } from "./types";
 
 // ============================================================================
@@ -42,9 +44,11 @@ export const RightPanelStyleEditor = memo(({
     css,
     events,
     content,
+    tag,
     onUpdateCss,
     onUpdateEvents,
     onUpdateContent,
+    onUpdateTag,
     getMotor,
     selectedIdentifier
 }: RightPanelStyleEditorProps) => {
@@ -91,6 +95,12 @@ export const RightPanelStyleEditor = memo(({
 
     return (
         <div style={{width: "100%", height: "100%", display: "flex", flexDirection: "column"}}>
+            {/* Tag Editor - Always visible at top */}
+            <div style={{marginBottom: "16px"}}>
+                <TagEditor tag={tag} onUpdate={onUpdateTag} />
+            </div>
+
+            {/* Tabs */}
             <div className={tabsContainerClass}>
                 <div
                     className={`${tabClass} ${activeTab === 'css' ? 'active' : ''}`}
@@ -106,11 +116,21 @@ export const RightPanelStyleEditor = memo(({
                     <MousePointer height={18} width={18} />
                     <span>Events</span>
                 </div>
+                {content && (
+                    <div
+                        className={`${tabClass} ${activeTab === 'content' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('content')}
+                    >
+                        <Type height={18} width={18} />
+                        <span>Content</span>
+                    </div>
+                )}
             </div>
 
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
                 {activeTab === 'css' && <CssEditor css={css} onUpdate={onUpdateCss} />}
                 {activeTab === 'events' && <EventsEditor events={events} onUpdate={onUpdateEvents} getMotor={getMotor} selectedIdentifier={selectedIdentifier}/>}
+                {activeTab === 'content' && content && onUpdateContent && <ContentEditor content={content} onUpdate={onUpdateContent} />}
             </div>
         </div>
     );

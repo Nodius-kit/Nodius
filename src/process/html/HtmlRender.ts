@@ -784,7 +784,13 @@ export class HtmlRender {
 
     private async callFunction(code: string, env: Record<string, any>): Promise<any> {
         const fct = new AsyncFunction(...[...Object.keys(env), code]);
-        return await fct(...[...Object.values(env)]);
+        let output:any = undefined;
+        try {
+            output = await fct(...[...Object.values(env)]);
+        } catch(e) {
+            console.error(e);
+        }
+        return output;
     }
 
     /* utility to trigger re render only one component and it's child*/

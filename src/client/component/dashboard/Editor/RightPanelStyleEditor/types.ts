@@ -17,9 +17,11 @@ export interface RightPanelStyleEditorProps {
     css: EditableCss;
     events: EditableEvents;
     content?: EditableContent;
+    tag: EditableTag;
     onUpdateCss: (cssInstruction: InstructionBuilder) => Promise<void>;
     onUpdateEvents: (eventsInstruction: InstructionBuilder) => Promise<void>;
     onUpdateContent?: (contentInstruction: InstructionBuilder) => Promise<void>;
+    onUpdateTag: (tagInstruction: InstructionBuilder) => Promise<void>;
     getMotor: () => (WebGpuMotor | undefined);
     selectedIdentifier?: string
 }
@@ -97,5 +99,19 @@ export interface EventsEditorProps {
 
 export interface ContentEditorProps {
     content: EditableContent;
+    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+}
+
+// ============================================================================
+// TAG EDITOR INTERFACES
+// ============================================================================
+
+export interface EditableTag {
+    tag: string;
+    instruction: InstructionBuilder;
+}
+
+export interface TagEditorProps {
+    tag: EditableTag;
     onUpdate: (instr: InstructionBuilder) => Promise<void>;
 }
