@@ -243,7 +243,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 const htmlRenderer = getHtmlRenderer(node)[render_id];
                 
                 gpuMotor.smoothFitToNode(node._key, {
-                    padding: 100
+                    padding: 500
                 });
                 
                 
