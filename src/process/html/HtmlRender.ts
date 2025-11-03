@@ -721,7 +721,7 @@ export class HtmlRender {
         }
     }*/
 
-    private callWorkFlowEvent(event: any, objectStorage: ObjectStorage, call: string): void {
+    /*private callWorkFlowEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         this.callFunction(call, {
             event: event,
             document: this.superContainer,
@@ -734,7 +734,7 @@ export class HtmlRender {
             renderElementWithIdentifier: this.renderElementWithIdentifier,
             renderElement: () => this.renderElementWithIdentifier(objectStorage.object.identifier)
         });
-    }
+    }*/
 
     public dispose(): void {
         if (this.previousObject) {
@@ -895,13 +895,13 @@ export class HtmlRender {
             overlayName.style.position = 'absolute';
             overlayName.style.backgroundColor = backgroundColor;
             overlayName.style.color = "var(--nodius-secondary-contrastText)";
-            overlayName.style.top = "0";
-            overlayName.style.left = "0";
+            overlayName.style.top = "-20px";
+            overlayName.style.left = "-2px";
             overlayName.style.fontSize = "12px";
             overlayName.style.userSelect = "none";
             overlayName.innerText = storage.object.name;
             overlayName.style.padding="0px 3px";
-            overlayName.style.borderBottomRightRadius = "5px";
+            //overlayName.style.borderBottomRightRadius = "5px";
             overlay.appendChild(overlayName);
 
             return overlay;

@@ -194,10 +194,11 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     }, []); // Empty deps - always use fresh ref
 
     const updateZIndex = useCallback((element: HTMLElement, overlay: HTMLElement, currentZIndex: number) => {
-        const currentZ = overlay.style.zIndex === "" ? 0 : parseInt(overlay.style.zIndex);
+        const currentZ = currentZIndex ? currentZIndex : (overlay.style.zIndex === "" ? 0 : parseInt(overlay.style.zIndex));
         if (currentZ < zIndex.current) {
-            zIndex.current++;
-            overlay.style.zIndex = element.style.zIndex = zIndex.current + "";
+            zIndex.current+=2;
+            element.style.zIndex = (zIndex.current+1) + "";
+            overlay.style.zIndex = (zIndex.current) + ""
             return zIndex.current;
         }
         return currentZ;
@@ -727,7 +728,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
                 // Increase z-index for selected nodes
                 const currentZ = parseInt(overlay.style.zIndex) || 0;
-                overlay.style.zIndex = element.style.zIndex = (currentZ + 10000) + "";
+                overlay.style.zIndex = (currentZ + 10000) + "";
+                element.style.zIndex = (currentZ + 10001) + "";
             } else {
                 // Remove selection classes
                 overlay.classList.remove(selectedNodeClass);

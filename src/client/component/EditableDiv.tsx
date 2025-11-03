@@ -193,10 +193,12 @@ export const EditableDiv = memo(({
     };
 
     const containerStyle: CSSProperties = {
-        ...style,
         position: 'relative',
         display: 'inline-block',
         cursor: 'text',
+        minHeight: "47px",
+        ...style,
+
     };
 
     if (resizable) {
@@ -244,7 +246,9 @@ export const EditableDiv = memo(({
                         overflow: 'hidden',
                         width: '100%',
                         height: '100%',
-                        display: resizable ? 'block' : 'inline',
+                        display: 'flex',
+                        alignItems:"center",
+
                     }}
                 >
                     {placeholder}
