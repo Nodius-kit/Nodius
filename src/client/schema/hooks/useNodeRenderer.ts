@@ -10,11 +10,12 @@ import { useRef, useCallback, useEffect } from "react";
 import { htmlRenderContext } from "../../hooks/contexts/ProjectContext";
 import {deepCopy} from "../../../utils/objectUtils";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
+import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 
 export interface RendererDependencies {
-    currentEntryDataType?: any;
-    enumTypes?: any[];
-    dataTypes?: any[];
+    currentEntryDataType?: DataTypeClass;
+    enumTypes?: EnumClass[];
+    dataTypes?: DataTypeClass[];
 }
 
 export interface NodeRendererInfo {

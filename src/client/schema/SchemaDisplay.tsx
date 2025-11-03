@@ -49,7 +49,7 @@ interface SchemaNodeInfo {
     overElement: HTMLElement;
     resizeHandle: HTMLElement;
     htmlRenderer?: htmlRenderContext;
-    eventManager: NodeEventManager;
+    //eventManager: NodeEventManager;
     mouseEnterHandler: () => void;
     mouseLeaveHandler: () => void;
     dragHandler: (evt: MouseEvent) => void;
@@ -308,7 +308,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         nodeHTML.addEventListener("mousedown", dragHandler);
 
         // Create event manager - using getter for fresh context
-        const eventManager = new NodeEventManager(
+        /*const eventManager = new NodeEventManager(
             nodeHTML,
             overlay,
             // Context getter - returns fresh state on each call
@@ -359,12 +359,12 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 overlayContainer: overlay,
                 triggerEventOnNode: triggerEventOnNode
             }
-        );
+        );*/
 
         // Attach events
-        if (nodeConfig.domEvents) {
+        /*if (nodeConfig.domEvents) {
             eventManager.attachEvents(nodeConfig.domEvents);
-        }
+        }*/
 
         // Handle node updates
         const handleNodeUpdate = async () => {
@@ -385,9 +385,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             if (!updatedConfig) return;
 
             // Update events with latest config
-            if (updatedConfig.domEvents) {
+            /*if (updatedConfig.domEvents) {
                 eventManager.updateEvents(updatedConfig.domEvents);
-            }
+            }*/
 
             // Update HTML renderer
             await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
@@ -468,7 +468,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             overElement: overlay,
             resizeHandle,
             htmlRenderer,
-            eventManager,
+            //eventManager,
             mouseEnterHandler: mouseEnter,
             mouseLeaveHandler: mouseLeave,
             dragHandler,
@@ -522,7 +522,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             nodeDisplayContainer.current.removeChild(schemaNode.element);
             nodeDisplayContainer.current.removeChild(schemaNode.overElement);
-            schemaNode.eventManager.dispose();
+            //schemaNode.eventManager.dispose();
             nodeRenderer.unregisterRenderer(nodeId);
             overlayManager.current?.removeOverlay(nodeId);
             animationManager.current?.stopAnimation(nodeId);
@@ -535,9 +535,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         if (nodeDisplayContainer.current) {
             nodeDisplayContainer.current.innerHTML = "";
         }
-        inSchemaNode.current.forEach(schemaNode => {
+        /*inSchemaNode.current.forEach(schemaNode => {
             schemaNode.eventManager.dispose();
-        });
+        });*/
         inSchemaNode.current.clear();
         pendingNodeEnters.current.clear();
         nodeRenderer.clearAllRenderers();
@@ -547,7 +547,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     // Update event listeners when nodeTypeConfig changes (only update events, not context)
     // Context is now fetched fresh via getter on each event, so no need to update it
-    useEffect(() => {
+    /*useEffect(() => {
         inSchemaNode.current.forEach(schemaNode => {
             const nodeConfig = projectRef.current.state.nodeTypeConfig[schemaNode.node.type];
             schemaNode.eventManager.removeEvents();
@@ -555,7 +555,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 schemaNode.eventManager.attachEvents(nodeConfig.domEvents);
             }
         });
-    }, [Project.state.nodeTypeConfig]); // Only dependency: nodeTypeConfig
+    }, [Project.state.nodeTypeConfig]); // Only dependency: nodeTypeConfig*/
 
     // Update drag and resize handlers when handlers change (e.g., when updateGraph changes)
     useEffect(() => {
