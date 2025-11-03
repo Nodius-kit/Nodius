@@ -280,7 +280,7 @@ export class HtmlRender {
         this.addDebugListeners(storage);
 
         if (object.type === "text") {
-            element.textContent = await this.parseContent(object.content[this.language], storage);
+            element.innerHTML = await this.parseContent(object.content[this.language], storage);
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
         } else {
@@ -451,7 +451,7 @@ export class HtmlRender {
                 storage.externalChanges.textContent = false; // Reset tracking
             } else if (!storage.externalChanges.textContent) {
                 // Content unchanged in object and not externally modified -> ensure sync
-                if (element.textContent !== newText) {
+                if (element.innerHTML !== newText) {
                     this.setTextContentInternal(element, newText);
                 }
             }
@@ -546,7 +546,7 @@ export class HtmlRender {
      */
     private setTextContentInternal(element: HTMLElement, content: string): void {
         (element as any).__htmlRenderInternalUpdate = true;
-        element.textContent = content;
+        element.innerHTML = content;
         setTimeout(() => {
             delete (element as any).__htmlRenderInternalUpdate;
         }, 0);
