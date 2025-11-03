@@ -86,6 +86,7 @@ export class NodeEventManager {
      * Attach DOM events from configuration
      */
     attachEvents(domEvents: DomEventConfig[]): void {
+
         // Reset cursor
         this.container.style.cursor = "default";
 
@@ -125,31 +126,13 @@ export class NodeEventManager {
 
                 const fct = new AsyncFunction(
                     "event",
-                    "gpuMotor",
-                    "node",
-                    "openHtmlEditor",
-                    "getHtmlRenderer",
-                    "initiateNewHtmlRenderer",
-                    "removeHtmlRenderer",
-                    "getHtmlAllRenderer",
-                    "container",
-                    "overlayContainer",
-                    "triggerEventOnNode",
+                    ...Object.keys(this.getAsyncFunctionContext()),
                     domEvent.call
                 );
 
                 await fct(
                     event,
-                    this.stableContext.gpuMotor,
-                    currentNode,
-                    ctx.openHtmlEditor,
-                    ctx.getHtmlRenderer,
-                    ctx.initiateNewHtmlRenderer,
-                    ctx.removeHtmlRenderer,
-                    ctx.getHtmlAllRenderer,
-                    this.container,
-                    this.overlay,
-                    this.stableContext.triggerEventOnNode
+                    ...Object.values(this.getAsyncFunctionContext()),
                 );
             };
 
@@ -201,6 +184,64 @@ export class NodeEventManager {
     updateEvents(domEvents: DomEventConfig[]): void {
         this.removeEvents();
         this.attachEvents(domEvents);
+    }
+
+    /**
+     * Get the async function context for node event handlers
+     * Returns the environment object that will be available in async functions
+     * @returns The context object with all available variables
+     */
+    public getAsyncFunctionContext(): Record<string, any> {
+        const ctx = this.getContext();
+        const currentNode = this.stableContext.getNode();
+
+        return {
+            event: null, // Will be provided at runtime for DOM events
+            gpuMotor: this.stableContext.gpuMotor,
+            node: currentNode,
+            openHtmlEditor: ctx.openHtmlEditor,
+            getHtmlRenderer: ctx.getHtmlRenderer,
+            initiateNewHtmlRenderer: ctx.initiateNewHtmlRenderer,
+            removeHtmlRenderer: ctx.removeHtmlRenderer,
+            getHtmlAllRenderer: ctx.getHtmlAllRenderer,
+            container: this.container,
+            overlayContainer: this.overlay,
+            triggerEventOnNode: this.stableContext.triggerEventOnNode
+        };
+    }
+
+    /**
+     * Get a map of context variables with their descriptions
+     * Useful for code editor autocomplete and documentation
+     * @returns A map of variable names to their descriptions
+     */
+    public getContextVariablesDescription(): Map<string, string> {
+        const descriptions = new Map<string, string>();
+
+        // Event variable
+        descriptions.set("event", "DOM Event object (available in event handlers)");
+
+        // GPU Motor
+        descriptions.set("gpuMotor", "WebGpuMotor instance for canvas operations and transformations");
+
+        // Node data
+        descriptions.set("node", "The current Node object with all its properties and data");
+
+        // HTML Editor functions
+        descriptions.set("openHtmlEditor", "Function to open HTML editor: openHtmlEditor(nodeId: string, context: htmlRenderContext, onClose: () => void)");
+        descriptions.set("getHtmlRenderer", "Function to get HTML renderer for a node: getHtmlRenderer(nodeId: string) => Record<string, htmlRenderContext>");
+        descriptions.set("initiateNewHtmlRenderer", "Function to create new HTML renderer: initiateNewHtmlRenderer(nodeId: string, key: string, html: HtmlObject, option?: HtmlRenderOption)");
+        descriptions.set("removeHtmlRenderer", "Function to remove HTML renderer: removeHtmlRenderer(nodeId: string, key?: string)");
+        descriptions.set("getHtmlAllRenderer", "Function to get all HTML renderers: getHtmlAllRenderer() => Record<string, Record<string, htmlRenderContext>>");
+
+        // DOM containers
+        descriptions.set("container", "The main HTML container element for the node");
+        descriptions.set("overlayContainer", "The overlay HTML container element for the node");
+
+        // Event trigger
+        descriptions.set("triggerEventOnNode", "Function to trigger event on another node: triggerEventOnNode(nodeId: string, eventName: string)");
+
+        return descriptions;
     }
 
     /**

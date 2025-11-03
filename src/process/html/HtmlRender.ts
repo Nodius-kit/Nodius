@@ -685,15 +685,7 @@ export class HtmlRender {
     private callDOMEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         this.callFunction(call, {
             event: event,
-            document: this.superContainer,
-            currentElement: objectStorage.element,
-            htmlObject: objectStorage.object,
-            currentStorage: objectStorage.storage,
-            globalStorage: this.globalStorage,
-            ...objectStorage.extraVariable,
-            renderElementWithId: this.renderElementWithId,
-            renderElementWithIdentifier: this.renderElementWithIdentifier,
-            renderElement: () => this.renderElementWithIdentifier(objectStorage.object.identifier)
+            ...this.getAsyncFunctionContext(objectStorage)
         })
     }
 
@@ -819,6 +811,64 @@ export class HtmlRender {
         const storage = this.objectStorage.get(identifier);
         if (!storage) return;
         this.updateDOM(storage.object, storage.element, storage, storage.extraVariable);
+    }
+
+    /**
+     * Get the async function context for a specific element
+     * Returns the environment object that will be available in async functions
+     * @param storage - The ObjectStorage of the element
+     * @returns The context object with all available variables, or undefined if element not found
+     */
+    public getAsyncFunctionContext(storage: ObjectStorage): Record<string, any> | undefined {
+
+        return {
+            document: this.superContainer,
+            currentElement: storage.element,
+            htmlObject: storage.object,
+            currentStorage: storage.storage,
+            globalStorage: this.globalStorage,
+            ...storage.extraVariable,
+            renderElementWithId: this.renderElementWithId,
+            renderElementWithIdentifier: this.renderElementWithIdentifier,
+            renderElement: () => this.renderElementWithIdentifier(storage.object.identifier)
+        };
+    }
+
+    /**
+     * Get a map of context variables with their descriptions
+     * Useful for code editor autocomplete and documentation
+     * @param identifier - The identifier of the element
+     * @returns A map of variable names to their descriptions, or undefined if element not found
+     */
+    public getContextVariablesDescription(identifier: string): Map<string, string> | undefined {
+        const storage = this.objectStorage.get(identifier);
+        if (!storage) return undefined;
+
+        const descriptions = new Map<string, string>();
+
+        // Core DOM and object variables
+        descriptions.set("event", "DOM Event object (available in event handlers)");
+        descriptions.set("document", "The container element (superContainer)");
+        descriptions.set("currentElement", "The current HTML element");
+        descriptions.set("htmlObject", "The HtmlObject definition for this element");
+
+        // Storage variables
+        descriptions.set("currentStorage", "Local storage object for this element (persistent data)");
+        descriptions.set("globalStorage", "Global storage object shared across all elements");
+
+        // Render functions
+        descriptions.set("renderElementWithId", "Function to re-render element by HTML id: renderElementWithId(id: string)");
+        descriptions.set("renderElementWithIdentifier", "Function to re-render element by identifier: renderElementWithIdentifier(identifier: string)");
+        descriptions.set("renderElement", "Function to re-render the current element: renderElement()");
+
+        // Extra variables (from array context, etc.)
+        for (const key of Object.keys(storage.extraVariable)) {
+            const value = storage.extraVariable[key];
+            const type = typeof value;
+            descriptions.set(key, `Extra variable (${type}): ${JSON.stringify(value)}`);
+        }
+
+        return descriptions;
     }
 
     private async parseContent(content: string, objectStorage: ObjectStorage): Promise<string> {

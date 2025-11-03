@@ -372,6 +372,8 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         {
             name: "nodeUpdate",
             call: `
+            console.log(container);
+                console.trace();
                 // Select the container element where the JSON viewer will be rendered
                 const renderContainer = container.querySelector("[dataTypeRender]");
                 
