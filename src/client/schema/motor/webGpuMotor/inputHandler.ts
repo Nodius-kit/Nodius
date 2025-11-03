@@ -75,7 +75,7 @@ export class InputHandler {
 	public setupMouseEvents(): void {
 		this.canvas.addEventListener("mousedown", (e) => {
 			if (!this.interactiveEnabled) return;
-			if (e.button === 0) {
+			if (e.button === 1) {
 				this.isPanning = true;
 				this.lastMouseX = e.clientX;
 				this.lastMouseY = e.clientY;
@@ -101,12 +101,17 @@ export class InputHandler {
 			}
 		});
 
-		const mouseUp = () => {
+
+		window.addEventListener("mouseup", (e) => {
+			if(e.button === 1) {
+				if (!this.interactiveEnabled) return;
+				this.isPanning = false;
+			}
+		});
+		window.addEventListener("mouseout", () => {
 			if (!this.interactiveEnabled) return;
 			this.isPanning = false;
-		};
-		window.addEventListener("mouseup", mouseUp);
-		window.addEventListener("mouseout", mouseUp);
+		});
 
 		this.canvas.addEventListener("wheel", (e) => {
 			if (!this.interactiveEnabled) return;
