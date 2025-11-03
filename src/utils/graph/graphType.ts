@@ -190,7 +190,6 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         delimiter: true,
         tag: "div",
         domEvents: [],
-        workflowEvents: [],
         attribute: {
             mainRender: "",
         },
@@ -306,7 +305,6 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         name: "Container",
         delimiter: true,
         domEvents: [],
-        workflowEvents: [],
         tag: "div",
         attribute: {
             dataTypeRender: "",

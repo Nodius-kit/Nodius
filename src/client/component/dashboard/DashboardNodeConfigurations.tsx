@@ -290,7 +290,7 @@ export const DashboardNodeConfigurations = memo(({
                 delimiter: true,
                 tag: "div",
                 domEvents: [],
-                workflowEvents: [],
+                //workflowEvents: [],
                 css: [
                     {
                         selector: "&",

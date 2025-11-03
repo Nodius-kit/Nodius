@@ -29,7 +29,7 @@ const object:HtmlObject = {
     name:"loader",
     css: [],
     domEvents: [],
-    workflowEvents: [],
+    //workflowEvents: [],
     identifier: "0",
     type: "html",
     content: `

@@ -24,7 +24,7 @@ import {CSSBlock} from "./HtmlCss";
 /* ------------ HTML CLASS --------------- */
 
 export const HTMLWorkflowEvent = ["variableChange"] as const;
-export type HTMLWorkflowEventType = typeof HTMLWorkflowEvent[number];
+//export type HTMLWorkflowEventType = typeof HTMLWorkflowEvent[number];
 
 export interface HTMLDomEvent<T> {
     name: T;
@@ -32,11 +32,11 @@ export interface HTMLDomEvent<T> {
     call: string;
 }
 
-export interface HTMLWorkFlowEvent<T> {
+/*export interface HTMLWorkFlowEvent<T> {
     name: T;
     description?: string;
     call: string;
-}
+}*/
 
 export interface HtmlBase {
     identifier: string; // auto generated
@@ -44,7 +44,7 @@ export interface HtmlBase {
     tag: string;
     css:CSSBlock[],
     domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
-    workflowEvents: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
+    //workflowEvents: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
     name:string,
     delimiter?: boolean,
     temporary?:boolean,

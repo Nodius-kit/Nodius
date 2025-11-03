@@ -20,8 +20,7 @@
  * - Async function execution for event handlers
  */
 
-import {CSSProperties} from "react";
-import {HtmlObject, HTMLWorkflowEventType, HtmlBase} from "../../utils/html/htmlType";
+import {HtmlObject, HtmlBase} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/HtmlCss";
@@ -30,7 +29,7 @@ export interface ObjectStorage {
     element: HTMLElement,
     object: HtmlObject,
     domEvents: Map<string, Array<((event: any) => void)>>,
-    workflowEvents: Map<string, Array<((event: any) => void)>>,
+    //workflowEvents: Map<string, Array<((event: any) => void)>>,
     storage: Record<string, any>,
     extraVariable: Record<string, any>,
     debugEvents: Map<string, Array<((event: any) => void)>>,
@@ -69,7 +68,7 @@ export class HtmlRender {
     private previousObject: HtmlObject | undefined;
     private readonly objectStorage: Map<string, ObjectStorage> = new Map<string, ObjectStorage>();
     private globalStorage: Record<string, any> = {};
-    private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
+    //private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
     private language: string = "en";
 
 
@@ -102,7 +101,12 @@ export class HtmlRender {
         this.globalStorage = new Proxy({}, {
             set: (target:any, prop: string, val) => {
                 target[prop] = val;
-                this.dispatchWorkFlowEvent("variableChange", { variable: prop, value: val });
+                //this.dispatchWorkFlowEvent("variableChange", { variable: prop, value: val });
+                const variableChange = new CustomEvent("variableChange", {
+                    detail: { variable: prop, value: val }
+                });
+
+                this.dispatchDomEvent(variableChange, false);
                 return true;
             }
         });
@@ -165,7 +169,7 @@ export class HtmlRender {
         for(const event of events) {
             event(undefined);
         }
-        document.querySelectorAll("[data-render-building-mode-overlay]").forEach((el)=> el.remove());
+        this.superContainer.querySelectorAll("[data-render-building-mode-overlay]").forEach((el)=> el.remove());
     }
 
     public setLanguage(lang: string): void {
@@ -211,11 +215,16 @@ export class HtmlRender {
             element: element,
             object: object,
             domEvents: new Map(),
-            workflowEvents: new Map(),
+            //workflowEvents: new Map(),
             storage: new Proxy({}, {
                 set: (target:any, prop: string, val) => {
                     target[prop] = val;
-                    this.dispatchWorkFlowEvent("variableChange", { variable: prop, value: val });
+                    const variableChange = new CustomEvent("variableChange", {
+                        detail: { variable: prop, value: val }
+                    });
+
+                    this.dispatchDomEvent(variableChange, false);
+                    //this.dispatchWorkFlowEvent("variableChange", { variable: prop, value: val });
                     return true;
                 }
             }),
@@ -257,7 +266,7 @@ export class HtmlRender {
                 storage.domEvents.set(event.name, events);
             });
         }
-        if (object.workflowEvents) {
+        /*if (object.workflowEvents) {
             object.workflowEvents.forEach((event) => {
                 const caller = (evt: any) => {
                     this.callWorkFlowEvent(evt, storage, event.call);
@@ -274,7 +283,7 @@ export class HtmlRender {
                     listeners.push(storage);
                 }
             })
-        }
+        }*/
         this.objectStorage.set(object.identifier, storage);
         parent.insertBefore(element, insertBefore);
         this.addDebugListeners(storage);
@@ -409,7 +418,7 @@ export class HtmlRender {
         }
 
         // Update workflowEvents: remove old from maps, clear, add new
-        for (const name of storage.workflowEvents.keys()) {
+        /*for (const name of storage.workflowEvents.keys()) {
             const listeners = this.workflowEventMap.get(name as HTMLWorkflowEventType);
             if (listeners) {
                 const index = listeners.indexOf(storage);
@@ -434,7 +443,7 @@ export class HtmlRender {
                     mapListeners.push(storage);
                 }
             });
-        }
+        }*/
 
         storage.object = newObject;
         storage.extraVariable = extraVar;
@@ -676,6 +685,7 @@ export class HtmlRender {
     private callDOMEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         this.callFunction(call, {
             event: event,
+            document: this.superContainer,
             currentElement: objectStorage.element,
             htmlObject: objectStorage.object,
             currentStorage: objectStorage.storage,
@@ -702,18 +712,19 @@ export class HtmlRender {
     }
 
     /* external workflow related event */
-    public dispatchWorkFlowEvent(eventName: string, event: any): void {
+    /*public dispatchWorkFlowEvent(eventName: string, event: any): void {
         const storages = this.workflowEventMap.get(eventName as HTMLWorkflowEventType) ?? [];
         for (const storage of storages) {
             if (storage.workflowEvents.has(eventName)) {
                 storage.workflowEvents.get(eventName)!.forEach((call) => call(event));
             }
         }
-    }
+    }*/
 
     private callWorkFlowEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         this.callFunction(call, {
             event: event,
+            document: this.superContainer,
             currentElement: objectStorage.element,
             htmlObject: objectStorage.object,
             currentStorage: objectStorage.storage,
@@ -731,7 +742,7 @@ export class HtmlRender {
         }
         this.clearBuildingOverlay();
         this.objectStorage.clear();
-        this.workflowEventMap.clear();
+        //this.workflowEventMap.clear();
         this.globalStorage = {};
         this.container.innerHTML = "";
         this.previousObject = undefined;
@@ -754,7 +765,7 @@ export class HtmlRender {
         storage.domEvents.clear();
 
         // Remove workflow mappings
-        for (const name of storage.workflowEvents.keys()) {
+        /*for (const name of storage.workflowEvents.keys()) {
             const listeners = this.workflowEventMap.get(name as HTMLWorkflowEventType);
             if (listeners) {
                 const index = listeners.indexOf(storage);
@@ -763,7 +774,7 @@ export class HtmlRender {
                 }
             }
         }
-        storage.workflowEvents.clear();
+        storage.workflowEvents.clear();*/
 
         this.removeDebugListeners(storage);
 
@@ -993,7 +1004,7 @@ export class HtmlRender {
 
     public pushBuildingInteractEvent(type:"hover"|"select", identifier?:string) {
         if(identifier) {
-            const element = document.querySelector("[data-identifier='" + identifier + "']") as HTMLElement;
+            const element = this.superContainer.querySelector("[data-identifier='" + identifier + "']") as HTMLElement;
             if (element) {
                 element.dispatchEvent(type === "hover" ? new Event("mouseenter") : new Event("click"));
             }

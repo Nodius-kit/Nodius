@@ -13,8 +13,8 @@
  * - Direct code editing with syntax highlighting
  */
 
-import {memo, useContext, useState} from "react";
-import {ChevronDown, ChevronRight, Plus, Trash2} from "lucide-react";
+import {memo, useContext, useMemo, useState} from "react";
+import {ChevronDown, ChevronRight, Plus, Trash2, Code2, Workflow, Edit3} from "lucide-react";
 import {HTMLDomEvent} from "../../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
@@ -23,7 +23,20 @@ import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {Collapse} from "../../../animate/Collapse";
 import {generateUniqueHandlePointId} from "../../../../schema/hooks/useHandleRenderer";
 import {getHandlePosition} from "../../../../schema/motor/webGpuMotor/handleUtils";
+import {EditableDiv} from "../../../EditableDiv";
 import {EventEditorProps, EventsEditorProps} from "./types";
+
+// Common DOM event types
+const COMMON_DOM_EVENTS = [
+    "click", "dblclick", "mousedown", "mouseup", "mousemove", "mouseenter", "mouseleave", "mouseover", "mouseout",
+    "keydown", "keyup", "keypress",
+    "focus", "blur", "focusin", "focusout",
+    "input", "change", "submit",
+    "scroll", "resize",
+    "load", "unload",
+    "drag", "dragstart", "dragend", "dragenter", "dragleave", "dragover", "drop",
+    "touchstart", "touchmove", "touchend", "touchcancel"
+];
 
 // ============================================================================
 // EVENT EDITOR
@@ -56,7 +69,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
     const eventHeaderClass = useDynamicClass(`
         & {
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.06)};
-            padding: 8px 12px;
+            padding: 12px;
             display: flex;
             flex-direction: row;
             align-items: center;
@@ -66,53 +79,110 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
         & .chevron {
             cursor: pointer;
             transition: transform 0.2s;
-            color: var(--nodius-text-primary);
+            color: var(--nodius-text-secondary);
+            flex-shrink: 0;
         }
         & .chevron:hover {
             color: var(--nodius-text-primary);
         }
-        & .event-type {
+        & .event-type-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+        }
+        & .event-type-label {
+            font-size: 12px;
             font-weight: 600;
-            color: var(--nodius-primary-main);
-            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.1)};
-            padding: 4px 12px;
-            border-radius: 6px;
-            font-size: 13px;
+            color: var(--nodius-text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
         }
         & .delete-btn {
             cursor: pointer;
             transition: all 0.2s;
-            margin-left: auto;
+            flex-shrink: 0;
+            padding: 4px;
+            border-radius: 6px;
         }
         & .delete-btn:hover {
-            transform: scale(1.1);
+            background-color: ${Theme.state.changeOpacity(Theme.state.error[Theme.state.theme].main, 0.1)};
+            transform: scale(1.05);
         }
     `);
 
     const eventContentClass = useDynamicClass(`
         & {
-            padding: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        & > div {
-            width: 100%;
-            min-height: 150px;
-            padding: 12px;
-            border: 1px solid var(--nodius-background-paper);
+    `);
+
+    const actionButtonsClass = useDynamicClass(`
+        & {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+    `);
+
+    const actionButtonClass = useDynamicClass(`
+        & {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.2)};
             border-radius: 8px;
-            background-color: var(--nodius-background-default);
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
             color: var(--nodius-text-primary);
-            font-family: 'Fira Code', monospace;
+            cursor: pointer;
+            transition: var(--nodius-transition-default);
             font-size: 13px;
+            font-weight: 500;
+            flex: 1;
+            min-width: 140px;
+            justify-content: center;
         }
-        & > div:focus {
-            outline: none;
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
             border-color: var(--nodius-primary-main);
+            transform: translateY(-1px);
+            box-shadow: var(--nodius-shadow-1);
+        }
+        &:active {
+            transform: translateY(0);
+        }
+        &.primary {
+            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.15)};
+            border-color: var(--nodius-primary-main);
+            color: var(--nodius-primary-main);
+        }
+        &.primary:hover {
+            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.25)};
+        }
+        &.secondary {
+            background-color: ${Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].main, 0.15)};
+            border-color: var(--nodius-secondary-main);
+            color: var(--nodius-secondary-main);
+        }
+        &.secondary:hover {
+            background-color: ${Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].main, 0.25)};
         }
     `);
 
     const deleteEvent = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("domEvents").arrayRemoveIndex(index);
+        await onUpdate(newInstruction);
+    };
+
+    const updateEventName = async (newName: string) => {
+        const newInstruction = baseInstruction.clone();
+        newInstruction.key("domEvents").index(index).key("name").set(newName);
         await onUpdate(newInstruction);
     };
 
@@ -248,19 +318,49 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
                 ) : (
                     <ChevronRight height={20} width={20} className="chevron" onClick={() => setIsExpanded(true)} />
                 )}
-                <span className="event-type">on{event.name}</span>
+                <div className="event-type-container">
+                    <span className="event-type-label">on</span>
+                    <EditableDiv
+                        value={event.name}
+                        completion={COMMON_DOM_EVENTS}
+                        onChange={updateEventName}
+                        placeholder="event name"
+                        style={{
+                            flex: 1,
+                            padding: "6px 12px",
+                            border: "1px solid var(--nodius-background-paper)",
+                            borderRadius: "6px",
+                            backgroundColor: "var(--nodius-background-default)",
+                            color: "var(--nodius-primary-main)",
+                            fontFamily: "'Fira Code', monospace",
+                            fontSize: "13px",
+                            fontWeight: "600"
+                        }}
+                    />
+                </div>
                 <Trash2 height={18} width={18} color={"var(--nodius-red-500)"} onClick={deleteEvent} className="delete-btn"/>
             </div>
             <Collapse in={isExpanded}>
                 <div className={eventContentClass}>
-                    {event.call.startsWith("[!]CALL-HANDLE-") ? (
-                        <button onClick={switchToCode}>Switch to code editor</button>
-                    ) : (
-                        <>
-                            <button onClick={editInCodeEditor}>Edit in code editor</button>
-                            <button onClick={switchToNode}>Switch to node</button>
-                        </>
-                    )}
+                    <div className={actionButtonsClass}>
+                        {event.call.startsWith("[!]CALL-HANDLE-") ? (
+                            <button className={`${actionButtonClass} primary`} onClick={switchToCode}>
+                                <Code2 height={16} width={16} />
+                                <span>Switch to Code Editor</span>
+                            </button>
+                        ) : (
+                            <>
+                                <button className={`${actionButtonClass} primary`} onClick={editInCodeEditor}>
+                                    <Edit3 height={16} width={16} />
+                                    <span>Edit in Code Editor</span>
+                                </button>
+                                <button className={`${actionButtonClass} secondary`} onClick={switchToNode}>
+                                    <Workflow height={16} width={16} />
+                                    <span>Switch to Node</span>
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </Collapse>
         </div>
