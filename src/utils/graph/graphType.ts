@@ -376,6 +376,14 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                 /*
                 output: {"_key":"6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_id":"nodius_data_type/6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_rev":"_kin-rDG---","description":"","name":"Modal Entry","types":[{"typeId":"str","name":"title","isArray":false,"required":false},{"typeId":"str","name":"description","isArray":false,"required":false}],"workspace":"root"}
                 */
+                
+                /*
+                
+                "node" is a deep copy of the real node, so you can make change in it, and then call await updateNode(node);
+                it will send the change to the serveur, updateNode return a promise<ActionContext>;  if in ActionContext status is false, it mean there is an error (no need to reverse change)
+                
+                */
+                
                 // Select the container element where the JSON viewer will be rendered
                 const renderContainer = container.querySelector("[dataTypeRender]");
                 

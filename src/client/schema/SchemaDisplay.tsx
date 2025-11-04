@@ -35,6 +35,7 @@ import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
 import {useHandleRenderer} from "./hooks/useHandleRenderer";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
+import {generateInstructionsToMatch} from "../../utils/sync/InstructionBuilder";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -356,7 +357,29 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                         });
                     }
                 },
-                selectedNode: projectRef.current.state.selectedNode
+                selectedNode: projectRef.current.state.selectedNode,
+                updateNode: async (node:Node<any>) => {
+                    const currentNode = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(node._key);
+                    if(!currentNode) {
+                        return  {
+                            status: false,
+                            timeTaken: 0,
+                            reason: "Node with key "+node._key+" don't exist"
+                        }
+                    }
+                    const instructions = generateInstructionsToMatch(currentNode, node);
+                    if(instructions.length > 0) {
+                        return await projectRef.current.state.updateGraph!(instructions.map((i) => ({
+                            nodeId: currentNode._key,
+                            i: i
+                        })))
+                    } else {
+                        return {
+                            status: true,
+                            timeTaken: 0
+                        }
+                    }
+                }
             }),
             // Stable context - values that don't change
             {

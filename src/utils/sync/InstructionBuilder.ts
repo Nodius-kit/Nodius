@@ -20,7 +20,7 @@
  */
 
 // Operation types enum (using short codes for minimal JSON)
-import {deepCopy} from "../objectUtils";
+import {deepCopy, deepEqual} from "../objectUtils";
 import {GraphInstructions} from "./wsObject";
 
 export enum OpType {
@@ -1174,6 +1174,79 @@ export function getInverseInstruction(target: any, instruction: Instruction | st
             error: `Failed to get inverse instruction: ${error instanceof Error ? error.message : String(error)}`
         };
     }
+}
+
+/**
+ * Recursively computes differences between oldVal and newVal, appending instructions to the list.
+ * @param oldVal The original value
+ * @param newVal The target value
+ * @param path Current path as string array
+ * @param instructions List to append generated instructions
+ */
+function diff(oldVal: any, newVal: any, path: string[], instructions: Instruction[]): void {
+    if (deepEqual(oldVal, newVal)) return;
+
+    // If types differ or not traversable, replace the entire value at this path
+    if (typeof oldVal !== typeof newVal ||
+        oldVal == null || newVal == null ||
+        Array.isArray(oldVal) !== Array.isArray(newVal)) {
+        instructions.push({ o: OpType.SET, p: [...path], v: deepCopy(newVal) });
+        return;
+    }
+
+    // Handle objects
+    if (typeof oldVal === 'object' && !Array.isArray(oldVal)) {
+        const oldKeys = new Set(Object.keys(oldVal));
+        for (const key of Object.keys(newVal)) {
+            const subPath = [...path, key];
+            if (key in oldVal) {
+                diff(oldVal[key], newVal[key], subPath, instructions);
+                oldKeys.delete(key);
+            } else {
+                // Added key: SET
+                instructions.push({ o: OpType.SET, p: subPath, v: deepCopy(newVal[key]) });
+            }
+        }
+        // Removed keys: REM (after additions/changes to avoid path conflicts)
+        for (const key of oldKeys) {
+            instructions.push({ o: OpType.REM, p: [...path, key] });
+        }
+        return;
+    }
+
+    // Handle arrays (treat indices as keys, use SET to overwrite/extend, REM for extras)
+    if (Array.isArray(oldVal)) {
+        const maxLen = Math.max(oldVal.length, newVal.length);
+        for (let i = 0; i < maxLen; i++) {
+            const subPath = [...path, `${i}`];
+            if (i >= newVal.length) {
+                // Extra in old: REM
+                instructions.push({ o: OpType.REM, p: subPath });
+            } else if (i >= oldVal.length) {
+                // New addition: SET (extends array)
+                instructions.push({ o: OpType.SET, p: subPath, v: deepCopy(newVal[i]) });
+            } else {
+                // Recurse on existing positions
+                diff(oldVal[i], newVal[i], subPath, instructions);
+            }
+        }
+        return;
+    }
+
+    // Primitives: SET if different
+    instructions.push({ o: OpType.SET, p: [...path], v: deepCopy(newVal) });
+}
+
+/**
+ * Generates a list of instructions to transform object1 to match object2.
+ * @param object1 The original object
+ * @param object2 The target object
+ * @returns List of Instruction objects
+ */
+export function generateInstructionsToMatch(object1: any, object2: any): Instruction[] {
+    const instructions: Instruction[] = [];
+    diff(object1, object2, [], instructions);
+    return instructions;
 }
 
 // Example usage and tests

@@ -11,6 +11,7 @@ import { AsyncFunction } from "../../process/html/HtmlRender";
 import { Node } from "../../utils/graph/graphType";
 import { WebGpuMotor } from "./motor/webGpuMotor/index";
 import {
+    ActionContext,
     EditedHtmlType,
     EditedNodeTypeConfig,
     getHtmlRendererType,
@@ -18,6 +19,7 @@ import {
 } from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 import {DataTypeClass} from "../../utils/dataType/dataType";
+import {deepCopy} from "../../utils/objectUtils";
 
 export interface NodeEventContext {
     gpuMotor: WebGpuMotor;
@@ -35,6 +37,7 @@ export interface NodeEventContext {
     selectedNode: string[],
     addSelectedNode: (nodeId:string, ctrlKey:boolean) => void;
     currentEntryDataType?:DataTypeClass,
+    updateNode: (node:Node<any>) => Promise<ActionContext>;
 
 }
 
@@ -200,7 +203,7 @@ export class NodeEventManager {
         return {
             event: null, // Will be provided at runtime for DOM events
             gpuMotor: this.stableContext.gpuMotor,
-            node: currentNode,
+            node: deepCopy(currentNode),
             openHtmlEditor: ctx.openHtmlEditor,
             getHtmlRenderer: ctx.getHtmlRenderer,
             initiateNewHtmlRenderer: ctx.initiateNewHtmlRenderer,
@@ -210,6 +213,7 @@ export class NodeEventManager {
             overlayContainer: this.overlay,
             triggerEventOnNode: this.stableContext.triggerEventOnNode,
             currentEntryDataType: ctx.currentEntryDataType,
+            updateNode: ctx.updateNode,
         };
     }
 
