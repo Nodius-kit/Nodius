@@ -372,166 +372,330 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         {
             name: "nodeUpdate",
             call: `
-                console.log(JSON.stringify(currentEntryDataType));
-                /*
-                output: {"_key":"6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_id":"nodius_data_type/6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_rev":"_kin-rDG---","description":"","name":"Modal Entry","types":[{"typeId":"str","name":"title","isArray":false,"required":false},{"typeId":"str","name":"description","isArray":false,"required":false}],"workspace":"root"}
-                */
-                
-                /*
-                
-                "node" is a deep copy of the real node, so you can make change in it, and then call await updateNode(node);
-                it will send the change to the serveur, updateNode return a promise<ActionContext>;  if in ActionContext status is false, it mean there is an error (no need to reverse change)
-                
-                */
-                
-                // Select the container element where the JSON viewer will be rendered
+
+                // Select the container element where the form will be rendered
                 const renderContainer = container.querySelector("[dataTypeRender]");
-                
-                // Clear any previous content in the render container
+
+                // Store current data type key to detect changes
+                const currentDataTypeKey = renderContainer.getAttribute('data-current-type');
+                const newDataTypeKey = currentEntryDataType?._key;
+
+                // Only re-render if data type changed or container is empty
+                if (currentDataTypeKey === newDataTypeKey && renderContainer.children.length > 0) {
+                    // Just update values without full re-render
+                    if (currentEntryDataType && node.data.fixedValue) {
+                        currentEntryDataType.types.forEach((typeConfig) => {
+                            const inputElement = renderContainer.querySelector('[data-field-name="' + typeConfig.name + '"]');
+                            if (inputElement) {
+                                const currentValue = node.data.fixedValue[typeConfig.name];
+                                if (inputElement.type === 'checkbox') {
+                                    inputElement.checked = currentValue === true || currentValue === 'true';
+                                } else {
+                                    inputElement.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : '';
+                                }
+                            }
+                        });
+                    }
+                    return;
+                }
+
+                // Full re-render needed
                 renderContainer.innerHTML = "";
-                
-                // Check if the necessary data is available before rendering
-                console.log(node.data.fixedValue);
-                if (node.data.fixedValue !== undefined) {
-                  const fixedValue = node.data.fixedValue;
-                
-                  // Add global styles for the JSON viewer if they haven't been added yet
-                  const styleId = 'json-viewer-style';
-                  if (!document.getElementById(styleId)) {
+                renderContainer.setAttribute('data-current-type', newDataTypeKey || '');
+
+                // Check if currentEntryDataType is available
+                if (!currentEntryDataType) {
+                    const noDataMessage = document.createElement('div');
+                    noDataMessage.style.cssText = 'padding: 20px; text-align: center; color: var(--nodius-text-secondary);';
+                    noDataMessage.textContent = 'No Entry Data Type selected';
+                    renderContainer.appendChild(noDataMessage);
+                    return;
+                }
+
+                // Initialize fixedValue if it doesn't exist
+                if (!node.data.fixedValue) {
+                    node.data.fixedValue = {};
+                }
+
+                // Add global styles for the form if they haven't been added yet
+                const styleId = 'entry-type-form-style';
+                if (!document.getElementById(styleId)) {
                     const style = document.createElement('style');
                     style.id = styleId;
                     style.textContent = \`
-                      .json-viewer {
-                        background-color: var(--nodius-background-paper);
-                        padding: 10px;
-                        border-radius: 8px;
-                        box-shadow: var(--nodius-shadow-1);
-                        color: var(--nodius-text-primary);
-                        font-family: monospace;
-                        font-size: 14px;
-                        overflow: auto;
-                      }
-                      .json-key {
-                        color: var(--nodius-primary-main);
-                        font-weight: bold;
-                      }
-                      .json-string {
-                        color: var(--nodius-success-main);
-                      }
-                      .json-number {
-                        color: var(--nodius-info-main);
-                      }
-                      .json-boolean {
-                        color: var(--nodius-warning-main);
-                      }
-                      .json-null {
-                        color: var(--nodius-text-disabled);
-                      }
-                      .json-object, .json-array {
-                        padding-left: 20px;
-                      }
-                      summary {
-                        cursor: pointer;
-                        font-weight: bold;
-                        color: var(--nodius-text-primary);
-                        background-color: var(--nodius-background-default);
-                        padding: 5px;
-                        border-radius: 4px;
-                        margin-bottom: 5px;
-                        transition: var(--nodius-transition-default);
-                      }
-                      summary:hover {
-                        background-color: var(--nodius-primary-paper);
-                      }
-                      .json-key-value, .json-array-item {
-                        display: flex;
-                        align-items: baseline;
-                        margin-bottom: 5px;
-                      }
-                      .json-value {
-                        flex: 1;
-                      }
+                        .entry-type-header {
+                            font-size: 16px;
+                            font-weight: bold;
+                            color: var(--nodius-text-primary);
+                            margin-bottom: 12px;
+                            padding-bottom: 8px;
+                            border-bottom: 2px solid var(--nodius-primary-main);
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        }
+                        .entry-import-btn {
+                            padding: 6px 12px;
+                            background: var(--nodius-success-main);
+                            color: var(--nodius-success-contrastText);
+                            border: none;
+                            border-radius: 6px;
+                            font-size: 12px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            transition: var(--nodius-transition-default);
+                            display: flex;
+                            align-items: center;
+                            gap: 6px;
+                        }
+                        .entry-import-btn:hover {
+                            background: var(--nodius-success-dark);
+                            transform: translateY(-1px);
+                            box-shadow: var(--nodius-shadow-2);
+                        }
+                        .entry-import-btn:active {
+                            transform: translateY(0);
+                        }
+                        .entry-field {
+                            margin-bottom: 16px;
+                        }
+                        .entry-field-label {
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                            margin-bottom: 6px;
+                            font-size: 13px;
+                            font-weight: 600;
+                            color: var(--nodius-text-primary);
+                        }
+                        .entry-field-type {
+                            font-size: 11px;
+                            padding: 2px 6px;
+                            background: var(--nodius-primary-main);
+                            color: var(--nodius-primary-contrastText);
+                            border-radius: 4px;
+                            font-weight: normal;
+                        }
+                        .entry-field-required {
+                            font-size: 11px;
+                            color: var(--nodius-error-main);
+                        }
+                        .entry-field-input {
+                            width: 100%;
+                            padding: 8px 12px;
+                            background: var(--nodius-background-default);
+                            color: var(--nodius-text-primary);
+                            border: 1px solid var(--nodius-primary-dark);
+                            border-radius: 6px;
+                            font-size: 13px;
+                            font-family: monospace;
+                            transition: var(--nodius-transition-default);
+                            box-sizing: border-box;
+                        }
+                        .entry-field-input:focus {
+                            outline: none;
+                            border-color: var(--nodius-primary-main);
+                            box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
+                        }
+                        .entry-field-input::placeholder {
+                            color: var(--nodius-text-disabled);
+                            font-style: italic;
+                        }
+                        .entry-field-checkbox {
+                            width: 18px;
+                            height: 18px;
+                            cursor: pointer;
+                        }
+                        .entry-field-meta {
+                            display: flex;
+                            gap: 4px;
+                            margin-top: 4px;
+                            font-size: 11px;
+                            color: var(--nodius-text-secondary);
+                        }
+                        .entry-field-placeholder {
+                            flex: 1;
+                        }
                     \`;
                     document.head.appendChild(style);
-                  }
-                
-                  // Apply the viewer class to the render container for overall styling
-                  renderContainer.classList.add('json-viewer');
-                
-                  // Start rendering the fixedValue recursively
-                  renderValue(fixedValue, renderContainer, true);
                 }
-                
-                // Recursive function to render any value (primitive, object, array) into a parent element
-                function renderValue(value, parent, isRoot = false) {
-                  // Handle null values
-                  if (value === null) {
-                    const span = document.createElement('span');
-                    span.className = 'json-null';
-                    span.textContent = 'null';
-                    parent.appendChild(span);
-                    return;
-                  }
-                
-                  // Determine the type of the value
-                  const type = typeof value;
-                
-                  // Handle primitive types: string, number, boolean
-                  if (type === 'string' || type === 'number' || type === 'boolean') {
-                    const span = document.createElement('span');
-                    span.className = "json-"+type;
-                    span.textContent = type === 'string' ? '"'+value+'"' : value.toString();
-                    parent.appendChild(span);
-                    return;
-                  }
-                
-                  // Handle objects and arrays recursively with collapsible sections
-                  const isArray = Array.isArray(value);
-                  const details = document.createElement('details');
-                  details.open = isRoot; // Expand the root level by default for better user experience
-                  const summary = document.createElement('summary');
-                  summary.textContent = isArray ? "Array ["+value.length+"]" : "Object {"+Object.keys(value).length+"}";
-                  details.appendChild(summary);
-                
-                  const containerDiv = document.createElement('div');
-                  containerDiv.className = isArray ? 'json-array' : 'json-object';
-                
-                  if (isArray) {
-                    // Render array items with indices
-                    value.forEach((item, index) => {
-                      const div = document.createElement('div');
-                      div.className = 'json-array-item';
-                      const indexSpan = document.createElement('span');
-                      indexSpan.className = 'json-key';
-                      indexSpan.textContent = index+": ";
-                      div.appendChild(indexSpan);
-                      const valDiv = document.createElement('div');
-                      valDiv.className = 'json-value';
-                      renderValue(item, valDiv);
-                      div.appendChild(valDiv);
-                      containerDiv.appendChild(div);
-                    });
-                  } else {
-                    // Render object key-value pairs
-                    Object.entries(value).forEach(([key, val]) => {
-                      const div = document.createElement('div');
-                      div.className = 'json-key-value';
-                      const keySpan = document.createElement('span');
-                      keySpan.className = 'json-key';
-                      keySpan.textContent = key+": ";
-                      div.appendChild(keySpan);
-                      const valDiv = document.createElement('div');
-                      valDiv.className = 'json-value';
-                      renderValue(val, valDiv);
-                      div.appendChild(valDiv);
-                      containerDiv.appendChild(div);
-                    });
-                  }
-                
-                  details.appendChild(containerDiv);
-                  parent.appendChild(details);
-                }
-                
+
+                // Create header with data type name and import button
+                const headerContainer = document.createElement('div');
+                headerContainer.className = 'entry-type-header';
+
+                const headerTitle = document.createElement('span');
+                headerTitle.textContent = currentEntryDataType.name;
+                headerContainer.appendChild(headerTitle);
+
+                // Create import button
+                const importButton = document.createElement('button');
+                importButton.className = 'entry-import-btn';
+                importButton.innerHTML = '📁 Import JSON';
+                headerContainer.appendChild(importButton);
+
+                // Create hidden file input
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = 'application/json,.json';
+                fileInput.style.display = 'none';
+
+                // Handle file selection
+                fileInput.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                        const text = await file.text();
+                        const jsonData = JSON.parse(text);
+
+                        // Get valid keys from currentEntryDataType
+                        const validKeys = new Set(currentEntryDataType.types.map(t => t.name));
+                        const jsonKeys = Object.keys(jsonData);
+                        const extraKeys = jsonKeys.filter(key => !validKeys.has(key));
+
+                        // Update fixedValue with only valid keys
+                        const updatedValues = {};
+                        let importedCount = 0;
+
+                        currentEntryDataType.types.forEach((typeConfig) => {
+                            if (jsonData.hasOwnProperty(typeConfig.name)) {
+                                updatedValues[typeConfig.name] = jsonData[typeConfig.name];
+                                importedCount++;
+                            } else {
+                                // Keep existing value if not in JSON
+                                updatedValues[typeConfig.name] = node.data.fixedValue[typeConfig.name];
+                            }
+                        });
+
+                        // Update node data
+                        node.data.fixedValue = updatedValues;
+                        await updateNode(node);
+
+                        // Show success message
+                        toast.success(\`Imported \${importedCount} field(s) from JSON\`, {
+                            duration: 3000,
+                            position: 'bottom-right',
+
+                        // Show warning for extra keys
+                        if (extraKeys.length > 0) {
+                            toast(\`Extra keys ignored: \${extraKeys.join(', ')}\`, {
+                                icon: '⚠️',
+                                duration: 5000,
+                                position: 'bottom-right',
+                                style: {
+                                    background: 'var(--nodius-warning-main)',
+                                    color: 'var(--nodius-warning-contrastText)',
+                                }
+                            });
+                        }
+
+                        // Trigger re-render to show new values
+                        triggerEventOnNode(node._key, 'nodeUpdate');
+
+                    } catch (error) {
+                        toast.error('Failed to parse JSON: ' + error.message, {
+                            duration: 4000,
+                            position: 'bottom-right',
+                        });
+                    }
+
+                    // Reset file input
+                    fileInput.value = '';
+                });
+
+                // Connect button to file input
+                importButton.addEventListener('click', () => {
+                    fileInput.click();
+                });
+
+                renderContainer.appendChild(headerContainer);
+                renderContainer.appendChild(fileInput);
+
+                // Render each field from currentEntryDataType
+                currentEntryDataType.types.forEach((typeConfig) => {
+                    const fieldContainer = document.createElement('div');
+                    fieldContainer.className = 'entry-field';
+
+                    // Create label with type and required indicator
+                    const label = document.createElement('div');
+                    label.className = 'entry-field-label';
+
+                    const labelText = document.createElement('span');
+                    labelText.textContent = typeConfig.name;
+                    label.appendChild(labelText);
+
+                    const typeTag = document.createElement('span');
+                    typeTag.className = 'entry-field-type';
+                    typeTag.textContent = typeConfig.typeId + (typeConfig.isArray ? '[]' : '');
+                    label.appendChild(typeTag);
+
+                    if (typeConfig.required) {
+                        const requiredTag = document.createElement('span');
+                        requiredTag.className = 'entry-field-required';
+                        requiredTag.textContent = '*required';
+                        label.appendChild(requiredTag);
+                    }
+
+                    fieldContainer.appendChild(label);
+
+                    // Create input field based on type
+                    let inputElement;
+                    const currentValue = node.data.fixedValue[typeConfig.name];
+
+                    if (typeConfig.typeId === 'bool') {
+                        inputElement = document.createElement('input');
+                        inputElement.type = 'checkbox';
+                        inputElement.className = 'entry-field-checkbox';
+                        inputElement.checked = currentValue === true || currentValue === 'true';
+                    } else {
+                        inputElement = document.createElement('input');
+                        inputElement.type = 'text';
+                        inputElement.className = 'entry-field-input';
+                        inputElement.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : '';
+                        inputElement.placeholder = typeConfig.defaultValue || 'Enter ' + typeConfig.name;
+                    }
+
+                    // Add data attribute for field name (for updates)
+                    inputElement.setAttribute('data-field-name', typeConfig.name);
+
+                    // Add change handler to update fixedValue
+                    const updateValue = async () => {
+                        const newValue = inputElement.type === 'checkbox' ? inputElement.checked : inputElement.value;
+                        node.data.fixedValue[typeConfig.name] = newValue;
+                        await updateNode(node);
+                    };
+
+                    if (inputElement.type === 'checkbox') {
+                        inputElement.addEventListener('change', updateValue);
+                    } else {
+                        inputElement.addEventListener('blur', updateValue);
+                        inputElement.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                updateValue();
+                            }
+                        });
+                    }
+
+                    fieldContainer.appendChild(inputElement);
+
+                    // Show placeholder/default value info
+                    if (typeConfig.defaultValue && typeConfig.typeId !== 'bool') {
+                        const meta = document.createElement('div');
+                        meta.className = 'entry-field-meta';
+
+                        const placeholderInfo = document.createElement('span');
+                        placeholderInfo.className = 'entry-field-placeholder';
+                        placeholderInfo.textContent = 'Default: ' + typeConfig.defaultValue;
+                        meta.appendChild(placeholderInfo);
+
+                        fieldContainer.appendChild(meta);
+                    }
+
+                    renderContainer.appendChild(fieldContainer);
+                });
+
             `
         }
     ],

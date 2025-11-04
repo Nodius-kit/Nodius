@@ -20,6 +20,7 @@ import {
 import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 import {DataTypeClass} from "../../utils/dataType/dataType";
 import {deepCopy} from "../../utils/objectUtils";
+import {toast} from "react-hot-toast";
 
 export interface NodeEventContext {
     gpuMotor: WebGpuMotor;
@@ -200,6 +201,7 @@ export class NodeEventManager {
         const ctx = this.getContext();
         const currentNode = this.stableContext.getNode();
 
+
         return {
             event: null, // Will be provided at runtime for DOM events
             gpuMotor: this.stableContext.gpuMotor,
@@ -214,6 +216,7 @@ export class NodeEventManager {
             triggerEventOnNode: this.stableContext.triggerEventOnNode,
             currentEntryDataType: ctx.currentEntryDataType,
             updateNode: ctx.updateNode,
+            toast: toast
         };
     }
 
