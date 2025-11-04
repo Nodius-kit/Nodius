@@ -372,8 +372,10 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
         {
             name: "nodeUpdate",
             call: `
-            console.log(container);
-                console.trace();
+                console.log(JSON.stringify(currentEntryDataType));
+                /*
+                output: {"_key":"6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_id":"nodius_data_type/6547f7d1d0f534089ba3e131601c9379aa612cfd4e3676f94480f508ff156da0","_rev":"_kin-rDG---","description":"","name":"Modal Entry","types":[{"typeId":"str","name":"title","isArray":false,"required":false},{"typeId":"str","name":"description","isArray":false,"required":false}],"workspace":"root"}
+                */
                 // Select the container element where the JSON viewer will be rendered
                 const renderContainer = container.querySelector("[dataTypeRender]");
                 

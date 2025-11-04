@@ -331,6 +331,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 triggerEventOnNode: triggerEventOnNode,
                 editedHtml: projectRef.current.state.editedHtml,
                 editedNodeConfig: projectRef.current.state.editedNodeConfig,
+                currentEntryDataType: projectRef.current.state.currentEntryDataType,
                 addSelectedNode: (nodeId:string, ctrlKey) => {
                     if (ctrlKey) {
                         if (projectRef.current.state.selectedNode.includes(nodeId)) {

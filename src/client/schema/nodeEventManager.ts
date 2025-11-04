@@ -17,6 +17,7 @@ import {
     htmlRenderContext, initiateNewHtmlRendererType, removeHtmlRendererType
 } from "../hooks/contexts/ProjectContext";
 import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
+import {DataTypeClass} from "../../utils/dataType/dataType";
 
 export interface NodeEventContext {
     gpuMotor: WebGpuMotor;
@@ -33,6 +34,7 @@ export interface NodeEventContext {
     editedNodeConfig: EditedNodeTypeConfig;
     selectedNode: string[],
     addSelectedNode: (nodeId:string, ctrlKey:boolean) => void;
+    currentEntryDataType?:DataTypeClass,
 
 }
 
@@ -206,7 +208,8 @@ export class NodeEventManager {
             getHtmlAllRenderer: ctx.getHtmlAllRenderer,
             container: this.container,
             overlayContainer: this.overlay,
-            triggerEventOnNode: this.stableContext.triggerEventOnNode
+            triggerEventOnNode: this.stableContext.triggerEventOnNode,
+            currentEntryDataType: ctx.currentEntryDataType,
         };
     }
 

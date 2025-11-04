@@ -65,8 +65,8 @@ export const useCreateReducer = <T extends Record<string, any>>({
 
     // debug react state management
     const d: ActionDispatch<any> = (args:any) => {
-        console.log(args);
-        console.trace();
+        /*console.log(args);
+        console.trace();*/
         return dispatch(args);
     }
 

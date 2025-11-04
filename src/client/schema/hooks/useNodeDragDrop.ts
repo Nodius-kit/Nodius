@@ -243,10 +243,10 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                         const overlayElement = document.querySelector(`[data-node-overlay-key="${id}"]`);
 
                         if (nodeElement) {
-                            nodeElement.addEventListener("click", preventClick, { capture: true, once: true });
+                            nodeElement.addEventListener("click" as any, preventClick, { capture: true, once: true });
                         }
                         if (overlayElement) {
-                            overlayElement.addEventListener("click", preventClick, { capture: true, once: true });
+                            overlayElement.addEventListener("click" as any, preventClick, { capture: true, once: true });
                         }
                     });
                 }
