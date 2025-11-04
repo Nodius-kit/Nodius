@@ -85,6 +85,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
             let animationFrame: number | undefined;
             let saveInProgress = false;
             let pendingSave: Map<string, { posX: number, posY: number }> | null = null;
+            let hasDragged = false; // Track if actual dragging occurred
 
             gpuMotor.enableInteractive(false);
             disableTextSelection();
@@ -172,6 +173,11 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     const deltaX = newX - lastX;
                     const deltaY = newY - lastY;
 
+                    // Mark as dragged if moved more than 3 pixels
+                    if (!hasDragged && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+                        hasDragged = true;
+                    }
+
                     const worldDeltaX = deltaX / gpuMotor.getTransform().scale;
                     const worldDeltaY = deltaY / gpuMotor.getTransform().scale;
 
@@ -223,6 +229,27 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                 window.removeEventListener("mouseup", mouseUp);
                 gpuMotor.enableInteractive(true);
                 enableTextSelection();
+
+                // If dragged, prevent click event from triggering node selection
+                if (hasDragged) {
+                    const preventClick = (e: MouseEvent) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    };
+
+                    // Add click blocker in capture phase for all affected nodes
+                    selectedNodeIds.forEach(id => {
+                        const nodeElement = document.querySelector(`[data-node-key="${id}"]`);
+                        const overlayElement = document.querySelector(`[data-node-overlay-key="${id}"]`);
+
+                        if (nodeElement) {
+                            nodeElement.addEventListener("click", preventClick, { capture: true, once: true });
+                        }
+                        if (overlayElement) {
+                            overlayElement.addEventListener("click", preventClick, { capture: true, once: true });
+                        }
+                    });
+                }
 
                 // Check if any selected node has unsaved changes
                 let hasUnsavedChanges = false;
