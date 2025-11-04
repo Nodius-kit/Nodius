@@ -103,12 +103,14 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                         nodeId: node._key,
                         animatePos: true,
                         dontApplyToMySelf: true,
+                        dontTriggerUpdateNode: true,
                     },
                     {
                         i: instructionsY.instruction,
                         nodeId: node._key,
                         animatePos: true,
                         dontApplyToMySelf: true,
+                        dontTriggerUpdateNode: true,
                     }
                 );
 
@@ -153,7 +155,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     lastY = newY;
 
                     gpuMotor.requestRedraw();
-                    (window as any).triggerNodeUpdate(currentNode._key);
+                    (window as any).triggerNodeUpdate(currentNode._key, {dontUpdateRender: true});
 
 
                     // Only schedule save if there's no save in progress

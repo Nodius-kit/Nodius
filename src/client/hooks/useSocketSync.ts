@@ -875,6 +875,7 @@ export const useSocketSync = () => {
         if(instructionOutput.status) {
             Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
+            let updateNode:string[] = [];
             const nodeAlreadyCheck:string[] = [];
             const edgeAlreadyCheck:string[] = [];
             for(const instruction of instructions) {
@@ -954,11 +955,15 @@ export const useSocketSync = () => {
 
                     }
 
-                    (window as any).triggerNodeUpdate?.(instruction.nodeId);
+                    if(!instruction.dontTriggerUpdateNode && !updateNode.includes(instruction.nodeId)) {
+                        updateNode.push(instruction.nodeId);
+                    }
 
                 }
             }
-
+            for(const nodeId of updateNode) {
+                (window as any).triggerNodeUpdate?.(nodeId);
+            }
             if(redrawGraph) {
                 gpuMotor.current!.requestRedraw();
             }

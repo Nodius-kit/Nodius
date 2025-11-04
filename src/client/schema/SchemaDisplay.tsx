@@ -56,6 +56,10 @@ interface SchemaNodeInfo {
     resizeHandler: (evt: MouseEvent) => void;
 }
 
+export interface updateNodeOption {
+    dontUpdateRender:boolean
+}
+
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
     onNodeEnter,
@@ -70,6 +74,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const canvasRef = useRef<HTMLCanvasElement|null>(null);
     const containerRef = useRef<HTMLDivElement|null>(null);
     const nodeDisplayContainer = useRef<HTMLDivElement>(null);
+    const overlayContainer = useRef<HTMLDivElement>(null);
 
     const gpuMotor = useRef<WebGpuMotor>(undefined);
     const zIndex = useRef<number>(1);
@@ -204,10 +209,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         return currentZ;
     }, []); // No deps - pure DOM manipulation
 
-    const triggerEventOnNode = useCallback((nodeId: string, eventName: string) => {
+    const triggerEventOnNode = useCallback((nodeId: string, eventName: string, options?: updateNodeOption) => {
         const nodeElement = document.querySelector(`[data-node-key="${nodeId}"]`);
         if (nodeElement) {
-            const updateEvent = new CustomEvent(eventName, { bubbles: false });
+            const updateEvent = new CustomEvent(eventName, { bubbles: false, detail: options });
             nodeElement.dispatchEvent(updateEvent);
         }
     }, []); // No deps - pure DOM manipulation
@@ -690,8 +695,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     // Global trigger function
     useEffect(() => {
-        const triggerNodeUpdate = (nodeKey: string) => {
-            triggerEventOnNode(nodeKey, "nodeUpdateSystem");
+        const triggerNodeUpdate = (nodeKey: string, options?: updateNodeOption) => {
+            triggerEventOnNode(nodeKey, "nodeUpdateSystem", options);
         };
 
         (window as any).triggerNodeUpdate = triggerNodeUpdate;
@@ -754,38 +759,97 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
     // Track drag state to distinguish click from drag
     const dragState = useRef({ isDragging: false, startX: 0, startY: 0 });
+    const selectingState = useRef<{isSelecting:boolean, startX: number, startY:number, endX:number, endY:number, container?:HTMLElement}>({isSelecting:false, startX: 0, startY:0, endX:0, endY:0, container:undefined})
 
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-        dragState.current.isDragging = false;
-        dragState.current.startX = e.clientX;
-        dragState.current.startY = e.clientY;
+        if(e.button === 1) {
+            dragState.current.isDragging = false;
+            dragState.current.startX = e.clientX;
+            dragState.current.startY = e.clientY;
+        } else if(e.button === 0) {
+            console.log("start");
+            selectingState.current.isSelecting = true;
+            selectingState.current.startX = e.clientX;
+            selectingState.current.startY = e.clientY;
+            selectingState.current.endX = e.clientX;
+            selectingState.current.endY = e.clientY;
+
+
+            selectingState.current.container?.remove();
+            selectingState.current.container = document.createElement("div");
+            selectingState.current.container.style.position = "absolute";
+            selectingState.current.container.style.pointerEvents = "none";
+            selectingState.current.container.style.border = "1px solid var(--nodius-primary-main)";
+            selectingState.current.container.style.top = "-100px";
+            selectingState.current.container.style.left = "-100px";
+            selectingState.current.container.style.width = "0px";
+            selectingState.current.container.style.height = "0px";
+        }
     }, []);
 
     const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
-        if (dragState.current.startX !== 0 || dragState.current.startY !== 0) {
+        if (e.button === 1 && (dragState.current.startX !== 0 || dragState.current.startY !== 0)) {
             const dx = Math.abs(e.clientX - dragState.current.startX);
             const dy = Math.abs(e.clientY - dragState.current.startY);
             // Consider it a drag if moved more than 5 pixels
             if (dx > 5 || dy > 5) {
                 dragState.current.isDragging = true;
             }
+        } else if(e.button === 0 && selectingState.current.isSelecting && selectingState.current.container) {
+            if(!selectingState.current.container.parentElement) {
+                overlayContainer.current!.appendChild(selectingState.current.container!);
+            }
+
+            selectingState.current.endX = e.clientX;
+            selectingState.current.endY = e.clientY;
+
+            const minX = Math.min(selectingState.current.endX, selectingState.current.startX);
+            const minY = Math.min(selectingState.current.endY, selectingState.current.startY);
+
+            const maxX = Math.max(selectingState.current.endX, selectingState.current.startX);
+            const maxY = Math.max(selectingState.current.endY, selectingState.current.startY);
+
+
+            const minPoint = gpuMotor.current!.screenToWorld({
+                x: minX,
+                y: minY
+            });
+
+            const maxPoint = gpuMotor.current!.screenToWorld({
+                x: maxX,
+                y: maxY
+            });
+
+            console.log(minPoint, maxPoint);
+
+            selectingState.current.container.style.top = minPoint.y+"px";
+            selectingState.current.container.style.left = minPoint.x+"px";
+
+            selectingState.current.container.style.width = (maxPoint.x-minPoint.x)+"px";
+            selectingState.current.container.style.height = (maxPoint.y-minPoint.y)+"px";
+
         }
     }, []);
 
     const handleCanvasMouseUp = useCallback((e: React.MouseEvent) => {
         // If mouseup without dragging
-        if (!dragState.current.isDragging && !Project.state.editedHtml) {
-            /*if (Project.state.selectedNode.length > 0) {
-                Project.dispatch({
-                    field: "selectedNode",
-                    value: []
-                });
-            }*/
+        if(e.button === 1) {
+            if (!dragState.current.isDragging && !Project.state.editedHtml) {
+                /*if (Project.state.selectedNode.length > 0) {
+                    Project.dispatch({
+                        field: "selectedNode",
+                        value: []
+                    });
+                }*/
+            }
+            // Reset drag state
+            dragState.current.isDragging = false;
+            dragState.current.startX = 0;
+            dragState.current.startY = 0;
+        } else if(e.button === 0 && selectingState.current.isSelecting && selectingState.current.container) {
+            selectingState.current.container.remove();
+            selectingState.current.isSelecting = false;
         }
-        // Reset drag state
-        dragState.current.isDragging = false;
-        dragState.current.startX = 0;
-        dragState.current.startY = 0;
     }, [Project.state.selectedNode, Project.state.editedHtml]);
 
     const handleCanvasClick = useCallback((e: React.MouseEvent) => {
@@ -809,6 +873,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             />
             <div
                 ref={nodeDisplayContainer}
+                style={{
+                    width:"100%",
+                    height:"100%",
+                    position:"absolute",
+                    inset:"0px",
+                    pointerEvents:"none",
+                    overflow:"hidden"
+                }}
+            />
+            <div
+                ref={overlayContainer}
                 style={{
                     width:"100%",
                     height:"100%",
