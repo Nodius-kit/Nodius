@@ -64,72 +64,102 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                 return;
             }
 
-            let lastSavedX = currentNode.posX;
-            let lastSavedY = currentNode.posY;
+            // Get selected nodes - if current node is not selected, only move it
+            const selectedNodeIds = Project.state.selectedNode.includes(nodeKey)
+                ? Project.state.selectedNode
+                : [nodeKey];
+
+            // Track last saved positions for all nodes
+            const lastSavedPositions = new Map<string, { x: number, y: number }>();
+            selectedNodeIds.forEach(id => {
+                const node = getNode(id);
+                if (node) {
+                    lastSavedPositions.set(id, { x: node.posX, y: node.posY });
+                }
+            });
+
             let lastSaveTime = Date.now();
             let lastX = evt.clientX;
             let lastY = evt.clientY;
             let timeoutSave: NodeJS.Timeout | undefined;
             let animationFrame: number | undefined;
             let saveInProgress = false;
-            let pendingSave: { node: Node<any>, oldPosX: number, oldPosY: number } | null = null;
+            let pendingSave: Map<string, { posX: number, posY: number }> | null = null;
 
             gpuMotor.enableInteractive(false);
             disableTextSelection();
 
-            const saveNodePosition = async (node: Node<any>) => {
-                const oldPosX = node.posX;
-                const oldPosY = node.posY;
-
+            const saveNodePositions = async (nodeIds: string[]) => {
                 // Queue save if one is already in progress
                 if (saveInProgress) {
-                    pendingSave = { node, oldPosX, oldPosY };
+                    pendingSave = new Map();
+                    nodeIds.forEach(id => {
+                        const node = getNode(id);
+                        if (node) {
+                            pendingSave!.set(id, { posX: node.posX, posY: node.posY });
+                        }
+                    });
                     return;
                 }
 
                 saveInProgress = true;
 
                 const insts: GraphInstructions[] = [];
-                const instructionsX = new InstructionBuilder();
-                const instructionsY = new InstructionBuilder();
-                instructionsX.key("posX").set(node.posX);
-                instructionsY.key("posY").set(node.posY);
+                const oldPositions = new Map<string, { x: number, y: number }>();
 
-                lastSavedX = node.posX;
-                lastSavedY = node.posY;
-                insts.push(
-                    {
-                        i: instructionsX.instruction,
-                        nodeId: node._key,
-                        animatePos: true,
-                        dontApplyToMySelf: true,
-                        dontTriggerUpdateNode: true,
-                    },
-                    {
-                        i: instructionsY.instruction,
-                        nodeId: node._key,
-                        animatePos: true,
-                        dontApplyToMySelf: true,
-                        dontTriggerUpdateNode: true,
-                    }
-                );
+                // Build instructions for all nodes
+                for (const id of nodeIds) {
+                    const node = getNode(id);
+                    if (!node) continue;
+
+                    oldPositions.set(id, { x: node.posX, y: node.posY });
+
+                    const instructionsX = new InstructionBuilder();
+                    const instructionsY = new InstructionBuilder();
+                    instructionsX.key("posX").set(node.posX);
+                    instructionsY.key("posY").set(node.posY);
+
+                    lastSavedPositions.set(id, { x: node.posX, y: node.posY });
+
+                    insts.push(
+                        {
+                            i: instructionsX.instruction,
+                            nodeId: node._key,
+                            animatePos: true,
+                            dontApplyToMySelf: true,
+                            dontTriggerUpdateNode: true,
+                        },
+                        {
+                            i: instructionsY.instruction,
+                            nodeId: node._key,
+                            animatePos: true,
+                            dontApplyToMySelf: true,
+                            dontTriggerUpdateNode: true,
+                        }
+                    );
+                }
 
                 const output = await getProjectRef().state.updateGraph!(insts);
                 if (!output.status) {
-                    // Restore old position on failure
-                    node.posX = oldPosX;
-                    node.posY = oldPosY;
+                    // Restore old positions on failure
+                    oldPositions.forEach((pos, id) => {
+                        const node = getNode(id);
+                        if (node) {
+                            node.posX = pos.x;
+                            node.posY = pos.y;
+                        }
+                    });
                     gpuMotor.requestRedraw();
-                    console.error("Failed to save node position:", output.reason);
+                    console.error("Failed to save node positions:", output.reason);
                 }
                 lastSaveTime = Date.now();
                 saveInProgress = false;
 
                 // Process pending save if exists
                 if (pendingSave) {
-                    const { node: pendingNode } = pendingSave;
+                    const nodeIdsToSave = Array.from(pendingSave.keys());
                     pendingSave = null;
-                    saveNodePosition(pendingNode);
+                    saveNodePositions(nodeIdsToSave);
                 }
             };
 
@@ -137,9 +167,6 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                 if (animationFrame) cancelAnimationFrame(animationFrame);
                 animationFrame = requestAnimationFrame(() => {
-                    const currentNode = getNode(nodeKey);
-                    if (!currentNode) return;
-
                     const newX = evt.clientX;
                     const newY = evt.clientY;
                     const deltaX = newX - lastX;
@@ -148,30 +175,40 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     const worldDeltaX = deltaX / gpuMotor.getTransform().scale;
                     const worldDeltaY = deltaY / gpuMotor.getTransform().scale;
 
-                    currentNode.posX += worldDeltaX;
-                    currentNode.posY += worldDeltaY;
+                    // Move all selected nodes
+                    let hasChanges = false;
+                    selectedNodeIds.forEach(id => {
+                        const node = getNode(id);
+                        if (!node) return;
+
+                        node.posX += worldDeltaX;
+                        node.posY += worldDeltaY;
+
+                        (window as any).triggerNodeUpdate(node._key, {dontUpdateRender: true});
+
+                        // Check if position changed from last saved
+                        const lastSaved = lastSavedPositions.get(id);
+                        if (lastSaved && (node.posX !== lastSaved.x || node.posY !== lastSaved.y)) {
+                            hasChanges = true;
+                        }
+                    });
 
                     lastX = newX;
                     lastY = newY;
 
                     gpuMotor.requestRedraw();
-                    (window as any).triggerNodeUpdate(currentNode._key, {dontUpdateRender: true});
 
-
-                    // Only schedule save if there's no save in progress
-                    if (!saveInProgress && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
+                    // Only schedule save if there's no save in progress and there are changes
+                    if (!saveInProgress && hasChanges) {
                         const now = Date.now();
                         if (now - lastSaveTime >= posAnimationDelay) {
-                            saveNodePosition(currentNode);
+                            saveNodePositions(selectedNodeIds);
                         } else {
                             if (timeoutSave) clearTimeout(timeoutSave);
                             timeoutSave = setTimeout(() => {
                                 // Check again if save is still needed and not in progress
                                 if (!saveInProgress) {
-                                    const node = getNode(nodeKey);
-                                    if (node && (node.posX !== lastSavedX || node.posY !== lastSavedY)) {
-                                        saveNodePosition(node);
-                                    }
+                                    saveNodePositions(selectedNodeIds);
                                 }
                             }, posAnimationDelay - (now - lastSaveTime));
                         }
@@ -187,13 +224,28 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                 gpuMotor.enableInteractive(true);
                 enableTextSelection();
 
-                const currentNode = getNode(nodeKey);
-                if (currentNode && (currentNode.posX !== lastSavedX || currentNode.posY !== lastSavedY)) {
+                // Check if any selected node has unsaved changes
+                let hasUnsavedChanges = false;
+                selectedNodeIds.forEach(id => {
+                    const node = getNode(id);
+                    const lastSaved = lastSavedPositions.get(id);
+                    if (node && lastSaved && (node.posX !== lastSaved.x || node.posY !== lastSaved.y)) {
+                        hasUnsavedChanges = true;
+                    }
+                });
+
+                if (hasUnsavedChanges) {
                     // Final save on mouse up - if there's already a save in progress, queue it
                     if (saveInProgress) {
-                        pendingSave = { node: currentNode, oldPosX: currentNode.posX, oldPosY: currentNode.posY };
+                        pendingSave = new Map();
+                        selectedNodeIds.forEach(id => {
+                            const node = getNode(id);
+                            if (node) {
+                                pendingSave!.set(id, { posX: node.posX, posY: node.posY });
+                            }
+                        });
                     } else {
-                        saveNodePosition(currentNode);
+                        saveNodePositions(selectedNodeIds);
                     }
                 }
             };
