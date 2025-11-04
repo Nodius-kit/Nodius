@@ -384,7 +384,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }) | undefined;
             if (!updatedNode) {
                 return;
-            };
+            }
 
             // Get fresh config via projectRef
             const updatedConfig = projectRef.current.state.nodeTypeConfig[updatedNode.type];
@@ -635,16 +635,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         };
 
         const handleCanvasClickEmpty = () => {
-            // Clear both node and edge selections
-            Project.dispatch({
-                field: "selectedNode",
-                value: []
-            });
-            motor.setSelectedEdges([]);
-            Project.dispatch({
-                field: "selectedEdge",
-                value: []
-            });
+
         };
 
         motor.on("pan", handlePan);
@@ -766,8 +757,12 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             dragState.current.isDragging = false;
             dragState.current.startX = e.clientX;
             dragState.current.startY = e.clientY;
-        } else if(e.button === 0) {
-            console.log("start");
+        } else if(e.button === 0 && !selectingState.current.isSelecting) {
+            const element = document.elementFromPoint(e.clientX, e.clientY);
+            if(!element || element.tagName.toLowerCase() !== "canvas") {
+                return;
+            }
+
             selectingState.current.isSelecting = true;
             selectingState.current.startX = e.clientX;
             selectingState.current.startY = e.clientY;
@@ -796,37 +791,84 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 dragState.current.isDragging = true;
             }
         } else if(e.button === 0 && selectingState.current.isSelecting && selectingState.current.container) {
-            if(!selectingState.current.container.parentElement) {
-                overlayContainer.current!.appendChild(selectingState.current.container!);
-            }
 
             selectingState.current.endX = e.clientX;
             selectingState.current.endY = e.clientY;
 
-            const minX = Math.min(selectingState.current.endX, selectingState.current.startX);
-            const minY = Math.min(selectingState.current.endY, selectingState.current.startY);
+            const isFartherThan = (x1:number, y1:number, x2:number, y2:number, distance:number) => {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const distSquared = dx * dx + dy * dy;
+                return distSquared > distance * distance;
+            }
+            if(!selectingState.current.container.parentElement && isFartherThan(selectingState.current.startX, selectingState.current.startY, selectingState.current.endX, selectingState.current.endY, 5)) {
+                overlayContainer.current!.appendChild(selectingState.current.container!);
+            }
 
-            const maxX = Math.max(selectingState.current.endX, selectingState.current.startX);
-            const maxY = Math.max(selectingState.current.endY, selectingState.current.startY);
+            if(selectingState.current.container.parentElement) {
+                selectingState.current.endX = e.clientX;
+                selectingState.current.endY = e.clientY;
 
+                const minX = Math.min(selectingState.current.endX, selectingState.current.startX);
+                const minY = Math.min(selectingState.current.endY, selectingState.current.startY);
 
-            const minPoint = gpuMotor.current!.screenToWorld({
-                x: minX,
-                y: minY
-            });
+                const maxX = Math.max(selectingState.current.endX, selectingState.current.startX);
+                const maxY = Math.max(selectingState.current.endY, selectingState.current.startY);
 
-            const maxPoint = gpuMotor.current!.screenToWorld({
-                x: maxX,
-                y: maxY
-            });
+                const worldMin = gpuMotor.current!.screenToWorld({
+                    x: minX,
+                    y: minY
+                });
+                const worldMax = gpuMotor.current!.screenToWorld({
+                    x: maxX,
+                    y: maxY
+                });
 
-            console.log(minPoint, maxPoint);
+                const newSelectedNode: string[] = [];
+                const newSelectedEdge: string[] = [];
+                for (const [key, node] of projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.entries()) {
+                    if (node.posX > worldMin.x && node.posY > worldMin.y && node.posX + node.size.width < worldMax.x && node.posY + node.size.height < worldMax.y) {
+                        newSelectedNode.push(key);
+                    }
+                }
+                for (const selectedNode of newSelectedNode) {
+                    const node = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(selectedNode)!;
+                    const edgesTarget = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].edgeMap.get("target-" + node._key) ?? [];
+                    const edgesSource = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].edgeMap.get("source-" + node._key) ?? [];
+                    for (const edgeTarget of edgesTarget) {
+                        if (newSelectedNode.some((n) => n === edgeTarget.source) && !newSelectedEdge.includes(edgeTarget._key)) {
+                            newSelectedEdge.push(edgeTarget._key);
+                        }
+                    }
+                    for (const edgeSource of edgesSource) {
+                        if (newSelectedNode.some((n) => n === edgeSource.source) && !newSelectedEdge.includes(edgeSource._key)) {
+                            newSelectedEdge.push(edgeSource._key);
+                        }
+                    }
+                }
 
-            selectingState.current.container.style.top = minPoint.y+"px";
-            selectingState.current.container.style.left = minPoint.x+"px";
+                projectRef.current.dispatch({
+                    field: "selectedNode",
+                    value: newSelectedNode
+                });
+                projectRef.current.dispatch({
+                    field: "selectedEdge",
+                    value: newSelectedEdge
+                })
 
-            selectingState.current.container.style.width = (maxPoint.x-minPoint.x)+"px";
-            selectingState.current.container.style.height = (maxPoint.y-minPoint.y)+"px";
+                // Get container offset to convert clientX/Y to container-relative coordinates
+                const containerRect = containerRef.current!.getBoundingClientRect();
+
+                const left = minX - containerRect.left;
+                const top = minY - containerRect.top;
+                const width = maxX - minX;
+                const height = maxY - minY;
+
+                selectingState.current.container.style.left = left + "px";
+                selectingState.current.container.style.top = top + "px";
+                selectingState.current.container.style.width = width + "px";
+                selectingState.current.container.style.height = height + "px";
+            }
 
         }
     }, []);
@@ -847,8 +889,22 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             dragState.current.startX = 0;
             dragState.current.startY = 0;
         } else if(e.button === 0 && selectingState.current.isSelecting && selectingState.current.container) {
-            selectingState.current.container.remove();
             selectingState.current.isSelecting = false;
+            if(!selectingState.current.container.parentElement) {
+                // it mean it didn't to a selection, only a click
+                console.log("clear");
+                projectRef.current.dispatch({
+                    field: "selectedNode",
+                    value: []
+                });
+                projectRef.current.dispatch({
+                    field: "selectedEdge",
+                    value: []
+                });
+                gpuMotor.current!.setSelectedEdges([]);
+            } else {
+                selectingState.current.container.remove();
+            }
         }
     }, [Project.state.selectedNode, Project.state.editedHtml]);
 
