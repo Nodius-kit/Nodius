@@ -61,6 +61,10 @@ export interface updateNodeOption {
     dontUpdateRender?:boolean
 }
 
+export interface GraphWorkflowMemory {
+    storage: Record<string, any>
+}
+
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
     onNodeEnter,
@@ -85,6 +89,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Managers
     const animationManager = useRef<NodeAnimationManager>(undefined);
     const overlayManager = useRef<OverlayManager>(undefined);
+
+    const graphMemoryWorkflow = useRef<GraphWorkflowMemory>({
+        storage: {}
+    })
 
     // Dynamic class for selected node effect
     const selectedNodeClass = useDynamicClass(`
@@ -380,7 +388,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             timeTaken: 0
                         }
                     }
-                }
+                },
+                graphMemoryWorkflow: graphMemoryWorkflow.current
             }),
             // Stable context - values that don't change
             {

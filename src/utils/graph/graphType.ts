@@ -184,15 +184,9 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
     workspace: "root",
     category: "",
     content: {
-        type: "html",
-        content: "",
-        name: "Container",
-        delimiter: true,
+        type: "list",
         tag: "div",
-        domEvents: [],
-        attribute: {
-            mainRender: "",
-        },
+        name: "container",
         css: [
             {
                 selector: "&",
@@ -202,7 +196,31 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 ]
             }
         ],
-        identifier: "root"
+        domEvents: [],
+        attribute: {},
+        identifier: "overlayRoot",
+        content: [
+            {
+                type: "html",
+                content: "",
+                name: "html render",
+                tag: "div",
+                domEvents: [],
+                attribute: {
+                    mainRender: "",
+                },
+                css: [
+                    {
+                        selector: "&",
+                        rules: [
+                            ["height", "100%"],
+                            ["width", "100%"]
+                        ]
+                    }
+                ],
+                identifier: "root"
+            }
+        ]
     },
     displayName: "Html Editor",
     description: "",
@@ -267,9 +285,13 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 const render_id = "main"; // unique render id in the node
                 if(getHtmlRenderer(node)?.[render_id]) return; // avoid dupling
 
+                storage.workflowMode ??= false; // default init workflow mode as false, so the graph will not be interpreted
+
                 const pathOfRender = ["data"]; // path inside the node where is stored the html
                 const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute
-                const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender);
+                const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender, {
+                    workflowMode: storage.workflowMode
+                });
 
                 // To remove a renderer when done (e.g., on nodeLeave or cleanup):
                 // removeHtmlRenderer(node._key, render_id);
@@ -303,7 +325,6 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
     content: {
         type: "block",
         name: "Container",
-        delimiter: true,
         domEvents: [],
         tag: "div",
         attribute: {
@@ -683,7 +704,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                             const nestedContainer = document.createElement('details');
 
                             // Restore state from sessionStorage, or auto-expand first 2 levels
-                            const savedState = sessionStorage.getItem(storageKey);
+                            const savedState = globalStorage[storageKey];
                             if (savedState !== null) {
                                 nestedContainer.open = savedState === 'true';
                             } else {
@@ -695,7 +716,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
 
                             // Save state to sessionStorage when toggled
                             nestedContainer.addEventListener('toggle', () => {
-                                sessionStorage.setItem(storageKey, nestedContainer.open.toString());
+                                globalStorage[storageKey] = nestedContainer.open.toString();
                             });
 
                             const summary = document.createElement('summary');

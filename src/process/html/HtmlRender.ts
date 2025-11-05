@@ -53,6 +53,7 @@ export interface HtmlRenderOption {
     buildingMode?: boolean,
     language?: string,
     noFirstRender?: boolean,
+    workflowMode?: boolean,
 }
 
 
@@ -71,6 +72,7 @@ export class HtmlRender {
     //private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
     private language: string = "en";
 
+    private workflowMode: boolean = true;
 
     /* building mode */
     private buildingMode: boolean = false;
@@ -96,6 +98,8 @@ export class HtmlRender {
         this.container.style.height = "100%";
         this.superContainer.appendChild(this.container);
 
+        this.workflowMode = option?.workflowMode ?? true;
+
         this.buildingMode = option?.buildingMode ?? false;
         this.language = option?.language ?? "en";
         this.globalStorage = new Proxy({}, {
@@ -116,6 +120,25 @@ export class HtmlRender {
         this.globalStorage[key] = value;
     }
 
+
+    public async setWorkflowMode(value: boolean) {
+        if (!this.container) {
+            throw new Error("HtmlRender: Container is null");
+        }
+        if(value == this.workflowMode) return;
+        if (this.workflowMode && !value) {
+            for (const storage of this.objectStorage.values()) {
+                if (storage.debugOverlay) {
+                    storage.debugOverlay.remove();
+                    storage.debugOverlay = undefined;
+                }
+            }
+        }
+        this.workflowMode = value;
+        if (this.previousObject !== undefined) {
+            await this.render(this.previousObject);
+        }
+    }
     public async setBuildingMode(value: boolean) {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
@@ -182,7 +205,7 @@ export class HtmlRender {
         }
     }
 
-    public async render(object: HtmlObject) {
+    public async render(object: HtmlObject, extraVariable?: Record<string, any>) {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
         }
@@ -190,11 +213,11 @@ export class HtmlRender {
         const existingRoot = this.container.firstElementChild as HTMLElement | null;
         if (!this.previousObject || !existingRoot || existingRoot.dataset.identifier !== object.identifier) {
             this.container.innerHTML = "";
-            await this.renderCreate(object, this.container);
+            await this.renderCreate(object, this.container, extraVariable);
         } else {
             const storage = this.objectStorage.get(object.identifier);
             if (storage) {
-                await this.updateDOM(object, storage.element, storage, {});
+                await this.updateDOM(object, storage.element, storage, extraVariable);
             }
         }
         if (this.previousObject == undefined) {
@@ -289,6 +312,7 @@ export class HtmlRender {
         this.addDebugListeners(storage);
 
         if (object.type === "text") {
+
             element.innerHTML = await this.parseContent(object.content[this.language], storage);
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
@@ -303,7 +327,7 @@ export class HtmlRender {
         this.setupExternalChangeTracking(storage);
     }
 
-    private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage, extraVar: Record<string, any>) {
+    private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage, extraVar: Record<string, any> = {}) {
         const oldObject = storage.object;
 
         if (newObject.tag !== oldObject.tag) {
@@ -407,14 +431,17 @@ export class HtmlRender {
             listeners.forEach(listener => element.removeEventListener(name, listener));
         }
         storage.domEvents.clear();
-        if (newObject.domEvents) {
-            newObject.domEvents.forEach(event => {
-                const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
-                element.addEventListener(event.name, caller);
-                const events = storage.domEvents.get(event.name) || [];
-                events.push(caller);
-                storage.domEvents.set(event.name, events);
-            });
+
+        if(this.workflowMode) {
+            if (newObject.domEvents) {
+                newObject.domEvents.forEach(event => {
+                    const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
+                    element.addEventListener(event.name, caller);
+                    const events = storage.domEvents.get(event.name) || [];
+                    events.push(caller);
+                    storage.domEvents.set(event.name, events);
+                });
+            }
         }
 
         // Update workflowEvents: remove old from maps, clear, add new
@@ -872,6 +899,10 @@ export class HtmlRender {
     }
 
     private async parseContent(content: string, objectStorage: ObjectStorage): Promise<string> {
+        if(!this.workflowMode) {
+            return content;
+        }
+
         const regex = /\{\{(.*?)\}\}/g; // Non-greedy match for {{content}}
 
         const matches = [...content.matchAll(regex)];
@@ -909,12 +940,12 @@ export class HtmlRender {
         storage.element.setAttribute("temporary", storage.object.temporary ? "true" : "false");
 
         // this interaction is only available for entry component, so the parent should be null or having delimiter=true
-        const parentIdentifier = storage.element.parentElement?.getAttribute("data-identifier");
+        /*const parentIdentifier = storage.element.parentElement?.getAttribute("data-identifier");
         if(
             !storage.element.parentElement || (parentIdentifier &&!this.objectStorage.has(parentIdentifier)) || (parentIdentifier &&!this.objectStorage.get(parentIdentifier)!.object.delimiter)
         ) {
             return;
-        }
+        }*/
 
         const lookForZoom = (element:HTMLElement):number => {
             const zoom = parseFloat(getComputedStyle(element).zoom);

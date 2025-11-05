@@ -21,6 +21,7 @@ import {OpenHtmlEditorFct} from "../hooks/useSocketSync";
 import {DataTypeClass} from "../../utils/dataType/dataType";
 import {deepCopy} from "../../utils/objectUtils";
 import {toast} from "react-hot-toast";
+import {GraphWorkflowMemory} from "./SchemaDisplay";
 
 export interface NodeEventContext {
     gpuMotor: WebGpuMotor;
@@ -40,6 +41,7 @@ export interface NodeEventContext {
     addSelectedNode: (nodeId:string, ctrlKey:boolean) => void;
     currentEntryDataType?:DataTypeClass,
     updateNode: (node:Node<any>) => Promise<ActionContext>;
+    graphMemoryWorkflow: GraphWorkflowMemory
 
 }
 
@@ -217,6 +219,7 @@ export class NodeEventManager {
             currentEntryDataType: ctx.currentEntryDataType,
             updateNode: ctx.updateNode,
             dataTypes: ctx.dataTypes,
+            storage: ctx.graphMemoryWorkflow.storage,
             toast: toast
         };
     }

@@ -46,7 +46,6 @@ export interface HtmlBase {
     domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
     //workflowEvents: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
     name:string,
-    delimiter?: boolean,
     temporary?:boolean,
     attribute?: Record<string, string>,
 }
