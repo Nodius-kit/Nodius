@@ -922,7 +922,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             selectingState.current.isSelecting = false;
             if(!selectingState.current.container.parentElement) {
                 // it mean it didn't to a selection, only a click
-                console.log("clear");
                 projectRef.current.dispatch({
                     field: "selectedNode",
                     value: []
@@ -941,6 +940,14 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const handleCanvasClick = useCallback((e: React.MouseEvent) => {
         onCanvasClick(e);
     }, [onCanvasClick]);
+
+    useEffect(() => {
+        requestAnimationFrame(() => {
+            for(const schema of inSchemaNode.current.values()) {
+                schema.element.dispatchEvent(new CustomEvent("entryDataType"));
+            }
+        });
+    }, [Project.state.currentEntryDataType]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >

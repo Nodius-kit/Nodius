@@ -151,7 +151,7 @@ export interface Graph {
 }
 
 
-export type MotorDomEventMap = "nodeEnter" | "nodeUpdate"
+export type MotorDomEventMap = "nodeEnter" | "nodeUpdate" | "entryDataType"
 
 
 export interface NodeTypeConfig {
@@ -367,6 +367,12 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                     //render logic is on the nodeUpdate, we can manually trigger it:
                     triggerEventOnNode(node._key, "nodeUpdate");
                 }
+            `
+        },
+        {
+            name: "entryDataType",
+            call: `
+                triggerEventOnNode(node._key, "nodeUpdate");
             `
         },
         {

@@ -304,12 +304,11 @@ export const LeftPanelEntryTypeSelect = memo((
 
             const instructions:Array<GraphInstructions> = [{
                 nodeId: nodeType._key,
-                i: instruction.instruction,
-                noRedraw: true
+                i: instruction.instruction
             }];
             const output = await Project.state.updateGraph!(instructions);
 
-            requestAnimationFrame(() => (window as any).triggerNodeUpdate?.(nodeType!._key));
+            //requestAnimationFrame(() => (window as any).triggerNodeUpdate?.(nodeType!._key));
 
         } else {
             const uniqueId = await Project.state.generateUniqueId!(2);

@@ -980,7 +980,6 @@ export const useSocketSync = () => {
         }
     }, [Project.state.graph, Project.state.editedHtml, handleIntructionToGraph, Project.state.selectedSheetId, Project.state.refreshCurrentEntryDataType]);
 
-
     const currentEditConfig = useRef<{node: Node<any>,config: NodeTypeConfig }>(Project.state.editedNodeConfig);
     useEffect(() => {
         currentEditConfig.current = Project.state.editedNodeConfig;
@@ -1711,39 +1710,7 @@ export const useSocketSync = () => {
             });
         }
     }
-
-
-    useEffect(() => {
-
-        const emptyCurrentDataType = () => {
-            Project.dispatch({
-                field: "currentEntryDataType",
-                value: undefined
-            });
-        }
-
-        if(!Project.state.graph || !Project.state.dataTypes) {
-            return emptyCurrentDataType();
-        }
-
-        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
-        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return emptyCurrentDataType();
-
-        const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
-        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
-
-        if(nodeType) {
-            Project.dispatch({
-                field: "currentEntryDataType",
-                value: Project.state.dataTypes.find((type) => type._key === nodeType.data!._key)
-            });
-        } else {
-            return emptyCurrentDataType();
-        }
-
-
-    }, [Project.state.graph, Project.state.dataTypes]);
-
+    
     const retrieveCurrentDataTypeEntry = useCallback(() => {
         const emptyCurrentDataType = () => {
             Project.dispatch({
