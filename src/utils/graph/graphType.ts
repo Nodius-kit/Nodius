@@ -670,11 +670,27 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                         const referencedType = dataTypes.find(dt => dt._key === referencedTypeKey);
 
                         if (referencedType) {
+                            // Create unique storage key for this section
+                            const storageKey = 'nodius-node-' + node._key + '-section-' + [...parentPath, typeConfig.name].join('.');
+
                             // Create collapsible section for nested type
                             const nestedContainer = document.createElement('details');
-                            nestedContainer.open = level < 2; // Auto-expand first 2 levels
+
+                            // Restore state from sessionStorage, or auto-expand first 2 levels
+                            const savedState = sessionStorage.getItem(storageKey);
+                            if (savedState !== null) {
+                                nestedContainer.open = savedState === 'true';
+                            } else {
+                                nestedContainer.open = level < 2;
+                            }
+
                             nestedContainer.style.marginTop = '8px';
                             nestedContainer.style.marginBottom = '8px';
+
+                            // Save state to sessionStorage when toggled
+                            nestedContainer.addEventListener('toggle', () => {
+                                sessionStorage.setItem(storageKey, nestedContainer.open.toString());
+                            });
 
                             const summary = document.createElement('summary');
                             summary.style.cursor = 'pointer';

@@ -309,6 +309,8 @@ export const LeftPanelEntryTypeSelect = memo((
             }];
             const output = await Project.state.updateGraph!(instructions);
 
+            (window as any).triggerNodeUpdate?.(nodeType._key);
+
         } else {
             const uniqueId = await Project.state.generateUniqueId!(2);
             if(!uniqueId) return;
@@ -437,7 +439,6 @@ export const LeftPanelEntryTypeSelect = memo((
         if(!nodeType) return;
 
         const cleanedData = cleanData(data);
-        console.log("Removed invalid values:", Object.keys(data).filter(k => !(k in cleanedData)));
         const instruction = new InstructionBuilder();
         instruction.key("data").key("fixedValue").set(cleanedData);
 
