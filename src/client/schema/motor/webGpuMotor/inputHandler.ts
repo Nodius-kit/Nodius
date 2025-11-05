@@ -116,6 +116,9 @@ export class InputHandler {
 		this.canvas.addEventListener("wheel", (e) => {
 			if (!this.interactiveEnabled) return;
 			e.preventDefault();
+
+
+
 			const rect = this.canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;

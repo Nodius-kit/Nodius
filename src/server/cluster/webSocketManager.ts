@@ -1250,20 +1250,17 @@ export class WebSocketManager {
                 // Create new edges
                 for (const edge of edgesToCreate) {
                     const arangoEdge = edgeToArangoFormat(edge);
-                    console.log("save", arangoEdge);
                     await edge_collection.save(arangoEdge);
                 }
 
                 // Update existing edges
                 for (const edge of edgesToUpdate) {
                     const arangoEdge = edgeToArangoFormat(edge);
-                    console.log("update", arangoEdge);
-                    await edge_collection.replace(edge._key, arangoEdge);
+                    await edge_collection.replace(graphKey+"-"+edge._key, arangoEdge);
                 }
 
                 // Delete removed edges
                 for (const edgeKey of edgesToDelete) {
-                    console.log("delete", graphKey+"-"+edgeKey);
                     await edge_collection.remove(graphKey+"-"+edgeKey);
                 }
 

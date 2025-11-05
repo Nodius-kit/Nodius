@@ -481,7 +481,6 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                             color: var(--nodius-error-main);
                         }
                         .entry-field-input {
-                            width: 100%;
                             padding: 8px 12px;
                             background: var(--nodius-background-default);
                             color: var(--nodius-text-primary);
@@ -613,10 +612,11 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                 renderContainer.appendChild(headerContainer);
                 renderContainer.appendChild(fileInput);
 
-                // Render each field from currentEntryDataType
-                currentEntryDataType.types.forEach((typeConfig) => {
+                // Helper function to render fields recursively
+                const renderField = (typeConfig, parentPath = [], level = 0) => {
                     const fieldContainer = document.createElement('div');
                     fieldContainer.className = 'entry-field';
+                    fieldContainer.style.marginLeft = (level * 20) + 'px';
 
                     // Create label with type and required indicator
                     const label = document.createElement('div');
@@ -640,61 +640,143 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
 
                     fieldContainer.appendChild(label);
 
-                    // Create input field based on type
-                    let inputElement;
-                    const currentValue = node.data.fixedValue[typeConfig.name];
-
-                    if (typeConfig.typeId === 'bool') {
-                        inputElement = document.createElement('input');
-                        inputElement.type = 'checkbox';
-                        inputElement.className = 'entry-field-checkbox';
-                        inputElement.checked = currentValue === true || currentValue === 'true';
-                    } else {
-                        inputElement = document.createElement('input');
-                        inputElement.type = 'text';
-                        inputElement.className = 'entry-field-input';
-                        inputElement.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : '';
-                        inputElement.placeholder = typeConfig.defaultValue || 'Enter ' + typeConfig.name;
-                    }
-
-                    // Add data attribute for field name (for updates)
-                    inputElement.setAttribute('data-field-name', typeConfig.name);
-
-                    // Add change handler to update fixedValue
-                    const updateValue = async () => {
-                        const newValue = inputElement.type === 'checkbox' ? inputElement.checked : inputElement.value;
-                        node.data.fixedValue[typeConfig.name] = newValue;
-                        await updateNode(node);
+                    // Get current value from nested path
+                    const getCurrentValue = () => {
+                        let value = node.data.fixedValue;
+                        for (const key of parentPath) {
+                            value = value?.[key];
+                        }
+                        return value?.[typeConfig.name];
                     };
 
-                    if (inputElement.type === 'checkbox') {
-                        inputElement.addEventListener('change', updateValue);
-                    } else {
-                        inputElement.addEventListener('blur', updateValue);
-                        inputElement.addEventListener('keydown', (e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                updateValue();
+                    // Set value in nested path
+                    const setCurrentValue = (newValue) => {
+                        // Ensure nested structure exists
+                        let current = node.data.fixedValue;
+                        for (let i = 0; i < parentPath.length; i++) {
+                            const key = parentPath[i];
+                            if (!current[key] || typeof current[key] !== 'object') {
+                                current[key] = {};
                             }
-                        });
+                            current = current[key];
+                        }
+                        current[typeConfig.name] = newValue;
+                    };
+
+                    // Handle dataType (complex nested type)
+                    if (typeConfig.typeId === 'dataType') {
+                        // Find the referenced data type
+                        const referencedTypeKey = typeConfig.defaultValue;
+                        const referencedType = dataTypes.find(dt => dt._key === referencedTypeKey);
+
+                        if (referencedType) {
+                            // Create collapsible section for nested type
+                            const nestedContainer = document.createElement('details');
+                            nestedContainer.open = level < 2; // Auto-expand first 2 levels
+                            nestedContainer.style.marginTop = '8px';
+                            nestedContainer.style.marginBottom = '8px';
+
+                            const summary = document.createElement('summary');
+                            summary.style.cursor = 'pointer';
+                            summary.style.fontWeight = '600';
+                            summary.style.padding = '8px';
+                            summary.style.backgroundColor = 'var(--nodius-background-default)';
+                            summary.style.borderRadius = '6px';
+                            summary.style.marginBottom = '8px';
+                            summary.textContent = '📦 ' + referencedType.name;
+                            nestedContainer.appendChild(summary);
+
+                            // Ensure nested object exists
+                            const currentValue = getCurrentValue();
+                            if (!currentValue || typeof currentValue !== 'object') {
+                                setCurrentValue({});
+                            }
+
+                            // Render nested fields
+                            const nestedFieldsContainer = document.createElement('div');
+                            nestedFieldsContainer.style.marginLeft = '12px';
+                            nestedFieldsContainer.style.borderLeft = '2px solid var(--nodius-primary-main)';
+                            nestedFieldsContainer.style.paddingLeft = '12px';
+
+                            referencedType.types.forEach(nestedTypeConfig => {
+                                const nestedField = renderField(nestedTypeConfig, [...parentPath, typeConfig.name], level + 1);
+                                nestedFieldsContainer.appendChild(nestedField);
+                            });
+
+                            nestedContainer.appendChild(nestedFieldsContainer);
+                            fieldContainer.appendChild(nestedContainer);
+                        } else {
+                            // Type not found
+                            const errorMsg = document.createElement('div');
+                            errorMsg.style.color = 'var(--nodius-error-main)';
+                            errorMsg.style.fontSize = '12px';
+                            errorMsg.style.marginTop = '4px';
+                            errorMsg.textContent = 'Referenced type not found: ' + referencedTypeKey;
+                            fieldContainer.appendChild(errorMsg);
+                        }
+                    } else {
+                        // Regular input field
+                        let inputElement;
+                        const currentValue = getCurrentValue();
+
+                        if (typeConfig.typeId === 'bool') {
+                            inputElement = document.createElement('input');
+                            inputElement.type = 'checkbox';
+                            inputElement.className = 'entry-field-checkbox';
+                            inputElement.checked = currentValue === true || currentValue === 'true';
+                        } else {
+                            inputElement = document.createElement('input');
+                            inputElement.type = 'text';
+                            inputElement.className = 'entry-field-input';
+                            inputElement.value = currentValue !== undefined && currentValue !== null ? String(currentValue) : '';
+                            inputElement.placeholder = typeConfig.defaultValue || 'Enter ' + typeConfig.name;
+                        }
+
+                        // Add data attribute for field name (for updates)
+                        inputElement.setAttribute('data-field-name', [...parentPath, typeConfig.name].join('.'));
+
+                        // Add change handler to update fixedValue
+                        const updateValue = async () => {
+                            const newValue = inputElement.type === 'checkbox' ? inputElement.checked : inputElement.value;
+                            setCurrentValue(newValue);
+                            await updateNode(node);
+                        };
+
+                        if (inputElement.type === 'checkbox') {
+                            inputElement.addEventListener('change', updateValue);
+                        } else {
+                            inputElement.addEventListener('blur', updateValue);
+                            inputElement.addEventListener('keydown', (e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    updateValue();
+                                }
+                            });
+                        }
+
+                        fieldContainer.appendChild(inputElement);
+
+                        // Show placeholder/default value info
+                        if (typeConfig.defaultValue && typeConfig.typeId !== 'bool' && typeConfig.typeId !== 'dataType') {
+                            const meta = document.createElement('div');
+                            meta.className = 'entry-field-meta';
+
+                            const placeholderInfo = document.createElement('span');
+                            placeholderInfo.className = 'entry-field-placeholder';
+                            placeholderInfo.textContent = 'Default: ' + typeConfig.defaultValue;
+                            meta.appendChild(placeholderInfo);
+
+                            fieldContainer.appendChild(meta);
+                        }
                     }
 
-                    fieldContainer.appendChild(inputElement);
+                    return fieldContainer;
+                };
 
-                    // Show placeholder/default value info
-                    if (typeConfig.defaultValue && typeConfig.typeId !== 'bool') {
-                        const meta = document.createElement('div');
-                        meta.className = 'entry-field-meta';
-
-                        const placeholderInfo = document.createElement('span');
-                        placeholderInfo.className = 'entry-field-placeholder';
-                        placeholderInfo.textContent = 'Default: ' + typeConfig.defaultValue;
-                        meta.appendChild(placeholderInfo);
-
-                        fieldContainer.appendChild(meta);
-                    }
-
-                    renderContainer.appendChild(fieldContainer);
+                // Render each field from currentEntryDataType
+                currentEntryDataType.types.forEach((typeConfig) => {
+                    const field = renderField(typeConfig);
+                    renderContainer.appendChild(field);
                 });
 
             `
