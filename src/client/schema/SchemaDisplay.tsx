@@ -61,9 +61,16 @@ export interface updateNodeOption {
     dontUpdateRender?:boolean
 }
 
-export interface GraphWorkflowMemory {
-    storage: Record<string, any>
+export interface GraphWorkFlowMemoryStorage {
+    workflowMode: boolean,
+    [key: string]: any
 }
+
+export interface GraphWorkflowMemory {
+    storage: Partial<GraphWorkFlowMemoryStorage>
+}
+
+
 
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     onExitCanvas,
@@ -91,7 +98,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     const overlayManager = useRef<OverlayManager>(undefined);
 
     const graphMemoryWorkflow = useRef<GraphWorkflowMemory>({
-        storage: {}
+        storage: {
+
+        }
     })
 
     // Dynamic class for selected node effect
@@ -313,6 +322,107 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         resizeHandle.className = resizeHandleClass;
         resizeHandle.setAttribute("data-resize-handle", node._key);
         overlay.appendChild(resizeHandle);
+
+        // Add workflow mode switch for root node
+        if (node._key === "root") {
+            const switchContainer = document.createElement('div');
+            switchContainer.style.cssText = `
+                position: absolute;
+                top: -48px;
+                right: 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 10px;
+                background-color: var(--nodius-background-paper);
+                border-radius: 8px;
+                border: 1px solid var(--nodius-primary-dark);
+                box-shadow: var(--nodius-shadow-2);
+                z-index: 10;
+                transition: var(--nodius-transition-default);
+                pointer-events: all;
+            `;
+
+            const label = document.createElement('label');
+            label.htmlFor = 'workflowModeSwitch';
+            label.textContent = 'Workflow Mode';
+            label.style.cssText = `
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--nodius-text-primary);
+                cursor: pointer;
+                user-select: none;
+            `;
+
+            const switchLabel = document.createElement('label');
+            switchLabel.style.cssText = `
+                position: relative;
+                display: inline-block;
+                width: 40px;
+                height: 22px;
+            `;
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'workflowModeSwitch';
+            checkbox.checked = graphMemoryWorkflow.current.storage.workflowMode == true;
+            checkbox.style.cssText = `
+                opacity: 0;
+                width: 0;
+                height: 0;
+            `;
+
+            const slider = document.createElement('span');
+            slider.style.cssText = `
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: var(--nodius-grey-600);
+                transition: var(--nodius-transition-default);
+                border-radius: 22px;
+            `;
+
+            const sliderBefore = document.createElement('span');
+            sliderBefore.style.cssText = `
+                position: absolute;
+                content: '';
+                height: 16px;
+                width: 16px;
+                left: 3px;
+                bottom: 3px;
+                background-color: white;
+                transition: var(--nodius-transition-default);
+                border-radius: 50%;
+            `;
+
+            slider.appendChild(sliderBefore);
+
+            // Click event handler
+            checkbox.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isChecked = !graphMemoryWorkflow.current.storage.workflowMode;
+                checkbox.checked = isChecked;
+                if (isChecked) {
+                    slider.style.backgroundColor = 'var(--nodius-success-main)';
+                    sliderBefore.style.transform = 'translateX(18px)';
+                    graphMemoryWorkflow.current.storage.workflowMode = true;
+                } else {
+                    slider.style.backgroundColor = 'var(--nodius-grey-600)';
+                    sliderBefore.style.transform = 'translateX(0)';
+                    graphMemoryWorkflow.current.storage.workflowMode = false;
+                }
+                (window as any).triggerNodeUpdate?.(node._key);
+            });
+
+            switchLabel.appendChild(checkbox);
+            switchLabel.appendChild(slider);
+            switchContainer.appendChild(label);
+            switchContainer.appendChild(switchLabel);
+            overlay.appendChild(switchContainer);
+        }
 
         // Resize handler
         const resizeHandler = createResizeHandler(node._key, overlay, nodeHTML);
