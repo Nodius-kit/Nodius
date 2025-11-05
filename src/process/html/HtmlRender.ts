@@ -677,6 +677,7 @@ export class HtmlRender {
             htmlObject: object,
             currentStorage: storage.storage,
             globalStorage: this.globalStorage,
+            element: storage.element,
             ...extraVar
         };
         if (object.type === "block") {
@@ -712,6 +713,7 @@ export class HtmlRender {
     private callDOMEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         this.callFunction(call, {
             event: event,
+            element: objectStorage.element,
             ...this.getAsyncFunctionContext(objectStorage)
         })
     }
@@ -818,7 +820,7 @@ export class HtmlRender {
         try {
             output = await fct(...[...Object.values(env)]);
         } catch(e) {
-            console.error(e);
+            console.error('Error:', e, "in function:", code, "with arg", env);
         }
         return output;
     }
@@ -919,6 +921,7 @@ export class HtmlRender {
                         htmlObject: objectStorage.object,
                         currentStorage: objectStorage.storage,
                         globalStorage: this.globalStorage,
+                        element: objectStorage.element,
                         ...objectStorage.extraVariable,
                     }
                 );
