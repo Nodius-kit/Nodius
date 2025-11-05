@@ -345,7 +345,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             const label = document.createElement('label');
             label.htmlFor = 'workflowModeSwitch';
-            label.textContent = 'Workflow Mode';
+            label.textContent = 'Auto Workflow';
             label.style.cssText = `
                 font-size: 12px;
                 font-weight: 600;
