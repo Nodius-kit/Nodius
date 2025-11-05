@@ -576,6 +576,7 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
                         toast.success(\`Imported \${importedCount} field(s) from JSON\`, {
                             duration: 3000,
                             position: 'bottom-right',
+                        });
 
                         // Show warning for extra keys
                         if (extraKeys.length > 0) {

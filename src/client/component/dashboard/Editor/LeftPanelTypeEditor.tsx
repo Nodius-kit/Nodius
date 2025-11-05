@@ -115,7 +115,187 @@ export const LeftPanelTypeEditor = memo((
 
     const addTypeFromJsonPromptAbortController = useRef<AbortController>(undefined);
     const addTypeFromJsonPrompt = async () => {
+        // Create hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'application/json,.json';
+        fileInput.style.display = 'none';
 
+        fileInput.addEventListener('change', async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const jsonData = JSON.parse(text);
+
+                if (addTypeFromJsonPromptAbortController.current) {
+                    addTypeFromJsonPromptAbortController.current.abort();
+                }
+                addTypeFromJsonPromptAbortController.current = new AbortController();
+
+                // Track all created types to avoid collisions
+                const usedNames = new Set((Project.state.dataTypes ?? []).map(dt => dt.name.toLowerCase()));
+                const createdTypes: DataTypeClass[] = [];
+
+                // Helper function to get unique name
+                const getUniqueName = (baseName: string): string => {
+                    let name = baseName;
+                    let counter = 0;
+                    while (usedNames.has(name.toLowerCase())) {
+                        counter++;
+                        name = baseName + '-' + counter;
+                    }
+                    usedNames.add(name.toLowerCase());
+                    return name;
+                };
+
+                // Helper function to detect data type from value
+                const detectType = (value: any): string => {
+                    if (value === null || value === undefined) return 'str';
+                    if (typeof value === 'boolean') return 'bool';
+                    if (typeof value === 'number') {
+                        return Number.isInteger(value) ? 'int' : 'db';
+                    }
+                    if (typeof value === 'string') return 'str';
+                    if (Array.isArray(value)) {
+                        // Return type of first element if array not empty
+                        return value.length > 0 ? detectType(value[0]) : 'str';
+                    }
+                    // Complex object - will need its own type
+                    return 'ref';
+                };
+
+                // Recursive function to create types from JSON structure
+                const createTypeFromObject = async (obj: any, typeName: string): Promise<DataTypeClass> => {
+                    const uniqueName = getUniqueName(typeName);
+                    const types: DataTypeClass['types'] = [];
+
+                    for (const [key, value] of Object.entries(obj)) {
+                        const isArray = Array.isArray(value);
+                        const actualValue = isArray ? value[0] : value;
+                        let typeId = detectType(actualValue);
+                        let refTypeName: string | undefined;
+
+                        // If it's a complex object, create a nested type
+                        if (typeId === 'ref' && actualValue && typeof actualValue === 'object') {
+                            const nestedType = await createTypeFromObject(actualValue, key);
+                            createdTypes.push(nestedType);
+                            refTypeName = nestedType._key;
+                        }
+
+                        types.push({
+                            name: key,
+                            typeId: refTypeName || typeId,
+                            isArray: isArray,
+                            required: false,
+                            defaultValue: refTypeName ? undefined : (
+                                actualValue !== null && actualValue !== undefined && !isArray
+                                    ? String(actualValue)
+                                    : undefined
+                            )
+                        });
+                    }
+
+                    // Create the type via API
+                    const body: Omit<DataTypeClass, "_key"> = {
+                        name: uniqueName,
+                        types: types,
+                        workspace: "root",
+                        description: "Generated from JSON",
+                    };
+
+                    const response = await fetch(`/api/type/create`, {
+                        method: "POST",
+                        signal: addTypeFromJsonPromptAbortController.current!.signal,
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (response.status === 200) {
+                        const createdType: DataTypeClass = await response.json();
+                        return createdType;
+                    } else {
+                        throw new Error('Failed to create type: ' + uniqueName);
+                    }
+                };
+
+                // Process root level
+                const rootTypeName = getUniqueName('untitled');
+                const rootTypes: DataTypeClass['types'] = [];
+
+                // Process each root key
+                for (const [key, value] of Object.entries(jsonData)) {
+                    const isArray = Array.isArray(value);
+                    const actualValue = isArray ? value[0] : value;
+                    let typeId = detectType(actualValue);
+                    let refTypeName: string | undefined;
+
+                    // If it's a complex object, create a nested type
+                    if (typeId === 'ref' && actualValue && typeof actualValue === 'object') {
+                        const nestedType = await createTypeFromObject(actualValue, key);
+                        createdTypes.push(nestedType);
+                        refTypeName = nestedType._key;
+                    }
+
+                    rootTypes.push({
+                        name: key,
+                        typeId: refTypeName || typeId,
+                        isArray: isArray,
+                        required: false,
+                        defaultValue: refTypeName ? undefined : (
+                            actualValue !== null && actualValue !== undefined && !isArray
+                                ? String(actualValue)
+                                : undefined
+                        )
+                    });
+                }
+
+                // Create root type
+                const rootBody: Omit<DataTypeClass, "_key"> = {
+                    name: rootTypeName,
+                    types: rootTypes,
+                    workspace: "root",
+                    description: "Generated from JSON (root)",
+                };
+
+                const rootResponse = await fetch(`/api/type/create`, {
+                    method: "POST",
+                    signal: addTypeFromJsonPromptAbortController.current.signal,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(rootBody)
+                });
+
+                if (rootResponse.status === 200) {
+                    const rootType: DataTypeClass = await rootResponse.json();
+                    createdTypes.push(rootType);
+
+                    // Update state with all created types
+                    Project.dispatch({
+                        field: "dataTypes",
+                        value: [...(Project.state.dataTypes ?? []), ...createdTypes]
+                    });
+
+                    // Set the root type as the editing class
+                    setEditingClass(rootType);
+
+                    console.log('Created types:', createdTypes.map(t => t.name).join(', '));
+                } else {
+                    throw new Error('Failed to create root type');
+                }
+
+            } catch (error) {
+                console.error('Error processing JSON:', error);
+                alert('Failed to process JSON: ' + (error as Error).message);
+            }
+
+            // Cleanup
+            fileInput.remove();
+        });
+
+        // Trigger file selection
+        document.body.appendChild(fileInput);
+        fileInput.click();
     }
 
     const nextClassUpdateExecution = useRef<Record<string, {timeout: NodeJS.Timeout, abort:AbortController}>>({});
