@@ -36,6 +36,7 @@ export interface NodeEventContext {
     editedHtml: EditedHtmlType;
     editedNodeConfig: EditedNodeTypeConfig;
     selectedNode: string[],
+    dataTypes:DataTypeClass[],
     addSelectedNode: (nodeId:string, ctrlKey:boolean) => void;
     currentEntryDataType?:DataTypeClass,
     updateNode: (node:Node<any>) => Promise<ActionContext>;
@@ -201,7 +202,6 @@ export class NodeEventManager {
         const ctx = this.getContext();
         const currentNode = this.stableContext.getNode();
 
-
         return {
             event: null, // Will be provided at runtime for DOM events
             gpuMotor: this.stableContext.gpuMotor,
@@ -216,6 +216,7 @@ export class NodeEventManager {
             triggerEventOnNode: this.stableContext.triggerEventOnNode,
             currentEntryDataType: ctx.currentEntryDataType,
             updateNode: ctx.updateNode,
+            dataTypes: ctx.dataTypes,
             toast: toast
         };
     }

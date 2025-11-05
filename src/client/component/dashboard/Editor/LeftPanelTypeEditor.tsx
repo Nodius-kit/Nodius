@@ -53,6 +53,8 @@ export const LeftPanelTypeEditor = memo((
 
     const [editingClass, setEditingClass] = useState<DataTypeClass>();
 
+    const [newlyCreatedTypeIds, setNewlyCreatedTypeIds] = useState<Set<string>>(new Set());
+
     const Theme = useContext(ThemeContext);
 
     const searchedDataTypes: DataTypeClass[]|undefined = useMemo(() => Project.state.dataTypes ? Project.state.dataTypes.filter((data) => data.name.toLowerCase().includes(searchValue.toLowerCase())) : undefined,[Project.state.dataTypes, searchValue]);
@@ -107,6 +109,8 @@ export const LeftPanelTypeEditor = memo((
                 field: "dataTypes",
                 value: [...(Project.state.dataTypes ?? []), json]
             })
+            // Mark as newly created
+            setNewlyCreatedTypeIds(prev => new Set(prev).add(json._key));
             if(!editingClass) {
                 setEditingClass(json);
             }
@@ -276,6 +280,13 @@ export const LeftPanelTypeEditor = memo((
                         value: [...(Project.state.dataTypes ?? []), ...createdTypes]
                     });
 
+                    // Mark all created types as new
+                    setNewlyCreatedTypeIds(prev => {
+                        const newSet = new Set(prev);
+                        createdTypes.forEach(type => newSet.add(type._key));
+                        return newSet;
+                    });
+
                     // Set the root type as the editing class
                     setEditingClass(rootType);
 
@@ -351,12 +362,29 @@ export const LeftPanelTypeEditor = memo((
             body: JSON.stringify(body)
         });
         if(response.status === 200) {
+            // Find current index before deletion
+            const currentIndex = Project.state.dataTypes.findIndex(d => d._key === editingClass._key);
             const newDataType = Project.state.dataTypes.filter((d) => d._key !== editingClass._key);
+
             Project.dispatch({
                 field: "dataTypes",
                 value: newDataType
             });
-            setEditingClass(newDataType.length > 0 ? newDataType[0] : undefined);
+
+            // Remove from newly created set if present
+            setNewlyCreatedTypeIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(editingClass._key);
+                return newSet;
+            });
+
+            // Select next index, or previous if at end, or undefined if none left
+            if (newDataType.length > 0) {
+                const nextIndex = currentIndex < newDataType.length ? currentIndex : currentIndex - 1;
+                setEditingClass(newDataType[Math.max(0, nextIndex)]);
+            } else {
+                setEditingClass(undefined);
+            }
         }
     }
 
@@ -835,9 +863,33 @@ export const LeftPanelTypeEditor = memo((
                                         <div
                                             key={i}
                                             className={`${dataTypeSelectionButtonClass} ${editingClass?._key === dataType._key ? "active" : ""}`}
-                                            onClick={() => setEditingClass(dataType)}
+                                            onClick={() => {
+                                                setEditingClass(dataType);
+                                                // Remove from newly created set when clicked
+                                                if (newlyCreatedTypeIds.has(dataType._key)) {
+                                                    setNewlyCreatedTypeIds(prev => {
+                                                        const newSet = new Set(prev);
+                                                        newSet.delete(dataType._key);
+                                                        return newSet;
+                                                    });
+                                                }
+                                            }}
                                         >
-                                            <span style={{fontWeight:"500", fontSize:"14px"}}>{dataType.name}</span>
+                                            <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
+                                                <span style={{fontWeight:"500", fontSize:"14px"}}>{dataType.name}</span>
+                                                {newlyCreatedTypeIds.has(dataType._key) && (
+                                                    <span style={{
+                                                        fontSize:"11px",
+                                                        fontWeight:"600",
+                                                        padding:"2px 6px",
+                                                        backgroundColor:"var(--nodius-success-main)",
+                                                        color:"var(--nodius-success-contrastText)",
+                                                        borderRadius:"4px"
+                                                    }}>
+                                                        New!
+                                                    </span>
+                                                )}
+                                            </div>
                                             {dataType.description && (
                                                 <span style={{fontSize:"12px", opacity:"0.7"}}>
                                                     {dataType.description}

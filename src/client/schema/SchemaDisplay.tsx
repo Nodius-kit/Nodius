@@ -358,6 +358,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     }
                 },
                 selectedNode: projectRef.current.state.selectedNode,
+                dataTypes: projectRef.current.state.dataTypes!,
                 updateNode: async (node:Node<any>) => {
                     const currentNode = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(node._key);
                     if(!currentNode) {
