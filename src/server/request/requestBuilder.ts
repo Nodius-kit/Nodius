@@ -76,7 +76,6 @@ export class RequestBuilder {
                     domEvents: [],
                     name: "Container",
                     identifier: "0",
-                    delimiter: true,
                     css:[
                         {
                             selector: "&",
@@ -102,7 +101,6 @@ export class RequestBuilder {
                     domEvents: [],
                     name: "Text",
                     identifier: "0",
-                    delimiter: true,
                     css: [],
                     tag: "p",
                     content: {
@@ -123,7 +121,6 @@ export class RequestBuilder {
                     domEvents: [],
                     tag: "div",
                     name: "Column",
-                    delimiter: true,
                     css: [
                         {
                             selector: "&",
@@ -152,7 +149,6 @@ export class RequestBuilder {
                     tag: "div",
                     domEvents: [],
                     name:"Row",
-                    delimiter: true,
                     css: [
                         {
                             selector: "&",

@@ -49,6 +49,8 @@ export interface Edge {
     label?:string,
 }
 
+
+
 export interface Node<T> {
     _key: string,
     graphKey: string,
@@ -227,7 +229,16 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
     alwaysRendered: true,
     node: {
         type: "html",
-        process: "",
+        process: `
+            let htmlObject = node;
+            const pathOfRender = ["data"];
+            
+            for(const path of pathOfRender) {
+                htmlObject = htmlObject[path];
+            }
+            
+            initHtml(htmlObject);
+        `,
         handles: {
             0: {
                 position: "fix",

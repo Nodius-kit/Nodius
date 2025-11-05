@@ -23,7 +23,7 @@
 import {memo, useContext, useEffect, useRef, forwardRef, useCallback, useMemo} from "react";
 import {WebGpuMotor} from "./motor/webGpuMotor/index";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
-import {Edge, Node} from "../../utils/graph/graphType";
+import {Edge, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {deepCopy, disableTextSelection, enableTextSelection, forwardMouseEvents} from "../../utils/objectUtils";
 import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {NodeAnimationManager} from "./nodeAnimations";
@@ -35,7 +35,10 @@ import {useDynamicClass} from "../hooks/useDynamicClass";
 import {useNodeResize} from "./hooks/useNodeResize";
 import {useHandleRenderer} from "./hooks/useHandleRenderer";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
-import {generateInstructionsToMatch} from "../../utils/sync/InstructionBuilder";
+import {generateInstructionsToMatch, Instruction} from "../../utils/sync/InstructionBuilder";
+import {WorkflowManager} from "../../process/workflow/WorkflowManager";
+import {HtmlObject} from "../../utils/html/htmlType";
+import {findFirstNodeWithId, findNodeConnected} from "../../utils/graph/nodeUtils";
 
 interface SchemaDisplayProps {
     onExitCanvas: () => void,
@@ -96,12 +99,16 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Managers
     const animationManager = useRef<NodeAnimationManager>(undefined);
     const overlayManager = useRef<OverlayManager>(undefined);
+    const workflowManager = useRef<WorkflowManager>(undefined);
 
     const graphMemoryWorkflow = useRef<GraphWorkflowMemory>({
         storage: {
 
         }
     })
+
+    // Track graph structure changes (excluding position/size changes)
+    const lastGraphStructure = useRef<string>("");
 
     // Dynamic class for selected node effect
     const selectedNodeClass = useDynamicClass(`
@@ -182,6 +189,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             damping: 2 * Math.sqrt(100)
         });
         overlayManager.current = new OverlayManager(motor);
+        workflowManager.current = new WorkflowManager();
 
         motor
             .init(containerRef.current, canvasRef.current, {
@@ -195,6 +203,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         return () => {
             animationManager.current?.stopAllAnimations();
             overlayManager.current?.dispose();
+            workflowManager.current?.dispose();
             if (motorRef && typeof motorRef !== "function") {
                 motorRef.current = null;
             }
@@ -234,6 +243,61 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             nodeElement.dispatchEvent(updateEvent);
         }
     }, []); // No deps - pure DOM manipulation
+
+    // Workflow execution function
+    const executeWorkflow = useCallback(() => {
+        if (!workflowManager.current || !projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) {
+            console.warn('[SchemaDisplay] Cannot execute workflow: missing manager or graph');
+            return;
+        }
+
+        const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
+        if (!sheet) {
+            console.warn('[SchemaDisplay] Cannot execute workflow: sheet not found');
+            return;
+        }
+
+        // Convert nodeMap and edgeMap to arrays
+        const nodes = Array.from(sheet.nodeMap.values());
+        const edges: Edge[] = [];
+        for(const key of sheet.edgeMap.keys()) {
+            if(key.startsWith("source-")) {
+                edges.push(...sheet.edgeMap.get(key)!);
+            }
+        }
+
+        const nodeRoot = findFirstNodeWithId(projectRef.current.state.graph, "root")!;
+        let nodeTypeEntre:Node<NodeTypeEntryType> | undefined = undefined;
+        if(! (!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0)) {
+            const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph, nodeRoot, "in");
+            nodeTypeEntre = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+            console.log("started with ",nodeTypeEntre?.data?.fixedValue);
+        }
+
+
+        workflowManager.current.executeWorkflow(nodes, edges, "root", nodeTypeEntre?.data?.fixedValue, projectRef.current.state.nodeTypeConfig, {
+            onComplete: (totalTimeMs: number, data:any) => {
+
+            },
+            onData: (nodeKey: string | undefined, data: any, timestamp: number) => {
+
+            },
+            onLog: (message: string, timestamp: number) => {
+
+            },
+            onError: (error: string, timestamp: number) => {
+
+            },
+            onInitHtml: (html: HtmlObject, id?:string, containerSelector?:string) => {
+
+            },
+            onUpdateHtml: (instructions:Instruction[], id?:string) => {
+
+            }
+
+        });
+
+    }, []); // Empty deps - uses projectRef
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
         getNode: getNode,
@@ -332,7 +396,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 right: 8px;
                 display: flex;
                 align-items: center;
-                gap: 8px;
+                gap: 12px;
                 padding: 6px 10px;
                 background-color: var(--nodius-background-paper);
                 border-radius: 8px;
@@ -417,10 +481,49 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 (window as any).triggerNodeUpdate?.(node._key);
             });
 
+            // Manual workflow start button
+            const startButton = document.createElement('button');
+            startButton.textContent = '▶ Run';
+            startButton.style.cssText = `
+                padding: 4px 12px;
+                background-color: var(--nodius-primary-main);
+                color: var(--nodius-primary-contrastText);
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: var(--nodius-transition-default);
+                user-select: none;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            `;
+
+            startButton.addEventListener('mouseenter', () => {
+                startButton.style.backgroundColor = 'var(--nodius-primary-dark)';
+                startButton.style.transform = 'scale(1.05)';
+            });
+            startButton.addEventListener('mouseleave', () => {
+                startButton.style.backgroundColor = 'var(--nodius-primary-main)';
+                startButton.style.transform = 'scale(1)';
+            });
+            startButton.addEventListener('mousedown', () => {
+                startButton.style.transform = 'scale(0.95)';
+            });
+            startButton.addEventListener('mouseup', () => {
+                startButton.style.transform = 'scale(1.05)';
+            });
+            startButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                (window as any).triggerWorkflowExecution?.();
+            });
+
             switchLabel.appendChild(checkbox);
             switchLabel.appendChild(slider);
             switchContainer.appendChild(label);
             switchContainer.appendChild(switchLabel);
+            switchContainer.appendChild(startButton);
             overlay.appendChild(switchContainer);
         }
 
@@ -840,11 +943,13 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         };
 
         (window as any).triggerNodeUpdate = triggerNodeUpdate;
+        (window as any).triggerWorkflowExecution = executeWorkflow;
 
         return () => {
             delete (window as any).triggerNodeUpdate;
+            delete (window as any).triggerWorkflowExecution;
         };
-    }, [triggerEventOnNode]);
+    }, [triggerEventOnNode, executeWorkflow]);
 
     // Selection visual effect using dynamic classes
     useEffect(() => {
@@ -1067,6 +1172,62 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         });
     }, [Project.state.currentEntryDataType]);
+
+    // Auto workflow execution on graph changes
+    useEffect(() => {
+        // Only execute if auto workflow mode is enabled
+        if (!graphMemoryWorkflow.current.storage.workflowMode) {
+            return;
+        }
+
+        if (!Project.state.graph || !Project.state.selectedSheetId) {
+            return;
+        }
+
+        const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
+        if (!sheet) {
+            return;
+        }
+
+        // Create a structure hash that excludes position and size
+        const structureData = {
+            nodes: Array.from(sheet.nodeMap.values()).map(node => ({
+                _key: node._key,
+                type: node.type,
+                handles: node.handles,
+                data: node.data
+                // Exclude: posX, posY, size (position/size changes don't trigger workflow)
+            })),
+            edges: [] as Edge[]
+        };
+
+        sheet.edgeMap.forEach(edgeArray => {
+            structureData.edges.push(...edgeArray);
+        });
+
+        const currentStructure = JSON.stringify(structureData);
+
+        // Check if structure actually changed
+        if (lastGraphStructure.current === currentStructure) {
+            return;
+        }
+
+        lastGraphStructure.current = currentStructure;
+
+        // Debounce execution to avoid too frequent runs
+        const timeoutId = setTimeout(() => {
+            console.log('[SchemaDisplay] Auto workflow execution triggered by structure change');
+            executeWorkflow();
+        }, 500); // 500ms debounce
+
+        return () => {
+            clearTimeout(timeoutId);
+        };
+    }, [
+        Project.state.graph,
+        Project.state.selectedSheetId,
+        executeWorkflow
+    ]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
