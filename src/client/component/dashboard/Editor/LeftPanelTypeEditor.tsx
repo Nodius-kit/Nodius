@@ -163,7 +163,7 @@ export const LeftPanelTypeEditor = memo((
                         return value.length > 0 ? detectType(value[0]) : 'str';
                     }
                     // Complex object - will need its own type
-                    return 'ref';
+                    return 'dataType';
                 };
 
                 // Recursive function to create types from JSON structure
@@ -175,22 +175,22 @@ export const LeftPanelTypeEditor = memo((
                         const isArray = Array.isArray(value);
                         const actualValue = isArray ? value[0] : value;
                         let typeId = detectType(actualValue);
-                        let refTypeName: string | undefined;
+                        let nestedTypeKey: string | undefined;
 
                         // If it's a complex object, create a nested type
-                        if (typeId === 'ref' && actualValue && typeof actualValue === 'object') {
+                        if (typeId === 'dataType' && actualValue && typeof actualValue === 'object') {
                             const nestedType = await createTypeFromObject(actualValue, key);
                             createdTypes.push(nestedType);
-                            refTypeName = nestedType._key;
+                            nestedTypeKey = nestedType._key;
                         }
 
                         types.push({
                             name: key,
-                            typeId: refTypeName || typeId,
+                            typeId: nestedTypeKey ? 'dataType' : typeId,
                             isArray: isArray,
                             required: false,
-                            defaultValue: refTypeName ? undefined : (
-                                actualValue !== null && actualValue !== undefined && !isArray
+                            defaultValue: nestedTypeKey ? nestedTypeKey : (
+                                actualValue !== null && actualValue !== undefined && !isArray && typeId !== 'dataType'
                                     ? String(actualValue)
                                     : undefined
                             )
@@ -229,22 +229,22 @@ export const LeftPanelTypeEditor = memo((
                     const isArray = Array.isArray(value);
                     const actualValue = isArray ? value[0] : value;
                     let typeId = detectType(actualValue);
-                    let refTypeName: string | undefined;
+                    let nestedTypeKey: string | undefined;
 
                     // If it's a complex object, create a nested type
-                    if (typeId === 'ref' && actualValue && typeof actualValue === 'object') {
+                    if (typeId === 'dataType' && actualValue && typeof actualValue === 'object') {
                         const nestedType = await createTypeFromObject(actualValue, key);
                         createdTypes.push(nestedType);
-                        refTypeName = nestedType._key;
+                        nestedTypeKey = nestedType._key;
                     }
 
                     rootTypes.push({
                         name: key,
-                        typeId: refTypeName || typeId,
+                        typeId: nestedTypeKey ? 'dataType' : typeId,
                         isArray: isArray,
                         required: false,
-                        defaultValue: refTypeName ? undefined : (
-                            actualValue !== null && actualValue !== undefined && !isArray
+                        defaultValue: nestedTypeKey ? nestedTypeKey : (
+                            actualValue !== null && actualValue !== undefined && !isArray && typeId !== 'dataType'
                                 ? String(actualValue)
                                 : undefined
                         )
