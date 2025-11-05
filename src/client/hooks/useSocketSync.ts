@@ -117,6 +117,7 @@ import {
 import {deepCopy, getTextChanges} from "../../utils/objectUtils";
 import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
+import {updateNodeOption} from "../schema/SchemaDisplay";
 
 export type OpenHtmlEditorFct = (nodeId:string,htmlRender:htmlRenderContext, onClose?: () => void) => void;
 export const useSocketSync = () => {
@@ -875,7 +876,7 @@ export const useSocketSync = () => {
         if(instructionOutput.status) {
             Project.state.refreshCurrentEntryDataType?.();
             let redrawGraph = false;
-            let updateNode:string[] = [];
+            let updateNode:{id:string, noRedraw?:boolean}[] = [];
             const nodeAlreadyCheck:string[] = [];
             const edgeAlreadyCheck:string[] = [];
             for(const instruction of instructions) {
@@ -955,14 +956,20 @@ export const useSocketSync = () => {
 
                     }
 
-                    if(!instruction.dontTriggerUpdateNode && !updateNode.includes(instruction.nodeId)) {
-                        updateNode.push(instruction.nodeId);
+                    if(!instruction.dontTriggerUpdateNode && !updateNode.some((n) => n.id === instruction.nodeId)) {
+                        updateNode.push({
+                            id: instruction.nodeId,
+                            noRedraw: instruction.noRedraw,
+                        });
                     }
 
                 }
             }
-            for(const nodeId of updateNode) {
-                (window as any).triggerNodeUpdate?.(nodeId);
+            for(const node of updateNode) {
+                const options = {
+                    dontUpdateRender: node.noRedraw
+                } as updateNodeOption;
+                (window as any).triggerNodeUpdate?.(node.id, options);
             }
             if(redrawGraph) {
                 gpuMotor.current!.requestRedraw();

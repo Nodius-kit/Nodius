@@ -309,7 +309,7 @@ export const LeftPanelEntryTypeSelect = memo((
             }];
             const output = await Project.state.updateGraph!(instructions);
 
-            (window as any).triggerNodeUpdate?.(nodeType._key);
+            requestAnimationFrame(() => (window as any).triggerNodeUpdate?.(nodeType!._key));
 
         } else {
             const uniqueId = await Project.state.generateUniqueId!(2);
@@ -607,7 +607,7 @@ export const LeftPanelEntryTypeSelect = memo((
 
                             {/* Data Type Selector */}
                             <div className={`${selectInputDataButton} ${showSelect ? "active" : "inactive"}`} onClick={!showSelect ? () => setShowSelect(!showSelect) : undefined}>
-                                <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between", alignItems:"center"}}>
+                                <div style={{display:"flex", flexDirection:"row", justifyContent:"space-between", alignItems:"center", padding:"5px"}}>
                                     <div style={{display:"flex", alignItems:"center", gap:"8px"}}>
                                         <Search height={18} width={18}/>
                                         <p style={{margin:"0", fontWeight:"500"}}>

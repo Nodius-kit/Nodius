@@ -11,6 +11,7 @@ import { disableTextSelection, enableTextSelection } from "../../../utils/object
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import { GraphInstructions } from "../../../utils/sync/wsObject";
 import { ProjectContextProps } from "../../hooks/contexts/ProjectContext";
+import {updateNodeOption} from "../SchemaDisplay";
 
 export interface NodeResizeConfig {
     sizeAnimationDelay?: number;
@@ -103,12 +104,14 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         nodeId: node._key,
                         animateSize: true,
                         dontApplyToMySelf: true,
+                        noRedraw: true
                     },
                     {
                         i: instructionsHeight.instruction,
                         nodeId: node._key,
                         animateSize: true,
                         dontApplyToMySelf: true,
+                        noRedraw: true,
                     }
                 );
 
@@ -156,7 +159,10 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     lastY = newY;
 
                     gpuMotor.requestRedraw();
-                    (window as any).triggerNodeUpdate(currentNode._key);
+                    const options = {
+                        dontUpdateRender: true
+                    } as updateNodeOption;
+                    (window as any).triggerNodeUpdate(currentNode._key, options);
 
                     // Only schedule save if there's no save in progress
                     if (!saveInProgress && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {

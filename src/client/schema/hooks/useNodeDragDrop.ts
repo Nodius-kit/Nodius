@@ -46,6 +46,19 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
         element: HTMLElement
     ) => {
         return async (evt: MouseEvent) => {
+
+            const elements = document.elementsFromPoint(evt.clientX, evt.clientY);
+            if(elements.length > 0 && (
+                elements[0].tagName.toLowerCase() === "input" ||
+                elements[0].tagName.toLowerCase() === "button" ||
+                elements[0].tagName.toLowerCase() === "checkbox" ||
+                elements[0].tagName.toLowerCase() === "select" ||
+                elements[0].tagName.toLowerCase() === "option" ||
+                elements[0].tagName.toLowerCase() === "textarea"
+            )) {
+                return;
+            }
+
             const currentNode = getNode(nodeKey);
             if (!currentNode) return;
 
@@ -129,6 +142,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             animatePos: true,
                             dontApplyToMySelf: true,
                             dontTriggerUpdateNode: true,
+                            noRedraw: true,
                         },
                         {
                             i: instructionsY.instruction,
@@ -136,6 +150,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             animatePos: true,
                             dontApplyToMySelf: true,
                             dontTriggerUpdateNode: true,
+                            noRedraw: true,
                         }
                     );
                 }
@@ -168,6 +183,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                 if (animationFrame) cancelAnimationFrame(animationFrame);
                 animationFrame = requestAnimationFrame(() => {
+
                     const newX = evt.clientX;
                     const newY = evt.clientY;
                     const deltaX = newX - lastX;

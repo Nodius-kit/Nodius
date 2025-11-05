@@ -58,7 +58,7 @@ interface SchemaNodeInfo {
 }
 
 export interface updateNodeOption {
-    dontUpdateRender:boolean
+    dontUpdateRender?:boolean
 }
 
 export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
@@ -398,7 +398,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
 
         // Handle node updates
-        const handleNodeUpdate = async () => {
+        const handleNodeUpdate = async (evt:CustomEvent) => {
             const updatedNode = getNode(node._key) as (Node<any> & {
                 toPosX?: number;
                 toPosY?: number;
@@ -407,6 +407,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     toHeight?: number;
                 }
             }) | undefined;
+
+            const detail = evt.detail as updateNodeOption | undefined;
+
             if (!updatedNode) {
                 return;
             }
@@ -421,7 +424,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
 
             // Update HTML renderer
-            await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
+            if(!detail?.dontUpdateRender) {
+                await nodeRenderer.updateRendererDependencies(node._key, updatedNode.type);
+            }
 
             overlayManager.current?.requestUpdate(node._key)
 
@@ -451,7 +456,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         };
 
-        nodeHTML.addEventListener("nodeUpdateSystem", handleNodeUpdate);
+        nodeHTML.addEventListener("nodeUpdateSystem" as any, handleNodeUpdate);
 
         // Initialize HTML renderer
         let htmlRenderer: htmlRenderContext | undefined;

@@ -117,7 +117,25 @@ export class InputHandler {
 			if (!this.interactiveEnabled) return;
 			e.preventDefault();
 
+			const elements = document.elementsFromPoint(e.clientX, e.clientY);
+			let hasScrollable = false;
+			for (const el of elements) {
+				if (el.tagName.toLowerCase() === 'canvas') break; // stop when we reach the canvas
+				const style = getComputedStyle(el);
+				const overflowY = style.overflowY;
+				const overflowX = style.overflowX;
 
+				const canScrollY = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+				const canScrollX = (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
+
+				if (canScrollY || canScrollX) {
+					hasScrollable = true;
+					break;
+				}
+			}
+			if(hasScrollable) {
+				return;
+			}
 
 			const rect = this.canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
