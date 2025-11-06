@@ -26,6 +26,7 @@ import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {Input} from "../form/Input";
 import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
 import {CategoryManager, CategoryData} from "./CategoryManager";
+import {api_graph_create} from "../../../utils/requests/type/api_workflow.type";
 
 interface DashboardHtmlWorkflowProps {
     htmlClasses: HtmlClassWithGraph[];
@@ -294,10 +295,12 @@ export const DashboardHtmlWorkflow = memo(({
                         name: name,
                         permission: 0,
                         object: {
+                            domEvents: [],
                             type: "block",
                             name: "Container",
                             delimiter: true,
                             tag: "div",
+
                             css: [
                                 {
                                     selector: "&",
@@ -310,7 +313,7 @@ export const DashboardHtmlWorkflow = memo(({
                             identifier: "root"
                         }
                     },
-                })
+                } as api_graph_create)
             });
 
             if (response.status === 200) {

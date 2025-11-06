@@ -1314,6 +1314,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         });
     }, [Project.state.currentEntryDataType]);
 
+
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
             <canvas

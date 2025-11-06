@@ -320,23 +320,25 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
                 )}
                 <div className="event-type-container">
                     <span className="event-type-label">on</span>
-                    <EditableDiv
-                        value={event.name}
-                        completion={COMMON_DOM_EVENTS}
-                        onChange={updateEventName}
-                        placeholder="event name"
-                        style={{
-                            flex: 1,
-                            padding: "6px 12px",
-                            border: "1px solid var(--nodius-background-paper)",
-                            borderRadius: "6px",
-                            backgroundColor: "var(--nodius-background-default)",
-                            color: "var(--nodius-primary-main)",
-                            fontFamily: "'Fira Code', monospace",
-                            fontSize: "13px",
-                            fontWeight: "600"
-                        }}
-                    />
+                    <div style={{flex:"1"}}>
+                        <EditableDiv
+                            value={event.name}
+                            completion={COMMON_DOM_EVENTS}
+                            onChange={updateEventName}
+                            placeholder="event name"
+                            style={{
+                                width:"100%",
+                                padding: "6px 12px",
+                                border: "1px solid var(--nodius-background-paper)",
+                                borderRadius: "6px",
+                                backgroundColor: "var(--nodius-background-default)",
+                                color: "var(--nodius-primary-main)",
+                                fontFamily: "'Fira Code', monospace",
+                                fontSize: "13px",
+                                fontWeight: "600"
+                            }}
+                        />
+                    </div>
                 </div>
                 <Trash2 height={18} width={18} color={"var(--nodius-red-500)"} onClick={deleteEvent} className="delete-btn"/>
             </div>

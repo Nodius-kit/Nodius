@@ -28,7 +28,7 @@ interface EditableDivProps {
     style?: CSSProperties;
     completion?: string[];
     minimalLengthBeforeCompletion?: number;
-    resizable?: boolean;
+    //resizable?: boolean;
     placeholder?: string;
 }
 
@@ -39,7 +39,6 @@ export const EditableDiv = memo(({
                                      style,
                                      completion,
                                      minimalLengthBeforeCompletion = 2,
-                                     resizable = false,
                                      placeholder = '',
                                  }: EditableDivProps) => {
     const divRef = useRef<HTMLDivElement>(null);
@@ -51,7 +50,6 @@ export const EditableDiv = memo(({
 
     const resizeStartY = useRef<number>(0);
     const resizeStartHeight = useRef<number>(0);
-    const [isResizing, setIsResizing] = useState(false);
 
     // Update internal div content when `value` changes from parent
     useEffect(() => {
@@ -111,30 +109,6 @@ export const EditableDiv = memo(({
         }
     }, [value, focused, completion, minimalLengthBeforeCompletion]);
 
-    // Handle resizing events
-    useEffect(() => {
-        if (isResizing) {
-            const handleMouseMove = (e: MouseEvent) => {
-                const delta = e.clientY - resizeStartY.current;
-                const newHeight = Math.max(50, resizeStartHeight.current + delta);
-                if (containerRef.current) {
-                    containerRef.current.style.height = `${newHeight}px`;
-                }
-            };
-
-            const handleMouseUp = () => {
-                setIsResizing(false);
-            };
-
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isResizing]);
 
     // Handle user input
     const handleInput = async () => {
@@ -183,34 +157,18 @@ export const EditableDiv = memo(({
         divRef.current?.focus();
     };
 
-    const handleResizeStart = (e: React.MouseEvent<SVGSVGElement>) => {
-        e.stopPropagation();
-        if (containerRef.current) {
-            resizeStartY.current = e.clientY;
-            resizeStartHeight.current = containerRef.current.clientHeight;
-            setIsResizing(true);
-        }
-    };
 
     const containerStyle: CSSProperties = {
         position: 'relative',
         display: 'inline-block',
         cursor: 'text',
-        minHeight: "47px",
         ...style,
 
     };
 
-    if (resizable) {
-        containerStyle.overflow = 'auto';
-        if (style?.height === '100%') {
-            containerStyle.height = '100px'; // Fixed initial height if parent prop was 100%
-        }
-    }
-
     const innerStyle: CSSProperties = {
         outline: 'none',
-        display: resizable ? 'block' : 'inline',
+        display:'inline',
         height: '100%',
         minWidth: '12px',
     };
@@ -268,19 +226,7 @@ export const EditableDiv = memo(({
                     {currentCompletion}
                 </span>
             )}
-            {resizable && (
-                <GripVertical
-                    size={12}
-                    style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        right: 0,
-                        cursor: 'ns-resize',
-                        color: 'gray',
-                    }}
-                    onMouseDown={handleResizeStart}
-                />
-            )}
+
         </div>
     );
 });
