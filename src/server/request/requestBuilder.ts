@@ -113,6 +113,23 @@ export class RequestBuilder {
                 _keys: "0",
                 category: "Most Used Components",
                 workspace: "root",
+                icon: "CodeXml",
+                htmlKeyLinked: "0",
+                object: {
+                    type: "html",
+                    domEvents: [],
+                    name: "Html",
+                    identifier: "0",
+                    css: [],
+                    tag: "div",
+                    content: "",
+                }
+            });
+
+            components.push({
+                _keys: "0",
+                category: "Most Used Components",
+                workspace: "root",
                 icon: "Rows3",
                 htmlKeyLinked: "0",
                 object: {

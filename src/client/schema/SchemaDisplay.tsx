@@ -209,12 +209,37 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         };
     }, [motorRef]);
 
+    // Update node function - stable callback
+    const updateNode = useCallback(async (node: Node<any>) => {
+        const currentNode = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId!]?.nodeMap.get(node._key);
+        if (!currentNode) {
+            return {
+                status: false,
+                timeTaken: 0,
+                reason: "Node with key " + node._key + " doesn't exist"
+            };
+        }
+        const instructions = generateInstructionsToMatch(currentNode, node);
+        if (instructions.length > 0) {
+            return await projectRef.current.state.updateGraph!(instructions.map((i) => ({
+                nodeId: currentNode._key,
+                i: i
+            })));
+        } else {
+            return {
+                status: true,
+                timeTaken: 0
+            };
+        }
+    }, []); // Empty deps - always use fresh ref
+
     // Node renderer hook
     const nodeRenderer = useNodeRenderer({
         dependencies: {
             currentEntryDataType: Project.state.currentEntryDataType,
             enumTypes: Project.state.enumTypes,
             dataTypes: Project.state.dataTypes,
+            updateNode: updateNode,
         },
     });
 
@@ -731,28 +756,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 },
                 selectedNode: projectRef.current.state.selectedNode,
                 dataTypes: projectRef.current.state.dataTypes!,
-                updateNode: async (node:Node<any>) => {
-                    const currentNode = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(node._key);
-                    if(!currentNode) {
-                        return  {
-                            status: false,
-                            timeTaken: 0,
-                            reason: "Node with key "+node._key+" don't exist"
-                        }
-                    }
-                    const instructions = generateInstructionsToMatch(currentNode, node);
-                    if(instructions.length > 0) {
-                        return await projectRef.current.state.updateGraph!(instructions.map((i) => ({
-                            nodeId: currentNode._key,
-                            i: i
-                        })))
-                    } else {
-                        return {
-                            status: true,
-                            timeTaken: 0
-                        }
-                    }
-                },
+                updateNode: updateNode,
                 graphMemoryWorkflow: graphMemoryWorkflow.current
             }),
             // Stable context - values that don't change
