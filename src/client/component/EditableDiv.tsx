@@ -55,9 +55,6 @@ export const EditableDiv = memo(({
     const [focused, setFocused] = useState<boolean>(false);
     const [currentCompletion, setCurrentCompletion] = useState<string>('');
 
-    const resizeStartY = useRef<number>(0);
-    const resizeStartHeight = useRef<number>(0);
-
     // Update internal div content when `value` changes from parent
     useEffect(() => {
         const div = divRef.current;
@@ -78,6 +75,10 @@ export const EditableDiv = memo(({
             }
         }
     }, [value, focused]);
+
+    useEffect(() => {
+        console.log(value);
+    }, [value]);
 
     function extractLeadingNumber(input: string): number | null {
         const match = input.match(/^(\d+(\.\d+)?)/);
