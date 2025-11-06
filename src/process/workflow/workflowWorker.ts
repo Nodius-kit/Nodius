@@ -172,29 +172,41 @@ export async function handleDomEvent(nodeKey: string, pointId: string, eventType
 
     sendLog(`DOM event received: ${eventType} on node ${nodeKey}, point ${pointId}`, nodeKey, eventData);
 
-
-    // exemple: récupéré les nodes connecté au pointId a éxécuté
+    // Get all edges connected to the source node at the specified point
     const edges = edgeMap.get("source-"+nodeKey)?.filter((e) => e.sourceHandle === pointId);
-    if(edges && edges.length > 0) {
-        const nodes = edges.map(edge => nodeMap.get(edge.target)).filter((n) => n !== undefined);
-    }
-    // end
 
-
-    const node = nodeMap.get(nodeKey);
-    if (!node) {
-        sendLog(`Node ${nodeKey} not found for DOM event`, undefined, undefined);
+    if (!edges || edges.length === 0) {
+        sendLog(`No nodes connected to node ${nodeKey} at point ${pointId}`, undefined, undefined);
         return;
     }
 
-    const incoming: incomingWorkflowNode = {
-        pointId: pointId,
-        data: eventData,
-    };
+    // Get all connected nodes
+    const connectedNodes = edges.map(edge => nodeMap.get(edge.target)).filter((n) => n !== undefined) as Node<any>[];
 
-    const task = createTask(node, incoming);
-    startTask(task);
-    await task.promise;
+    if (connectedNodes.length === 0) {
+        sendLog(`No valid nodes found connected to point ${pointId}`, undefined, undefined);
+        return;
+    }
+
+    sendLog(`Executing ${connectedNodes.length} node(s) connected to point ${pointId}`, nodeKey, undefined);
+
+    // Execute all connected nodes with the event data
+    const tasks: Promise<any>[] = [];
+    for (const connectedNode of connectedNodes) {
+        const edge = edges.find(e => e.target === connectedNode._key);
+        const incoming: incomingWorkflowNode = {
+            pointId: edge!.targetHandle,
+            data: deepCopy(eventData),
+            node: nodeMap.get(nodeKey),
+        };
+
+        const task = createTask(connectedNode, incoming);
+        startTask(task);
+        tasks.push(task.promise);
+    }
+
+    // Wait for all tasks to complete
+    await Promise.all(tasks);
 }
 
 /**
