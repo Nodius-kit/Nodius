@@ -186,7 +186,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             damping: 2 * Math.sqrt(100)
         });
         overlayManager.current = new OverlayManager(motor);
-        workflowManager.current = new WorkflowManager();
+        // true = real worker (separate thread), false = main thread (debug mode)
+        workflowManager.current = new WorkflowManager(false);
 
         motor
             .init(containerRef.current, canvasRef.current, {

@@ -72,11 +72,17 @@ export class WorkflowManager {
 
     private worker: Worker | null;
     private isExecuting: boolean = false;
+    private useWorker: boolean = true; // true = real worker, false = main thread
 
     private currentCallbacks: WorkflowCallbacks | null = null;
-    
-    constructor() {
-        this.worker = this.createWorker();
+
+    constructor(useWorker: boolean = true) {
+        this.useWorker = useWorker;
+        if (this.useWorker) {
+            this.worker = this.createWorker();
+        } else {
+            this.worker = null;
+        }
     }
 
     /**
@@ -132,16 +138,11 @@ export class WorkflowManager {
     ) {
         console.log('[WorkflowManager] Starting workflow execution', {
             nodeCount: nodes.length,
-            edgeCount: edges.length
+            edgeCount: edges.length,
+            mode: this.useWorker ? 'worker' : 'main-thread'
         });
 
         this.currentCallbacks = callbacks;
-
-
-        if(!this.worker) {
-            console.log('[WorkflowManager] Creating a new worker');
-            this.worker = this.createWorker();
-        }
 
         // Cancel any existing execution
         if (this.isExecuting) {
@@ -149,25 +150,71 @@ export class WorkflowManager {
             await this.cancelExecution();
         }
 
+        this.isExecuting = true;
 
-        try {
-            this.isExecuting = true;
+        if (this.useWorker) {
+            // Mode Worker: utilise un Web Worker
+            if(!this.worker) {
+                console.log('[WorkflowManager] Creating a new worker');
+                this.worker = this.createWorker();
+            }
 
-            // Send execution message
-            const message: WorkerMessageExecute = {
-                type: 'execute',
-                nodes: nodes,
-                edges: edges,
-                entryNodeId: entryNodeId,
-                entryData: entryData,
-                nodeTypeConfig: nodeTypeConfig
-            };
+            try {
+                const message: WorkerMessageExecute = {
+                    type: 'execute',
+                    nodes: nodes,
+                    edges: edges,
+                    entryNodeId: entryNodeId,
+                    entryData: entryData,
+                    nodeTypeConfig: nodeTypeConfig
+                };
 
-            this.worker.postMessage(message);
-            console.log('[WorkflowManager] Execution message sent to worker');
-        } catch (error) {
-            console.error('[WorkflowManager] Failed to start worker:', error);
-            this.handleWorkerError(error instanceof Error ? error.message : String(error));
+                this.worker.postMessage(message);
+                console.log('[WorkflowManager] Execution message sent to worker');
+            } catch (error) {
+                console.error('[WorkflowManager] Failed to start worker:', error);
+                this.handleWorkerError(error instanceof Error ? error.message : String(error));
+            }
+        } else {
+            // Mode Main Thread: appel direct
+            console.log('[WorkflowManager] Executing in main thread');
+
+            try {
+                // Import dynamique du module worker
+                const workerModule = await import('./workflowWorker');
+
+                // Créer un faux self qui redirige les messages
+                const fakeSelf = {
+                    postMessage: (msg: WorkerMessage) => {
+                        this.handleWorkerMessage(msg);
+                    }
+                };
+
+                // Remplacer temporairement self
+                const originalSelf = (globalThis as any).self;
+                (globalThis as any).self = fakeSelf;
+
+                try {
+                    // Simuler l'envoi du message au worker
+                    const message: WorkerMessageExecute = {
+                        type: 'execute',
+                        nodes: nodes,
+                        edges: edges,
+                        entryNodeId: entryNodeId,
+                        entryData: entryData,
+                        nodeTypeConfig: nodeTypeConfig
+                    };
+
+                    // Appeler directement la fonction du worker
+                    await (workerModule as any).handleMessage?.(message);
+                } finally {
+                    // Restaurer self
+                    (globalThis as any).self = originalSelf;
+                }
+            } catch (error) {
+                console.error('[WorkflowManager] Failed to execute in main thread:', error);
+                this.handleWorkerError(error instanceof Error ? error.message : String(error));
+            }
         }
     }
 
