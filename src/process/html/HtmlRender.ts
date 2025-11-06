@@ -54,6 +54,7 @@ export interface HtmlRenderOption {
     language?: string,
     noFirstRender?: boolean,
     workflowMode?: boolean,
+    onDomEvent?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void,
 }
 
 
@@ -81,6 +82,11 @@ export class HtmlRender {
     private readonly buildingInteractEventMap: Map<"hover"|"select", ((objectStorage?:ObjectStorage) => void)[]> = new Map();
     /* ------------- */
 
+    /* DOM event forwarding */
+    private onDomEventCallback?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void;
+    private nodeKey?: string;
+    /* ------------- */
+
 
     constructor(container: HTMLElement, option?: HtmlRenderOption) {
         if (!container) {
@@ -102,6 +108,7 @@ export class HtmlRender {
 
         this.buildingMode = option?.buildingMode ?? false;
         this.language = option?.language ?? "en";
+        this.onDomEventCallback = option?.onDomEvent;
         this.globalStorage = new Proxy({}, {
             set: (target:any, prop: string, val) => {
                 target[prop] = val;
@@ -203,6 +210,14 @@ export class HtmlRender {
         if (this.previousObject !== undefined) {
             this.render(this.previousObject);
         }
+    }
+
+    public setNodeKey(nodeKey: string): void {
+        this.nodeKey = nodeKey;
+    }
+
+    public setOnDomEventCallback(callback: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void): void {
+        this.onDomEventCallback = callback;
     }
 
     public async render(object: HtmlObject, extraVariable?: Record<string, any>) {
@@ -714,7 +729,22 @@ export class HtmlRender {
     private callDOMEvent(event: any, objectStorage: ObjectStorage, call: string): void {
         if(call.startsWith("[!]CALL-HANDLE-")) {
             const pointId = call.substring("[!]CALL-HANDLE-".length);
-            // it mean it need to be processed as graph workflow from the pointid on the current node
+            // Forward event to workflow worker
+            if (this.onDomEventCallback && this.nodeKey) {
+                // Extract serializable event data
+                const eventData = {
+                    type: event.type,
+                    target: {
+                        id: event.target?.id,
+                        tagName: event.target?.tagName,
+                        className: event.target?.className,
+                        value: event.target?.value,
+                    },
+                    detail: event.detail,
+                    timestamp: Date.now(),
+                };
+                this.onDomEventCallback(this.nodeKey, pointId, event.type, eventData);
+            }
         } else {
             this.callFunction(call, {
                 event: event,

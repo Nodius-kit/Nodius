@@ -49,6 +49,14 @@ export interface WorkflowMessageComplete {
     data: any
 }
 
+export interface WorkflowMessageDomEvent {
+    type: "domEvent";
+    nodeKey: string;
+    pointId: string;
+    eventType: string;
+    eventData: any;
+}
+
 export type WorkerMessage =
     WorkerMessageClean |
     WorkflowMessageLog |
@@ -56,7 +64,8 @@ export type WorkerMessage =
     WorkflowMessageComplete |
     WorkflowMessageOutputData |
     WorkflowMessageApplyHtmlInstruction |
-    WorkflowMessageInitHtml
+    WorkflowMessageInitHtml |
+    WorkflowMessageDomEvent
 
 
 export interface WorkflowCallbacks {
@@ -66,6 +75,7 @@ export interface WorkflowCallbacks {
     onError?: (error: string, timestamp: number) => void;
     onInitHtml?: (html: HtmlObject, id?:string, containerSelector?:string) => void;
     onUpdateHtml?: (instructions:Instruction[], id?:string) => void;
+    onDomEvent?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void;
 }
 
 export class WorkflowManager {
@@ -122,6 +132,45 @@ export class WorkflowManager {
                 }
                 await new Promise(resolve => setTimeout(resolve, checkIntervalMs)); // wait before checking again
             }
+        }
+    }
+
+    public sendDomEvent(nodeKey: string, pointId: string, eventType: string, eventData: any) {
+        if (!this.isExecuting) {
+            console.warn('[WorkflowManager] Cannot send DOM event: workflow not executing');
+            return;
+        }
+
+        const message: WorkflowMessageDomEvent = {
+            type: 'domEvent',
+            nodeKey: nodeKey,
+            pointId: pointId,
+            eventType: eventType,
+            eventData: eventData
+        };
+
+        console.log('[WorkflowManager] Sending DOM event:', eventType, 'for node:', nodeKey, 'point:', pointId);
+
+        if (this.useWorker) {
+            if (this.worker) {
+                this.worker.postMessage(message);
+            }
+        } else {
+            // Main thread mode: call handleMessage directly
+            import('./workflowWorker').then(workerModule => {
+                const fakeSelf = {
+                    postMessage: (msg: WorkerMessage) => {
+                        this.handleWorkerMessage(msg);
+                    }
+                };
+                const originalSelf = (globalThis as any).self;
+                (globalThis as any).self = fakeSelf;
+                try {
+                    (workerModule as any).handleMessage?.(message);
+                } finally {
+                    (globalThis as any).self = originalSelf;
+                }
+            });
         }
     }
 
@@ -232,8 +281,7 @@ export class WorkflowManager {
      */
     private handleWorkerMessage(message: WorkerMessage) {
         if(message.type === "log") {
-            console.log('[WorkflowManager] Log:', message.message);
-            this.currentCallbacks?.onData?.(message.nodeKey, message.data, message.timestamp);
+            this.currentCallbacks?.onLog?.(message.message, message.timestamp);
         } else if(message.type === "complete") {
             this.isExecuting = false;
             console.log('[WorkflowManager] Execution completed in', message.totalTimeMs, 'ms');

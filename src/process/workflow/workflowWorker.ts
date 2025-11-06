@@ -64,6 +64,8 @@ const executeTask = async (task: Task): Promise<any> => {
         throw new Error(`Node config id ${node.type} is not provided`);
     }
 
+    sendLog("working on node id "+node._key, node._key, undefined);
+
     const env = {
         node: node,
         nodeMap: nodeMap,
@@ -192,6 +194,33 @@ export async function handleMessage(message: WorkerMessage) {
             parsedMessage.initialGlobalData
         );
 
+    } else if (message.type === 'domEvent') {
+        if (!isExecuting) {
+            sendLog('Received DOM event but workflow is not executing', undefined, undefined);
+            return;
+        }
+
+        // Handle DOM event by continuing workflow from the specified node and point
+        const eventMessage = message as any; // WorkflowMessageDomEvent
+        sendLog(`DOM event received: ${eventMessage.eventType} on node ${eventMessage.nodeKey}, point ${eventMessage.pointId}`, eventMessage.nodeKey, eventMessage.eventData);
+
+        // Find the node
+        const node = nodeMap.get(eventMessage.nodeKey);
+        if (!node) {
+            sendLog(`Node ${eventMessage.nodeKey} not found for DOM event`, undefined, undefined);
+            return;
+        }
+
+        // Create incoming data with event information
+        const incoming: incomingWorkflowNode = {
+            pointId: eventMessage.pointId,
+            data: eventMessage.eventData,
+        };
+
+        // Execute from this node
+        const task = createTask(node, incoming);
+        startTask(task);
+        await task.promise;
     }
 }
 
@@ -236,7 +265,7 @@ function WF_yieldData(data: any, nodeKey: string) {
 /**
  * Send log message to main thread
  */
-function sendLog(message: string, nodeKey: string | undefined, data: any) {
+function sendLog(message: string, nodeKey: string | undefined, data: any | undefined) {
     const logMessage: WorkflowMessageLog = {
         type: 'log',
         message: message,

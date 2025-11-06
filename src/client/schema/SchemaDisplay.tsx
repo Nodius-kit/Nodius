@@ -336,6 +336,9 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 onError: (error: string, timestamp: number) => {
                     console.error(`[SchemaDisplay] Workflow error:`, error);
                 },
+                onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+                    console.log(`[SchemaDisplay] DOM event: ${eventType} from node ${nodeKey}, point ${pointId}`, eventData);
+                },
                 onInitHtml: async (html: HtmlObject, id?: string, containerSelector?: string) => {
                     console.log('[SchemaDisplay] Init HTML render', { id, containerSelector });
 
@@ -368,10 +371,21 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                             `workflow-${renderId}`,
                             container,
                             html,
-                            { noFirstRender: true, workflowMode: true }
+                            {
+                                noFirstRender: true,
+                                workflowMode: true,
+                                onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+                                    // Forward DOM event to workflow manager
+                                    if (workflowManager.current) {
+                                        workflowManager.current.sendDomEvent(nodeKey, pointId, eventType, eventData);
+                                    }
+                                }
+                            }
                         );
 
                         if (renderer) {
+                            // Set the node key for event tracking
+                            renderer.htmlMotor.setNodeKey(rootNode._key);
                             await renderer.htmlMotor.render(html);
                         }
                     }
