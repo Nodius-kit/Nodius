@@ -65,7 +65,9 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
                 const graph = projectRef.current.state.graph;
                 const sheetId = projectRef.current.state.selectedSheetId;
                 if (!graph || !sheetId) return undefined;
-                return deepCopy(graph.sheets[sheetId]?.nodeMap.get(nodeKey));
+                const node = deepCopy(graph.sheets[sheetId]?.nodeMap.get(nodeKey));
+                console.log(node);
+                return node;
             };
             htmlRenderer.htmlMotor.setVariableInGlobalStorage("node", getNode());
             htmlRenderer.htmlMotor.setVariableInGlobalStorage("getNode", getNode);

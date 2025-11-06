@@ -212,6 +212,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
     // Update node function - stable callback
     const updateNode = useCallback(async (node: Node<any>) => {
         const currentNode = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId!]?.nodeMap.get(node._key);
+        console.log(deepCopy(currentNode), deepCopy(node));
         if (!currentNode) {
             return {
                 status: false,
@@ -223,7 +224,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         if (instructions.length > 0) {
             return await projectRef.current.state.updateGraph!(instructions.map((i) => ({
                 nodeId: currentNode._key,
-                i: i
+                i: i,
             })));
         } else {
             return {
