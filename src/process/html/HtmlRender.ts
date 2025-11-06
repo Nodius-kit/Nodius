@@ -712,11 +712,16 @@ export class HtmlRender {
     }
 
     private callDOMEvent(event: any, objectStorage: ObjectStorage, call: string): void {
-        this.callFunction(call, {
-            event: event,
-            element: objectStorage.element,
-            ...this.getAsyncFunctionContext(objectStorage)
-        })
+        if(call.startsWith("[!]CALL-HANDLE-")) {
+            const pointId = call.substring("[!]CALL-HANDLE-".length);
+            // it mean it need to be processed as graph workflow from the pointid on the current node
+        } else {
+            this.callFunction(call, {
+                event: event,
+                element: objectStorage.element,
+                ...this.getAsyncFunctionContext(objectStorage)
+            })
+        }
     }
 
     /* DOM related event */
