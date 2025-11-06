@@ -64,6 +64,7 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
      */
     const unregisterRenderer = useCallback((nodeKey: string) => {
         const info = nodeRenderers.current.get(nodeKey);
+
         if (info?.htmlRenderer) {
             info.htmlRenderer.htmlMotor.dispose();
         }

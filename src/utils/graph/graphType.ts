@@ -269,7 +269,8 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
             call: `
             
                 const render_id = "main";
-                const htmlRenderer = getHtmlRenderer(node)[render_id];
+                const htmlRenderer = getHtmlRenderer(node)?.[render_id];
+                if(!htmlRenderer) return; 
                 
                 gpuMotor.smoothFitToNode(node._key, {
                     padding: 500
@@ -291,7 +292,6 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         {
             name: "nodeEnter",
             call: `
-
                 // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
                 const render_id = "main"; // unique render id in the node
                 if(getHtmlRenderer(node)?.[render_id]) return; // avoid dupling

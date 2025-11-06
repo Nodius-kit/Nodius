@@ -107,9 +107,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     })
 
-    // Track graph structure changes (excluding position/size changes)
-    const lastGraphStructure = useRef<string>("");
-
     // Dynamic class for selected node effect
     const selectedNodeClass = useDynamicClass(`
         & {
@@ -204,6 +201,8 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             animationManager.current?.stopAllAnimations();
             overlayManager.current?.dispose();
             workflowManager.current?.dispose();
+
+
             if (motorRef && typeof motorRef !== "function") {
                 motorRef.current = null;
             }
@@ -244,18 +243,60 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         }
     }, []); // No deps - pure DOM manipulation
 
-    // Workflow execution function
-    const executeWorkflow = useCallback(() => {
+    // Clean root node HTML (remove workflow renderers, keep base renderer)
+    const cleanRootNodeHtml = useCallback(() => {
+        const rootSchemaNode = inSchemaNode.current.get('root');
+        if (!rootSchemaNode) return;
+
+
+        // Remove all workflow HTML renderers
+        /*workflowHtmlRenderers.current.forEach((renderer, id) => {
+            projectRef.current.state.removeHtmlRenderer!("root", id);
+            renderer.htmlMotor.dispose();
+        });*/
+
+        for(const [key, renderer] of Object.entries(projectRef.current.state.getHtmlRenderer!("root") ?? {})) {
+            renderer.htmlMotor.dispose();
+            projectRef.current.state.removeHtmlRenderer!("root", key);
+        }
+
+
+        // Clear root node container (will be re-rendered with base config)
+        rootSchemaNode.element.innerHTML = '';
+
+
+        // Re-render base HTML if node has content
+        /*const rootNode = getNode('root');
+        if (rootNode && projectRef.current.state.nodeTypeConfig[rootNode.type]?.content) {
+            const nodeConfig = projectRef.current.state.nodeTypeConfig[rootNode.type];
+            projectRef.current.state.initiateNewHtmlRenderer?.(
+                rootNode,
+                "",
+                rootSchemaNode.element,
+                nodeConfig.content!,
+                { noFirstRender: false }
+            ).then(renderer => {
+                if (renderer) {
+                    renderer.htmlMotor.render(nodeConfig.content!);
+                }
+            });
+        }*/
+    }, [getNode]);
+
+    // Start workflow execution
+    const startWorkflow = useCallback(() => {
         if (!workflowManager.current || !projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) {
-            console.warn('[SchemaDisplay] Cannot execute workflow: missing manager or graph');
             return;
         }
 
         const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
         if (!sheet) {
-            console.warn('[SchemaDisplay] Cannot execute workflow: sheet not found');
             return;
         }
+
+
+        // Clean root node HTML before starting
+        cleanRootNodeHtml();
 
         // Convert nodeMap and edgeMap to arrays
         const nodes = Array.from(sheet.nodeMap.values());
@@ -266,38 +307,115 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         }
 
+        // Get entry data from entryType node
         const nodeRoot = findFirstNodeWithId(projectRef.current.state.graph, "root")!;
-        let nodeTypeEntre:Node<NodeTypeEntryType> | undefined = undefined;
+        let nodeTypeEntre: Node<NodeTypeEntryType> | undefined = undefined;
         if(! (!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0)) {
             const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph, nodeRoot, "in");
             nodeTypeEntre = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
-            console.log("started with ",nodeTypeEntre?.data?.fixedValue);
         }
 
+        // Execute workflow with callbacks
+        workflowManager.current.executeWorkflow(
+            nodes,
+            edges,
+            "root",
+            nodeTypeEntre?.data?.fixedValue || {},
+            projectRef.current.state.nodeTypeConfig,
+            {
+                onComplete: (totalTimeMs: number, data: any) => {
+                    console.log(`[SchemaDisplay] Workflow completed in ${totalTimeMs}ms`, data);
+                },
+                onData: (nodeKey: string | undefined, data: any, timestamp: number) => {
+                    console.log(`[SchemaDisplay] Data from node ${nodeKey}:`, data);
+                },
+                onLog: (message: string, timestamp: number) => {
+                    console.log(`[SchemaDisplay] [${new Date(timestamp).toISOString()}] ${message}`);
+                },
+                onError: (error: string, timestamp: number) => {
+                    console.error(`[SchemaDisplay] Workflow error:`, error);
+                },
+                onInitHtml: async (html: HtmlObject, id?: string, containerSelector?: string) => {
+                    console.log('[SchemaDisplay] Init HTML render', { id, containerSelector });
 
-        workflowManager.current.executeWorkflow(nodes, edges, "root", nodeTypeEntre?.data?.fixedValue, projectRef.current.state.nodeTypeConfig, {
-            onComplete: (totalTimeMs: number, data:any) => {
+                    const renderId = id || '';
+                    const rootSchemaNode = inSchemaNode.current.get('root');
+                    if (!rootSchemaNode) return;
 
-            },
-            onData: (nodeKey: string | undefined, data: any, timestamp: number) => {
+                    // Determine container
+                    let container: HTMLElement;
+                    if (containerSelector) {
+                        const selected = rootSchemaNode.element.querySelector(containerSelector);
+                        container = selected as HTMLElement || rootSchemaNode.element;
+                    } else {
+                        container = rootSchemaNode.element;
+                    }
 
-            },
-            onLog: (message: string, timestamp: number) => {
+                    // Remove existing renderer with same ID
 
-            },
-            onError: (error: string, timestamp: number) => {
+                    const existingRenderer = projectRef.current.state.getHtmlRenderer!("root")?.[renderId];
+                    if (existingRenderer) {
+                        existingRenderer.htmlMotor.dispose();
+                        projectRef.current.state.removeHtmlRenderer!("root", renderId);
+                    }
 
-            },
-            onInitHtml: (html: HtmlObject, id?:string, containerSelector?:string) => {
+                    // Create new workflow HTML renderer
+                    const rootNode = getNode('root');
+                    if (rootNode) {
+                        const renderer = await projectRef.current.state.initiateNewHtmlRenderer?.(
+                            rootNode,
+                            `workflow-${renderId}`,
+                            container,
+                            html,
+                            { noFirstRender: true, workflowMode: true }
+                        );
 
-            },
-            onUpdateHtml: (instructions:Instruction[], id?:string) => {
+                        if (renderer) {
+                            await renderer.htmlMotor.render(html);
+                        }
+                    }
+                },
+                onUpdateHtml: async (instructions: Instruction[], id?: string) => {
+                    console.log('[SchemaDisplay] Update HTML render', { id, instructions });
 
+                    const renderId = id || '';
+                    const renderer =  projectRef.current.state.getHtmlRenderer!("root")?.[renderId];
+
+                    if (!renderer) {
+                        console.warn(`[SchemaDisplay] No workflow renderer found with id: ${renderId}`);
+                        return;
+                    }
+
+                    // Apply instructions to the renderer's HTML object
+                    for (const instruction of instructions) {
+                        //await renderer.htmlMotor.applyInstruction(instruction);
+                    }
+                }
             }
+        );
+    }, [getNode, cleanRootNodeHtml]);
 
+    // Stop workflow execution
+    const stopWorkflow = useCallback(async () => {
+        if (workflowManager.current) {
+            await workflowManager.current.cancelExecution();
+        }
+
+        // Restore base HTML render
+        cleanRootNodeHtml();
+    }, [cleanRootNodeHtml, nodeRenderer]);
+
+    // Reset workflow (restart from beginning)
+    const resetWorkflow = useCallback(() => {
+
+        // Stop current execution
+        stopWorkflow().then(() => {
+            // If workflow is ON, restart it
+            if (graphMemoryWorkflow.current.storage.workflowMode) {
+                startWorkflow();
+            }
         });
-
-    }, []); // Empty deps - uses projectRef
+    }, [stopWorkflow, startWorkflow]);
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
         getNode: getNode,
@@ -409,7 +527,7 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             const label = document.createElement('label');
             label.htmlFor = 'workflowModeSwitch';
-            label.textContent = 'Auto Workflow';
+            label.textContent = 'Execute WorkFlow';
             label.style.cssText = `
                 font-size: 12px;
                 font-weight: 600;
@@ -464,8 +582,10 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
 
             slider.appendChild(sliderBefore);
 
-            // Click event handler
-            checkbox.addEventListener('click', (e) => {
+            const resetButton = document.createElement('button');
+
+            // Click event handler - start/stop workflow
+            checkbox.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const isChecked = !graphMemoryWorkflow.current.storage.workflowMode;
                 checkbox.checked = isChecked;
@@ -473,21 +593,38 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                     slider.style.backgroundColor = 'var(--nodius-success-main)';
                     sliderBefore.style.transform = 'translateX(18px)';
                     graphMemoryWorkflow.current.storage.workflowMode = true;
+                    resetButton.style.display = "flex";
+                    await (window as any).triggerWorkflowStart?.();
                 } else {
                     slider.style.backgroundColor = 'var(--nodius-grey-600)';
                     sliderBefore.style.transform = 'translateX(0)';
                     graphMemoryWorkflow.current.storage.workflowMode = false;
+                    resetButton.style.display = "none";
+                    await (window as any).triggerWorkflowStop?.();
+                    if (nodeConfig.content) {
+                        // Use projectRef for fresh initiateNewHtmlRenderer
+                        htmlRenderer = await projectRef.current.state.initiateNewHtmlRenderer!(
+                            node,
+                            "",
+                            nodeHTML,
+                            nodeConfig.content,
+                            { noFirstRender: true }
+                        );
+                        if (htmlRenderer) {
+                            nodeRenderer.registerRenderer(node._key, htmlRenderer);
+                            await htmlRenderer.htmlMotor.render(nodeConfig.content);
+                        }
+                    }
+                    triggerEventOnNode("root", "nodeEnter");
                 }
-                (window as any).triggerNodeUpdate?.(node._key);
             });
 
-            // Manual workflow start button
-            const startButton = document.createElement('button');
-            startButton.textContent = '▶ Run';
-            startButton.style.cssText = `
+            // Reset button
+            resetButton.textContent = '↻ Reset';
+            resetButton.style.cssText = `
                 padding: 4px 12px;
-                background-color: var(--nodius-primary-main);
-                color: var(--nodius-primary-contrastText);
+                background-color: var(--nodius-warning-main);
+                color: var(--nodius-warning-contrastText);
                 border: none;
                 border-radius: 6px;
                 font-size: 12px;
@@ -495,35 +632,35 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
                 cursor: pointer;
                 transition: var(--nodius-transition-default);
                 user-select: none;
-                display: flex;
                 align-items: center;
                 gap: 4px;
             `;
+            resetButton.style.display = "none";
 
-            startButton.addEventListener('mouseenter', () => {
-                startButton.style.backgroundColor = 'var(--nodius-primary-dark)';
-                startButton.style.transform = 'scale(1.05)';
+            resetButton.addEventListener('mouseenter', () => {
+                resetButton.style.backgroundColor = 'var(--nodius-warning-dark)';
+                resetButton.style.transform = 'scale(1.05)';
             });
-            startButton.addEventListener('mouseleave', () => {
-                startButton.style.backgroundColor = 'var(--nodius-primary-main)';
-                startButton.style.transform = 'scale(1)';
+            resetButton.addEventListener('mouseleave', () => {
+                resetButton.style.backgroundColor = 'var(--nodius-warning-main)';
+                resetButton.style.transform = 'scale(1)';
             });
-            startButton.addEventListener('mousedown', () => {
-                startButton.style.transform = 'scale(0.95)';
+            resetButton.addEventListener('mousedown', () => {
+                resetButton.style.transform = 'scale(0.95)';
             });
-            startButton.addEventListener('mouseup', () => {
-                startButton.style.transform = 'scale(1.05)';
+            resetButton.addEventListener('mouseup', () => {
+                resetButton.style.transform = 'scale(1.05)';
             });
-            startButton.addEventListener('click', (e) => {
+            resetButton.addEventListener('click', (e) => {
                 e.stopPropagation();
-                (window as any).triggerWorkflowExecution?.();
+                (window as any).triggerWorkflowReset?.();
             });
 
             switchLabel.appendChild(checkbox);
             switchLabel.appendChild(slider);
             switchContainer.appendChild(label);
             switchContainer.appendChild(switchLabel);
-            switchContainer.appendChild(startButton);
+            switchContainer.appendChild(resetButton);
             overlay.appendChild(switchContainer);
         }
 
@@ -943,13 +1080,17 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
         };
 
         (window as any).triggerNodeUpdate = triggerNodeUpdate;
-        (window as any).triggerWorkflowExecution = executeWorkflow;
+        (window as any).triggerWorkflowStart = startWorkflow;
+        (window as any).triggerWorkflowStop = stopWorkflow;
+        (window as any).triggerWorkflowReset = resetWorkflow;
 
         return () => {
             delete (window as any).triggerNodeUpdate;
-            delete (window as any).triggerWorkflowExecution;
+            delete (window as any).triggerWorkflowStart;
+            delete (window as any).triggerWorkflowStop;
+            delete (window as any).triggerWorkflowReset;
         };
-    }, [triggerEventOnNode, executeWorkflow]);
+    }, [triggerEventOnNode, startWorkflow, stopWorkflow, resetWorkflow]);
 
     // Selection visual effect using dynamic classes
     useEffect(() => {
@@ -1172,62 +1313,6 @@ export const SchemaDisplay = memo(forwardRef<WebGpuMotor, SchemaDisplayProps>(({
             }
         });
     }, [Project.state.currentEntryDataType]);
-
-    // Auto workflow execution on graph changes
-    useEffect(() => {
-        // Only execute if auto workflow mode is enabled
-        if (!graphMemoryWorkflow.current.storage.workflowMode) {
-            return;
-        }
-
-        if (!Project.state.graph || !Project.state.selectedSheetId) {
-            return;
-        }
-
-        const sheet = Project.state.graph.sheets[Project.state.selectedSheetId];
-        if (!sheet) {
-            return;
-        }
-
-        // Create a structure hash that excludes position and size
-        const structureData = {
-            nodes: Array.from(sheet.nodeMap.values()).map(node => ({
-                _key: node._key,
-                type: node.type,
-                handles: node.handles,
-                data: node.data
-                // Exclude: posX, posY, size (position/size changes don't trigger workflow)
-            })),
-            edges: [] as Edge[]
-        };
-
-        sheet.edgeMap.forEach(edgeArray => {
-            structureData.edges.push(...edgeArray);
-        });
-
-        const currentStructure = JSON.stringify(structureData);
-
-        // Check if structure actually changed
-        if (lastGraphStructure.current === currentStructure) {
-            return;
-        }
-
-        lastGraphStructure.current = currentStructure;
-
-        // Debounce execution to avoid too frequent runs
-        const timeoutId = setTimeout(() => {
-            console.log('[SchemaDisplay] Auto workflow execution triggered by structure change');
-            executeWorkflow();
-        }, 500); // 500ms debounce
-
-        return () => {
-            clearTimeout(timeoutId);
-        };
-    }, [
-        Project.state.graph,
-        Project.state.selectedSheetId,
-        executeWorkflow
-    ]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', backgroundColor:'white', position:"relative"}} >
