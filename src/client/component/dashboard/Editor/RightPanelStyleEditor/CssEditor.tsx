@@ -92,6 +92,7 @@ export const CssRuleEditor = memo(({
     return (
         <div className={ruleContainerClass}>
             <EditableDiv
+                removeSpecialChar={true}
                 completion={keyCompletion}
                 value={keyStr}
                 onChange={onEditKeyRule}
@@ -100,6 +101,7 @@ export const CssRuleEditor = memo(({
             />
             <p className="separator">:</p>
             <EditableDiv
+                removeSpecialChar={true}
                 completion={valueCompletion}
                 value={valueStr}
                 onChange={onEditValueRule}
@@ -252,6 +254,7 @@ export const CssBlockEditor = memo(({
                     <ChevronRight height={20} width={20} className="chevron" onClick={() => setIsExpanded(true)} />
                 )}
                 <EditableDiv
+                    removeSpecialChar={true}
                     value={block.selector}
                     onChange={onEditSelector}
                     style={{height: "100%", flex: "1", border: "1px solid var(--nodius-background-paper)", borderRadius: "6px", padding: "4px 8px", backgroundColor: "var(--nodius-background-default)"}}

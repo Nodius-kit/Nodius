@@ -971,6 +971,9 @@ export const useSocketSync = () => {
                 } as updateNodeOption;
                 (window as any).triggerNodeUpdate?.(node.id, options);
             }
+
+
+
             if(redrawGraph) {
                 gpuMotor.current!.requestRedraw();
             }

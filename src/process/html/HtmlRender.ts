@@ -278,7 +278,7 @@ export class HtmlRender {
             applyCSSBlocks(element, object.css);
         }
 
-        if (object.domEvents) {
+        if (object.domEvents && this.workflowMode) {
             object.domEvents.forEach((event) => {
                 const caller = (evt: Event) => {
                     this.callDOMEvent(evt, storage, event.call);
@@ -287,6 +287,7 @@ export class HtmlRender {
                 const events = storage.domEvents.get(event.name) ?? [];
                 events.push(caller);
                 storage.domEvents.set(event.name, events);
+
             });
         }
         /*if (object.workflowEvents) {

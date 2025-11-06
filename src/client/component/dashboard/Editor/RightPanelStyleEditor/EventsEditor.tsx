@@ -323,6 +323,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
                     <div style={{flex:"1"}}>
                         <EditableDiv
                             value={event.name}
+                            removeSpecialChar={true}
                             completion={COMMON_DOM_EVENTS}
                             onChange={updateEventName}
                             placeholder="event name"

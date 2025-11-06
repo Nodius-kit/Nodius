@@ -80,6 +80,7 @@ export const TagEditor = memo(({ tag, onUpdate }: TagEditorProps) => {
                 HTML Tag
             </label>
             <EditableDiv
+                removeSpecialChar={true}
                 value={tag.tag}
                 completion={commonTags}
                 placeholder="Enter HTML tag..."

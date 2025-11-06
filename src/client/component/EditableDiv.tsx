@@ -8,6 +8,7 @@
  * - Selection preservation: Maintains cursor position during updates
  * - Auto-completion: Suggests completions based on input
  * - Numeric prefix handling: Extracts leading numbers for special logic
+ * - HTML cleanup on paste: Removes HTML tags while keeping text content
  *
  * Key features:
  * - Tab completion with visual preview
@@ -16,6 +17,7 @@
  * - Debounced onChange callbacks
  * - Minimal length threshold for completions
  * - Blur on Enter key
+ * - removeSpecialChar: Strips HTML tags on paste (keeps text only)
  */
 
 import React, {CSSProperties, memo, useEffect, useRef, useState} from 'react';
@@ -30,6 +32,7 @@ interface EditableDivProps {
     minimalLengthBeforeCompletion?: number;
     //resizable?: boolean;
     placeholder?: string;
+    removeSpecialChar?: boolean;
 }
 
 export const EditableDiv = memo(({
@@ -40,6 +43,7 @@ export const EditableDiv = memo(({
                                      completion,
                                      minimalLengthBeforeCompletion = 2,
                                      placeholder = '',
+                                     removeSpecialChar = false,
                                  }: EditableDivProps) => {
     const divRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -157,6 +161,53 @@ export const EditableDiv = memo(({
         divRef.current?.focus();
     };
 
+    // Handle paste event to remove HTML tags when removeSpecialChar is enabled
+    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+        if (!removeSpecialChar) return;
+
+        e.preventDefault();
+
+        // Get clipboard data
+        const clipboardData = e.clipboardData;
+        if (!clipboardData) return;
+
+        // Get HTML or plain text from clipboard
+        let pastedContent = clipboardData.getData('text/html');
+
+        if (!pastedContent) {
+            // Fallback to plain text if no HTML
+            pastedContent = clipboardData.getData('text/plain');
+        }
+
+        // Create a temporary div to parse the HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = pastedContent;
+
+        // Extract only the text content (removes all HTML tags)
+        const textOnly = tempDiv.textContent || tempDiv.innerText || '';
+
+        // Insert the plain text at cursor position
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount) return;
+
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+
+        const textNode = document.createTextNode(textOnly);
+        range.insertNode(textNode);
+
+        // Move cursor to end of inserted text
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        // Trigger onChange with updated content
+        if (onChange && divRef.current) {
+            onChange(divRef.current.innerHTML);
+        }
+    };
+
 
     const containerStyle: CSSProperties = {
         position: 'relative',
@@ -187,6 +238,7 @@ export const EditableDiv = memo(({
                 suppressContentEditableWarning
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 style={innerStyle}
                 onFocus={_onFocus}
                 onBlur={_onFocusOut}
