@@ -1,11 +1,3 @@
-//import { JSDOM } from "jsdom";
-import {
-    WorkerMessage,
-    WorkerMessageExecute,
-    WorkflowMessageApplyHtmlInstruction, WorkflowMessageComplete,
-    WorkflowMessageInitHtml,
-    WorkflowMessageLog, WorkflowMessageOutputData
-} from "./WorkflowManager";
 import {Edge, Node, NodeType, NodeTypeConfig} from "../../utils/graph/graphType";
 import {edgeArrayToMap, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {HtmlObject} from "../../utils/html/htmlType";
@@ -25,11 +17,8 @@ const AsyncFunction: AsyncFunctionConstructor = Object.getPrototypeOf(async func
 
 let isExecuting = false;
 let shouldCancel = false;
-/*
-let dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`);
-let document = dom.window.document;*/
-
 let globalData:any;
+let messageHandler: ((message: any) => void) | null = null;
 
 interface Task {
     node: Node<any>;
@@ -110,7 +99,7 @@ let edgeMap: Map<string, Edge[]>;
 let entryData: Record<string, any>;
 let nodeTypeConfig: Record<NodeType, NodeTypeConfig>;
 
-const executeWorkflow = async (
+export const executeWorkflow = async (
     nodes: Node<any>[],
     edges: Edge[],
     entryNodeId: string,
@@ -122,6 +111,8 @@ const executeWorkflow = async (
     initialGlobalData?: any
 ) => {
     const startTime = Date.now();
+
+    isExecuting = true;
 
     nodeMap = nodeArrayToMap(nodes);
     edgeMap = edgeArrayToMap(edges);
@@ -151,136 +142,112 @@ const executeWorkflow = async (
     startTask(rootTask);
     await rootTask.promise;
 
-    isExecuting = false;
     const totalTime = Date.now() - startTime;
     sendLog(`Workflow execution completed in ${totalTime}ms`, undefined, undefined);
 
-    const completeMessage: WorkflowMessageComplete = {
+    sendMessage({
         type: "complete",
         data: deepCopy(globalData),
         totalTimeMs: totalTime,
-    };
-    self.postMessage(completeMessage);
-
+    });
 };
 
 /**
- * Message handler
+ * Cancel execution
  */
-export async function handleMessage(message: WorkerMessage) {
-    if (message.type === 'clean') {
-        shouldCancel = true;
-        sendLog('Cancellation requested', undefined, undefined);
+export function cancelExecution() {
+    shouldCancel = true;
+    isExecuting = false;
+    sendLog('Cancellation requested', undefined, undefined);
+}
+
+/**
+ * Handle DOM event
+ */
+export async function handleDomEvent(nodeKey: string, pointId: string, eventType: string, eventData: any) {
+    if (!isExecuting) {
+        sendLog('Received DOM event but workflow is not executing', undefined, undefined);
         return;
-    } else if (message.type === 'execute') {
-        isExecuting = true;
-        shouldCancel = false;
+    }
 
-        const parsedMessage = message as WorkerMessageExecute & {
-            startNodeId?: string;
-            startPointId?: string;
-            startData?: any;
-            initialGlobalData?: any;
-        };
-        await executeWorkflow(
-            parsedMessage.nodes,
-            parsedMessage.edges,
-            parsedMessage.entryNodeId,
-            parsedMessage.entryData,
-            parsedMessage.nodeTypeConfig,
-            parsedMessage.startNodeId,
-            parsedMessage.startPointId,
-            parsedMessage.startData,
-            parsedMessage.initialGlobalData
-        );
+    sendLog(`DOM event received: ${eventType} on node ${nodeKey}, point ${pointId}`, nodeKey, eventData);
 
-    } else if (message.type === 'domEvent') {
-        if (!isExecuting) {
-            sendLog('Received DOM event but workflow is not executing', undefined, undefined);
-            return;
-        }
 
-        // Handle DOM event by continuing workflow from the specified node and point
-        const eventMessage = message as any; // WorkflowMessageDomEvent
-        sendLog(`DOM event received: ${eventMessage.eventType} on node ${eventMessage.nodeKey}, point ${eventMessage.pointId}`, eventMessage.nodeKey, eventMessage.eventData);
+    // exemple: récupéré les nodes connecté au pointId a éxécuté
+    const edges = edgeMap.get("source-"+nodeKey)?.filter((e) => e.sourceHandle === pointId);
+    if(edges && edges.length > 0) {
+        const nodes = edges.map(edge => nodeMap.get(edge.target)).filter((n) => n !== undefined);
+    }
+    // end
 
-        // Find the node
-        const node = nodeMap.get(eventMessage.nodeKey);
-        if (!node) {
-            sendLog(`Node ${eventMessage.nodeKey} not found for DOM event`, undefined, undefined);
-            return;
-        }
 
-        // Create incoming data with event information
-        const incoming: incomingWorkflowNode = {
-            pointId: eventMessage.pointId,
-            data: eventMessage.eventData,
-        };
+    const node = nodeMap.get(nodeKey);
+    if (!node) {
+        sendLog(`Node ${nodeKey} not found for DOM event`, undefined, undefined);
+        return;
+    }
 
-        // Execute from this node
-        const task = createTask(node, incoming);
-        startTask(task);
-        await task.promise;
+    const incoming: incomingWorkflowNode = {
+        pointId: pointId,
+        data: eventData,
+    };
+
+    const task = createTask(node, incoming);
+    startTask(task);
+    await task.promise;
+}
+
+/**
+ * Set message handler for communication
+ */
+export function setMessageHandler(handler: (message: any) => void) {
+    messageHandler = handler;
+}
+
+/**
+ * Send message to manager
+ */
+function sendMessage(message: any) {
+    if (messageHandler) {
+        messageHandler(message);
     }
 }
 
-// Worker message listener
-if (typeof self !== 'undefined' && 'onmessage' in self) {
-    self.onmessage = (event: MessageEvent<WorkerMessage>) => {
-        handleMessage(event.data);
-    };
-}
-
-
 function WF_initHtml(html: HtmlObject, id?: string, containerSelector?: string) {
-    const htmlMessage: WorkflowMessageInitHtml = {
+    sendMessage({
         containerSelector: containerSelector,
         html: html,
         id: id,
         type: "initHtml",
-    };
-    self.postMessage(htmlMessage);
+    });
 }
 
 function WF_updateHtml(instructions: Instruction[], id?: string) {
-    const htmlMessage: WorkflowMessageApplyHtmlInstruction = {
+    sendMessage({
         instructions: instructions,
         id: id,
         type: "applyHtmlInstruction"
-    };
-    self.postMessage(htmlMessage);
+    });
 }
 
 function WF_yieldData(data: any, nodeKey: string) {
-    const htmlMessage: WorkflowMessageOutputData = {
+    sendMessage({
         type: "yieldData",
         data: data,
         nodeKey: nodeKey,
         timestamp: Date.now(),
-    };
-    self.postMessage(htmlMessage);
+    });
 }
 
-
 /**
- * Send log message to main thread
+ * Send log message
  */
 function sendLog(message: string, nodeKey: string | undefined, data: any | undefined) {
-    const logMessage: WorkflowMessageLog = {
+    sendMessage({
         type: 'log',
         message: message,
         nodeKey: nodeKey,
         data: data,
         timestamp: Date.now()
-    };
-    self.postMessage(logMessage);
-}
-
-
-/**
- * Build execution graph from nodes and edges
- * Maps source handle points to their connected target nodes and handles
- */
-function buildExecutionGraph(nodes: Node<any>[], edges: Edge[]) {
-    return { nodeMap: nodeArrayToMap(nodes), edgeMap: edgeArrayToMap(edges) };
+    });
 }
