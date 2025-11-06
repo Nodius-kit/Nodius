@@ -21,7 +21,7 @@
 import { ReactElement } from "react";
 
 export function deepCopy<T>(obj: T): T {
-
+    /*
     // Check if the object is null or not an object
     if (obj === null || typeof obj !== 'object') {
         return obj;
@@ -43,8 +43,8 @@ export function deepCopy<T>(obj: T): T {
             copy[key] = deepCopy((obj as { [key: string]: any })[key]);
         }
     }
-    return copy as T;
-    //return structuredClone(obj);
+    return copy as T;*/
+    return structuredClone(obj);
 }
 
 /**
