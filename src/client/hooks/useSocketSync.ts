@@ -229,7 +229,15 @@ export const useSocketSync = () => {
             value: onClose,
         });
 
+        // Check if we're already editing this exact HTML to avoid resetting the editor
+        const currentlyEditingSame = Project.state.editedHtml &&
+            Project.state.editedHtml.htmlRender === htmlRenderer.htmlMotor &&
+            Project.state.editedHtml.target === (Array.isArray(htmlRenderer.pathOfRender) ? node : Project.state.editedNodeConfig?.config);
 
+        // If already editing the same HTML, don't reset it
+        if (currentlyEditingSame) {
+            return;
+        }
 
         if(Array.isArray(htmlRenderer.pathOfRender)) {
             let object = node as any;
@@ -265,7 +273,7 @@ export const useSocketSync = () => {
                 value: newEditedHtml
             });
         }
-    }, [Project.state.graph, Project.state.selectedSheetId, Project.state.editedNodeConfig]);
+    }, [Project.state.graph, Project.state.selectedSheetId, Project.state.editedNodeConfig, Project.state.editedHtml]);
 
     useEffect(() => {
         Project.dispatch({

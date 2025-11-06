@@ -420,7 +420,9 @@ const CodeEditorModal = memo(() => {
                                 key={index+"-"+editor.title}
                                 style={{
                                     display: index === activeTabIndex ? 'block' : 'none',
-                                    height: '100%'
+                                    height: '100%',
+                                    overflowY: 'auto',
+                                    overflowX: 'auto',
                                 }}
                             >
                                 <EditorBlock index={index} />

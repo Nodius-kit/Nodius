@@ -76,10 +76,6 @@ export const EditableDiv = memo(({
         }
     }, [value, focused]);
 
-    useEffect(() => {
-        console.log(value);
-    }, [value]);
-
     function extractLeadingNumber(input: string): number | null {
         const match = input.match(/^(\d+(\.\d+)?)/);
         return match ? Number(match[0]) : null;

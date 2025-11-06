@@ -2,7 +2,7 @@ import React, { memo, useCallback, useContext, useEffect, useRef, useState } fro
 import { EditorState } from '@codemirror/state';
 import { EditorView, crosshairCursor, drawSelection, highlightActiveLine,
     highlightActiveLineGutter, keymap, rectangularSelection } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { autocompletion,  completionKeymap, closeBrackets, closeBracketsKeymap, Completion, CompletionContext } from '@codemirror/autocomplete';
 import { Fade } from "../animate/Fade";
@@ -215,6 +215,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
                     ...completionKeymap,
                     // Keys related to the linter system
                     ...lintKeymap,
+                    indentWithTab
                 ]),
                 javascript(),
                 autocompletion({ override: [customSource] }),
@@ -256,6 +257,8 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         <div ref={editorRef} style={editorStyle} />
     );
 });
+
+
 
 CodeEditorModal.displayName = 'CodeEditorModal';
 
