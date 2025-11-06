@@ -80,13 +80,13 @@ export const CssRuleEditor = memo(({
         } else {
             newInstruction.key("css").index(blockIndex).key("rules").index(ruleIndex).index(0).set(newKey);
         }
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     const onEditValueRule = async (newValue: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(blockIndex).key("rules").index(ruleIndex).index(1).set(newValue);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (
@@ -230,19 +230,19 @@ export const CssBlockEditor = memo(({
     const newRule = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(index).key("rules").arrayAdd(["", ""]);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     const onEditSelector = async (value: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").index(index).key("selector").set(value);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     const deleteSelector = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("css").arrayRemoveIndex(index);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (
@@ -338,7 +338,7 @@ export const CssEditor = memo(({ css, onUpdate }: CssEditorProps) => {
         };
         const newInstruction = css.instruction.clone();
         newInstruction.key("css").arrayAdd(emptyBlock);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (

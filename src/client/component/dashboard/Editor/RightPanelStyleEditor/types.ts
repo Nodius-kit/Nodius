@@ -5,7 +5,7 @@
  */
 
 import {CSSBlock} from "../../../../../utils/html/HtmlCss";
-import {InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
+import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {HTMLDomEvent} from "../../../../../utils/html/htmlType";
 import {WebGpuMotor} from "../../../../schema/motor/webGpuMotor";
 
@@ -18,10 +18,10 @@ export interface RightPanelStyleEditorProps {
     events: EditableEvents;
     content?: EditableContent;
     tag: EditableTag;
-    onUpdateCss: (cssInstruction: InstructionBuilder) => Promise<void>;
-    onUpdateEvents: (eventsInstruction: InstructionBuilder) => Promise<void>;
-    onUpdateContent?: (contentInstruction: InstructionBuilder) => Promise<void>;
-    onUpdateTag: (tagInstruction: InstructionBuilder) => Promise<void>;
+    onUpdateCss: (cssInstruction: Instruction | Instruction[]) => Promise<boolean>;
+    onUpdateEvents: (eventsInstruction: Instruction | Instruction[]) => Promise<boolean>;
+    onUpdateContent?: (contentInstruction: Instruction | Instruction[]) => Promise<boolean>;
+    onUpdateTag: (tagInstruction: Instruction | Instruction[]) => Promise<boolean>;
     getMotor: () => (WebGpuMotor | undefined);
     selectedIdentifier?: string
 }
@@ -50,7 +50,7 @@ export interface CssBlockEditorProps {
     block: CSSBlock;
     index: number;
     baseInstruction: InstructionBuilder;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
     availableCss: Record<string, string[]>;
     aditionalCss: string[];
     variableColor: string[];
@@ -65,12 +65,12 @@ export interface CssRuleEditorProps {
     aditionalCss: string[];
     variableColor: string[];
     baseInstruction: InstructionBuilder;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
 }
 
 export interface CssEditorProps {
     css: EditableCss;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
 }
 
 // ============================================================================
@@ -81,14 +81,14 @@ export interface EventEditorProps {
     event: HTMLDomEvent<keyof HTMLElementEventMap>;
     index: number;
     baseInstruction: InstructionBuilder;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
     getMotor: () => (WebGpuMotor | undefined);
     selectedIdentifier?: string
 }
 
 export interface EventsEditorProps {
     events: EditableEvents;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
     getMotor: () => (WebGpuMotor | undefined);
     selectedIdentifier: string | undefined;
 }
@@ -99,7 +99,7 @@ export interface EventsEditorProps {
 
 export interface ContentEditorProps {
     content: EditableContent;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
 }
 
 // ============================================================================
@@ -113,5 +113,5 @@ export interface EditableTag {
 
 export interface TagEditorProps {
     tag: EditableTag;
-    onUpdate: (instr: InstructionBuilder) => Promise<void>;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
 }

@@ -18,6 +18,7 @@
  * - Minimal length threshold for completions
  * - Blur on Enter key
  * - removeSpecialChar: Strips HTML tags on paste (keeps text only)
+ * - disableNewlines: Prevents Enter key from creating newlines
  */
 
 import React, {CSSProperties, memo, useEffect, useRef, useState} from 'react';
@@ -33,6 +34,7 @@ interface EditableDivProps {
     //resizable?: boolean;
     placeholder?: string;
     removeSpecialChar?: boolean;
+    disableNewlines?: boolean;
 }
 
 export const EditableDiv = memo(({
@@ -44,6 +46,7 @@ export const EditableDiv = memo(({
                                      minimalLengthBeforeCompletion = 2,
                                      placeholder = '',
                                      removeSpecialChar = false,
+                                     disableNewlines = false,
                                  }: EditableDivProps) => {
     const divRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -122,6 +125,12 @@ export const EditableDiv = memo(({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        // Prevent newlines if disableNewlines is true
+        if (disableNewlines && e.key === 'Enter') {
+            e.preventDefault();
+            return;
+        }
+
         // Accept completion with Tab or Right Arrow at end of text
         if ((e.key === 'Tab' || e.key === 'ArrowRight') && currentCompletion) {
             e.preventDefault();

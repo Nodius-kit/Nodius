@@ -1069,7 +1069,6 @@ export const useSocketSync = () => {
                 }
             }
 
-            console.log(Project.state.editedHtml);
             // Update edited HTML if applicable
             if(Project.state.editedHtml && Project.state.editedHtml.targetType === "NodeTypeConfig" ) {
                 let object = nodeConfig as any;
@@ -1079,8 +1078,8 @@ export const useSocketSync = () => {
                 }
 
                 Project.state.editedHtml.html = object;
-                console.log("new object", deepCopy(object));
                 Project.state.editedHtml.target = nodeConfig;
+
 
                 Project.dispatch({
                     field: "editedHtml",
@@ -1089,7 +1088,6 @@ export const useSocketSync = () => {
 
                 // Check if any instruction requires redraw
                 const needsRedraw = instructions.some(instruction => !instruction.noRedraw);
-                console.log(needsRedraw);
                 if(needsRedraw) {
                     await Project.state.editedHtml.htmlRender.render(Project.state.editedHtml.html);
                 }

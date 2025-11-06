@@ -13,7 +13,7 @@
  * - Direct code editing with syntax highlighting
  */
 
-import {memo, useContext, useMemo, useState} from "react";
+import {memo, useContext, useEffect, useMemo, useState} from "react";
 import {ChevronDown, ChevronRight, Plus, Trash2, Code2, Workflow, Edit3} from "lucide-react";
 import {HTMLDomEvent} from "../../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
@@ -177,13 +177,13 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
     const deleteEvent = async () => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("domEvents").arrayRemoveIndex(index);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     const updateEventName = async (newName: string) => {
         const newInstruction = baseInstruction.clone();
         newInstruction.key("domEvents").index(index).key("name").set(newName);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     const editInCodeEditor = () => {
@@ -204,8 +204,9 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
             value: [...Project.state.editedCode, {
                 nodeId: nodeId,
                 title: event.name,
-                path: [...Project.state.editedHtml.pathOfRender, ...newInstruction.instruction.p!],
-                baseText: event.call
+                path: [...newInstruction.instruction.p!],
+                baseText: event.call,
+                onUpdate: onUpdate
             }]
         });
     }
@@ -255,7 +256,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
 
             const newInstruction = baseInstruction.clone();
             newInstruction.key("domEvents").index(index).key("call").set("[!]CALL-HANDLE-"+handlePointId);
-            await onUpdate(newInstruction);
+            await onUpdate(newInstruction.instruction);
 
             let node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
             if(!node) return;
@@ -306,7 +307,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
 
             const newInstruction = baseInstruction.clone();
             newInstruction.key("domEvents").index(index).key("call").set("");
-            await onUpdate(newInstruction);
+            await onUpdate(newInstruction.instruction);
         }
     }
 
@@ -324,6 +325,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, getM
                         <EditableDiv
                             value={event.name}
                             removeSpecialChar={true}
+                            disableNewlines={true}
                             completion={COMMON_DOM_EVENTS}
                             onChange={updateEventName}
                             placeholder="event name"
@@ -417,7 +419,7 @@ export const EventsEditor = memo(({ events, onUpdate, getMotor, selectedIdentifi
         };
         const newInstruction = events.instruction.clone();
         newInstruction.key("domEvents").arrayAdd(emptyEvent);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (

@@ -24,6 +24,7 @@ import {HtmlObject, HtmlBase} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/HtmlCss";
+import {modalManager} from "../modal/ModalManager";
 
 export interface ObjectStorage {
     element: HTMLElement,
@@ -694,6 +695,7 @@ export class HtmlRender {
             currentStorage: storage.storage,
             globalStorage: this.globalStorage,
             element: storage.element,
+            modalManager: modalManager,
             ...extraVar
         };
         if (object.type === "block") {
@@ -895,7 +897,8 @@ export class HtmlRender {
             ...storage.extraVariable,
             renderElementWithId: this.renderElementWithId,
             renderElementWithIdentifier: this.renderElementWithIdentifier,
-            renderElement: () => this.renderElementWithIdentifier(storage.object.identifier)
+            renderElement: () => this.renderElementWithIdentifier(storage.object.identifier),
+            modalManager: modalManager,
         };
     }
 
@@ -958,6 +961,7 @@ export class HtmlRender {
                         currentStorage: objectStorage.storage,
                         globalStorage: this.globalStorage,
                         element: objectStorage.element,
+                        modalManager: modalManager,
                         ...objectStorage.extraVariable,
                     }
                 );

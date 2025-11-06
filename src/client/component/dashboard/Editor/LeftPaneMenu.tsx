@@ -107,14 +107,28 @@ export const LeftPaneMenu = memo((
                                 value: Project.state.editedCode.filter((e) => e.nodeId !== Project.state.editedNodeConfig!.node._key)
                             });
                         } else {
-                            console.log(Project.state.editedNodeConfig);
                             Project.dispatch({
                                 field: "editedCode",
                                 value: [...Project.state.editedCode, {
                                     path:["process"],
                                     title: "Node Logic #"+Project.state.editedNodeConfig.node._key,
                                     nodeId:Project.state.editedNodeConfig.node._key,
-                                    baseText:Project.state.editedNodeConfig.node.process
+                                    baseText:Project.state.editedNodeConfig.node.process,
+                                    onUpdate: async (instructions) =>  {
+                                        if(Array.isArray(instructions)) {
+                                            const output = await Project.state.updateGraph!(instructions.map((i) => ({
+                                                i: i,
+                                                nodeId:Project.state.editedNodeConfig!.node._key
+                                            })))
+                                            return output.status
+                                        } else {
+                                            const output = await Project.state.updateGraph!([{
+                                                i: instructions,
+                                                nodeId:Project.state.editedNodeConfig!.node._key
+                                            }])
+                                            return output.status
+                                        }
+                                    }
                                 }]
                             })
                         }
@@ -185,7 +199,7 @@ export const LeftPaneMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig, Project.state.selectedNode, Project.state.editedCode]);
+    ], [setEditingPanel, editingPanel, iconSize, Project.state.editedHtml, Project.state.editedNodeConfig, Project.state.selectedNode, Project.state.editedCode, Project.state.updateGraph]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

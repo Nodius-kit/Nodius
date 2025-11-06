@@ -70,7 +70,7 @@ export const TagEditor = memo(({ tag, onUpdate }: TagEditorProps) => {
     const updateTag = async (newTag: string) => {
         const newInstruction = tag.instruction.clone();
         newInstruction.key("tag").set(newTag);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (

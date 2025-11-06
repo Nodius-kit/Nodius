@@ -83,7 +83,7 @@ export const ContentEditor = memo(({ content, onUpdate }: ContentEditorProps) =>
     const updateContent = async (key: string, value: string) => {
         const newInstruction = content.instruction.clone();
         newInstruction.key("content").key(key).set(value);
-        await onUpdate(newInstruction);
+        await onUpdate(newInstruction.instruction);
     };
 
     return (

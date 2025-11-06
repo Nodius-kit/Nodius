@@ -13,7 +13,7 @@ import {lintKeymap} from "@codemirror/lint"
 import { ProjectContext } from "../../hooks/contexts/ProjectContext";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import {applyTextChanges, deepCopy, TextChangeInfo} from "../../../utils/objectUtils";
-import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
+import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
 import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {
     dropCursor,
@@ -89,7 +89,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
     const avoidNextUpdate = useRef<boolean>(false);
 
     const sendChanges = useCallback(async (changes: TextChangeInfo[]) : Promise<boolean> => {
-        if (!Project.state.editedCode || !Project.state.updateGraph || !Project.state.graph || !Project.state.selectedSheetId ) return false;
+        if (!Project.state.editedCode || !Project.state.updateHtml || !Project.state.graph || !Project.state.selectedSheetId ) return false;
         if(disableSendEvent.current) {
             disableSendEvent.current = false;
             return false;
@@ -101,7 +101,6 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
         const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(currentEditor.nodeId);
         if(!node) return false;
 
-        console.log("send change", changes);
 
         const oldBaseText = currentEditor.baseText;
         const newBaseText = applyTextChanges(oldBaseText, changes.map(c => ({ from: c.from, to: c.to, insert: c.insert })));
@@ -113,7 +112,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
             value: [...Project.state.editedCode],
         });
 
-        const instructions:GraphInstructions[] = changes.map(change => {
+        /*const instructions:GraphInstructions[] = changes.map(change => {
             const instruction = new InstructionBuilder();
             for (const path of currentEditor.path) {
                 instruction.key(path);
@@ -123,12 +122,22 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
                 nodeId: currentEditor.nodeId,
                 i: instruction.instruction,
             };
+        });*/
+
+        const instructions:Instruction[] = changes.map(change => {
+            const instruction = new InstructionBuilder();
+            for (const path of currentEditor.path) {
+                instruction.key(path);
+            }
+            instruction.insertString(change.from, change.insert, change.to);
+            return instruction.instruction;
         });
 
-        const output = await Project.state.updateGraph(instructions);
 
-        if (!output.status) {
-            console.log(output);
+
+        const output = await currentEditor.onUpdate(instructions);
+
+        if (!output) {
             // Rollback to old baseText, may lose concurrent remote changes in race conditions
             currentEditor.baseText = oldBaseText;
             Project.dispatch({
@@ -143,7 +152,7 @@ const CodeEditorModal = memo(({index}:EditorBlockProps) => {
             }
         }
 
-        return output.status;
+        return output;
     }, [Project.state.updateGraph, Project.state.editedCode, Project.state.graph, Project.state.selectedSheetId, index]);
 
     useEffect(() => {

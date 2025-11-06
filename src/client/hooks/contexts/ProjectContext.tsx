@@ -146,6 +146,7 @@ export interface ProjectContextType {
         title:string,
         baseText:string,
         applyChange?: (changes:TextChangeInfo|TextChangeInfo[]) => void,
+        onUpdate:(instruction:Instruction|Instruction[]) => Promise<boolean>
     }>
 
     selectedNode: string[],
