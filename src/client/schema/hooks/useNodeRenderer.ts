@@ -115,7 +115,7 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
             const graph = projectRef.current.state.graph;
             const sheetId = projectRef.current.state.selectedSheetId;
             if (!graph || !sheetId) return undefined;
-            return graph.sheets[sheetId]?.nodeMap.get(nodeKey);
+            return deepCopy(graph.sheets[sheetId]?.nodeMap.get(nodeKey));
         };
         info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("node", getNode());
         info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("getNode", getNode);
@@ -145,7 +145,7 @@ export function useNodeRenderer(options: UseNodeRendererOptions) {
                 const graph = projectRef.current.state.graph;
                 const sheetId = projectRef.current.state.selectedSheetId;
                 if (!graph || !sheetId) return undefined;
-                return graph.sheets[sheetId]?.nodeMap.get(info.nodeKey);
+                return deepCopy(graph.sheets[sheetId]?.nodeMap.get(info.nodeKey));
             };
             info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("node", getNode());
             info.htmlRenderer.htmlMotor.setVariableInGlobalStorage("getNode", getNode);

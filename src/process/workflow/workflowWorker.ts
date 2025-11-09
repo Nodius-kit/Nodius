@@ -55,6 +55,7 @@ const executeTask = async (task: Task): Promise<any> => {
 
     sendLog("working on node id "+node._key, node._key, undefined);
 
+
     const env = {
         node: node,
         nodeMap: nodeMap,

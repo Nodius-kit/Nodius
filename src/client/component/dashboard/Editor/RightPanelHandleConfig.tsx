@@ -407,7 +407,7 @@ export const RightPanelHandleConfig = memo(() => {
             <div className={sectionGroupClass}>
                 <div className={groupTitleClass}>
                     <Circle size={14} />
-                    Point #{editedHandle.pointId + 1} Settings
+                    Point #{editedHandle.pointId} Settings
                 </div>
 
                 {/* Type Selection */}
