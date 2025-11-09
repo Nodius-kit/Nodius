@@ -23,7 +23,7 @@
 import {HtmlObject, HtmlBase} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
-import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/HtmlCss";
+import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/htmlCss";
 import {modalManager} from "../modal/ModalManager";
 
 export interface ObjectStorage {
