@@ -276,12 +276,12 @@ export const HomeHtmlWorkflow = memo(({
      * Delegates to ProjectContext.openHtmlClass for actual opening logic
      */
     const handleOpenHtmlClass = useCallback(async (html: HtmlClass, graph: Graph) => {
-        console.log(Project.state.openHtmlClass);
         if (!Project.state.openHtmlClass) return;
         const action = await Project.state.openHtmlClass(html, graph);
         if (!action.status) {
             console.error("Failed to open HTML class:", action.reason);
         }
+
     }, [Project.state.openHtmlClass]);
 
     /**

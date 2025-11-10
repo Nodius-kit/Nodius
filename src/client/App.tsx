@@ -5,6 +5,7 @@ import {WebGpuMotor} from "./schema/motor/webGpuMotor";
 import {GraphicalMotor} from "./schema/motor/graphicalMotor";
 import {ThemeContextParser} from "./hooks/contexts/ThemeContextParser";
 import {MultiFade} from "./component/animate/MultiFade";
+import {useSocketSync} from "./hooks/useSocketSync";
 
 
 export const App = () => {
@@ -15,6 +16,8 @@ export const App = () => {
     const containerRef = useRef<HTMLDivElement | null>(null);
 
     const motorRef = useRef<GraphicalMotor>(undefined);
+
+    useSocketSync();
 
     useEffect(() => {
         if (!canvasRef.current || !containerRef.current) return;
@@ -33,6 +36,14 @@ export const App = () => {
             field: "getMotor",
             value: getMotor
         });
+
+        // Cleanup function: dispose motor on unmount or hot reload
+        return () => {
+            if (motorRef.current) {
+                motorRef.current.dispose();
+                motorRef.current = undefined;
+            }
+        };
     }, []);
 
     const getMotor = () => {
