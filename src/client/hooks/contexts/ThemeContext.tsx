@@ -107,7 +107,7 @@ export interface ThemeContextType {
 }
 
 export const ThemeContextDefaultValue: ThemeContextType = {
-    theme: "dark",
+    theme: "light",
     primary: {
         light: {
             main:"#1976d2",

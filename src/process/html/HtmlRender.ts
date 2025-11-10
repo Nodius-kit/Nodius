@@ -20,7 +20,7 @@
  * - Async function execution for event handlers
  */
 
-import {HtmlObject, HtmlBase} from "../../utils/html/htmlType";
+import {HtmlObject, HtmlBase, HTMLWorkflowEvent} from "../../utils/html/htmlType";
 import {deepCopy} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/htmlCss";
@@ -294,7 +294,7 @@ export class HtmlRender {
             applyCSSBlocks(element, object.css);
         }
 
-        if (object.domEvents && this.workflowMode) {
+        if(object.domEvents && this.workflowMode) {
             object.domEvents.forEach((event) => {
                 const caller = (evt: Event) => {
                     this.callDOMEvent(evt, storage, event.call);
@@ -304,6 +304,15 @@ export class HtmlRender {
                 events.push(caller);
                 storage.domEvents.set(event.name, events);
 
+                if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
+                    if(element.hasAttribute("data-workflow-event")) {
+                        if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
+                            element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
+                        }
+                    } else {
+                        element.setAttribute("data-workflow-event", event.name);
+                    }
+                }
             });
         }
         /*if (object.workflowEvents) {
@@ -447,6 +456,7 @@ export class HtmlRender {
         for (const [name, listeners] of storage.domEvents.entries()) {
             listeners.forEach(listener => element.removeEventListener(name, listener));
         }
+        element.removeAttribute("data-workflow-event");
         storage.domEvents.clear();
 
         if(this.workflowMode) {
@@ -457,6 +467,16 @@ export class HtmlRender {
                     const events = storage.domEvents.get(event.name) || [];
                     events.push(caller);
                     storage.domEvents.set(event.name, events);
+
+                    if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
+                        if(element.hasAttribute("data-workflow-event")) {
+                            if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
+                                element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
+                            }
+                        } else {
+                            element.setAttribute("data-workflow-event", event.name);
+                        }
+                    }
                 });
             }
         }

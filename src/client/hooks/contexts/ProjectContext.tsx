@@ -19,12 +19,33 @@
  * - Unique ID generation for graph elements
  * - WebSocket message catch-up for reconnection scenarios
  */
-import {createContext, Dispatch} from "react";
+import {createContext, Dispatch, JSX, MemoExoticComponent} from "react";
 import {ActionType} from "../useCreateReducer";
+import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
+import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
+import {WSMessage} from "../../../utils/sync/wsObject";
+import {HtmlClass} from "../../../utils/html/htmlType";
+import {Graph} from "../../../utils/graph/graphType";
+
+export interface ActionContext {
+    timeTaken: number;
+    status: boolean;
+    reason?: string;
+}
 
 export interface ProjectContextProps {
     state: ProjectContextType;
     dispatch: Dispatch<ActionType<ProjectContextType>>;
+}
+
+export interface AppMenu {
+    element:(({}: AppMenuProps) => JSX.Element)|MemoExoticComponent<({}: AppMenuProps) => JSX.Element>,
+    pointerEvent:boolean,
+    id:string
+}
+
+export interface AppMenuProps {
+    getMotor: () => GraphicalMotor
 }
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
@@ -32,8 +53,22 @@ export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 export interface ProjectContextType {
     selectedNode: string[],
     selectedEdge: string[],
+    activeAppMenuId: string,
+    appMenu:Array<AppMenu>,
+    getMotor: () => GraphicalMotor,
+    caughtUpMessage?: WSMessage<any>[],
+    openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
+    selectedSheetId?:string;
+    graph?:Graph,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],
     selectedEdge: [],
+    getMotor: () => undefined!,
+    activeAppMenuId: "home",
+    appMenu:[{
+        id: "home",
+        pointerEvent: true,
+        element: HomeWorkflow
+    }]
 }

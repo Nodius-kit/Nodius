@@ -42,6 +42,7 @@ import {
 import {aql} from "arangojs";
 import {db} from "../server";
 import escapeHTML from 'escape-html';
+import {CategoryData} from "../../client/menu/homeWorkflow/CategoryManager";
 
 export class RequestCategory {
     public static init = async (app: HttpServer) => {
@@ -68,7 +69,7 @@ export class RequestCategory {
             `;
 
             const cursor = await db.query(query);
-            res.status(200).json(await cursor.all());
+            res.status(200).json(await cursor.all() as CategoryData[]);
         });
 
         app.post("/api/category/delete", async (req: Request, res: Response) => {

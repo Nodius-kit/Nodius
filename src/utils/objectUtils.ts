@@ -435,3 +435,13 @@ export function applyTextChanges(base: string, changes: TextChangeInfo[]): strin
 
     return result;
 }
+
+/**
+ * Represents a 2D point in world or screen coordinates
+ */
+export interface Point {
+    x: number;
+    y: number;
+}
+
+export interface Rect { x: number; y: number; width: number; height: number }
