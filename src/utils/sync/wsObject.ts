@@ -51,11 +51,13 @@ export interface GraphInstructions {
     i:Instruction,
     nodeId?: string,
     edgeId?: string,
+
     applyUniqIdentifier?:string, // key to apply unique identifier
     targetedIdentifier?:string, // security check
-    noRedraw?: boolean, // don't trigger a re render
+
     animatePos?:boolean, // animate pos change
     animateSize?:boolean, // animate size change
+
     dontTriggerUpdateNode?:boolean,
 
     // don't apply instruction to the graph after sending it to the server, should be only used when working on non logic data rapidly (like node position or size)

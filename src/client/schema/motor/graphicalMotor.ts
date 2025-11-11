@@ -47,12 +47,7 @@ export interface ViewTransform {
 export type MotorEventMap = {
     zoom: (transform: ViewTransform) => void;
     pan: (transform: ViewTransform) => void;
-    nodeClick: (node: Node<any>, nodeId: string, ctrlKey: boolean) => void;
     edgeClick: (edge: Edge, edgeId: string, ctrlKey: boolean) => void;
-    nodeChange: (node: Node<any>, nodeId: string) => void;
-    edgeChange: (edge: Edge, edgeId: string) => void;
-    nodeEnter: (node: Node<any>, nodeId: string) => void;
-    nodeLeave: (node: Node<any> | undefined, nodeId: string) => void; // node will be undefined if the node have been removed
     canvasClick: () => void;
     reset: () => void;
 };
@@ -65,7 +60,6 @@ export interface GraphicalMotor {
     setScene(scene: MotorScene): void;
     resetScene(): void;
     getScene(): MotorScene | undefined;
-    updateNode(id: string, updates: Partial<Pick<Node<any>, 'posX' | 'posY' | 'size'>>): void;
     setTransform(transform: Partial<ViewTransform>): void;
     getTransform(): ViewTransform;
     on<K extends keyof MotorEventMap>(event: K, cb: MotorEventMap[K]): void;
@@ -76,11 +70,12 @@ export interface GraphicalMotor {
     initKeyboardShortcut(): void;
     disposeKeyboardShortcut(): void;
     // HTML overlay support: returns node's screen-space rect for syncing DOM overlays
-    getNodeScreenRect?(nodeId: string): Rect | undefined;
+    getNodeScreenRect(nodeId: string): (Rect | undefined);
     getContainerDraw():HTMLElement;
     enableInteractive(value:boolean): void;
     isInteractive(): boolean;
     resetViewport(): void;
+    setSelectedEdges(edges:string[]): void;
     smoothTransitionTo(options: {
         x: number;
         y: number;

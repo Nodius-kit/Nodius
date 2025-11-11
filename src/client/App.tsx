@@ -6,6 +6,9 @@ import {GraphicalMotor} from "./schema/motor/graphicalMotor";
 import {ThemeContextParser} from "./hooks/contexts/ThemeContextParser";
 import {MultiFade} from "./component/animate/MultiFade";
 import {useSocketSync} from "./hooks/useSocketSync";
+import {HomeWorkflow} from "./menu/homeWorkflow/HomeWorkflow";
+import {SchemaDisplay} from "./schema/SchemaDisplay";
+import {SchemaEditor} from "./schema/editor/SchemaEditor";
 
 
 export const App = () => {
@@ -30,12 +33,12 @@ export const App = () => {
             if(!motorRef.current) return;
             motorRef.current.resetViewport();
             motorRef.current.enableInteractive(true);
+            Project.dispatch({
+                field: "getMotor",
+                value: getMotor
+            });
         });
 
-        Project.dispatch({
-            field: "getMotor",
-            value: getMotor
-        });
 
         // Cleanup function: dispose motor on unmount or hot reload
         return () => {
@@ -51,6 +54,24 @@ export const App = () => {
     }
 
 
+    useEffect(() => {
+        Project.dispatch({
+            field: "appMenu",
+            value: [
+                {
+                    id: "home",
+                    pointerEvent: true,
+                    element: HomeWorkflow
+                },
+                {
+                    id: "schemaEditor",
+                    pointerEvent: false,
+                    element: SchemaEditor
+                }
+            ]
+        });
+    }, []);
+
     return (
         <div style={{width: "100vw", height: "100vh", position:"relative"}} ref={containerRef}>
             <ThemeContextParser/>
@@ -62,6 +83,7 @@ export const App = () => {
                 }}
                 data-graph-motor=""
             />
+            <SchemaDisplay/>
             <MultiFade
                 active={Project.state.appMenu.findIndex((m) => m.id === Project.state.activeAppMenuId)}
                 timeout={250}
@@ -69,11 +91,12 @@ export const App = () => {
                     position: 'absolute',
                     inset: "0px",
                     overflow:"hidden",
-                    zIndex: "10000000"
+                    zIndex: "10000000",
+                    pointerEvents: Project.state.appMenu.find((m) => m.id === Project.state.activeAppMenuId)?.pointerEvent ? "all" : "none"
                 }}
             >
                 {Project.state.appMenu.map((M, i) => (
-                    <M.element key={i} getMotor={Project.state.getMotor} />
+                    <M.element key={i}  />
                 ))}
 
             </MultiFade>

@@ -23,9 +23,16 @@ import {createContext, Dispatch, JSX, MemoExoticComponent} from "react";
 import {ActionType} from "../useCreateReducer";
 import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
 import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
-import {WSMessage} from "../../../utils/sync/wsObject";
+import {GraphInstructions, WSMessage} from "../../../utils/sync/wsObject";
 import {HtmlClass} from "../../../utils/html/htmlType";
-import {Graph} from "../../../utils/graph/graphType";
+import {
+    Graph,
+    NodeType,
+    NodeTypeConfig,
+    NodeTypeEntryTypeConfig,
+    NodeTypeHtmlConfig
+} from "../../../utils/graph/graphType";
+import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 
 export interface ActionContext {
     timeTaken: number;
@@ -45,7 +52,6 @@ export interface AppMenu {
 }
 
 export interface AppMenuProps {
-    getMotor: () => GraphicalMotor
 }
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
@@ -58,17 +64,25 @@ export interface ProjectContextType {
     getMotor: () => GraphicalMotor,
     caughtUpMessage?: WSMessage<any>[],
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
-    selectedSheetId?:string;
+    selectedSheetId?:string,
     graph?:Graph,
+    nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
+    updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
+
+    dataTypes?: DataTypeClass[],
+    refreshAvailableDataTypes?:() => Promise<void>,
+
+    enumTypes?:EnumClass[],
+    refreshAvailableEnums?:() => Promise<void>,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],
     selectedEdge: [],
     getMotor: () => undefined!,
     activeAppMenuId: "home",
-    appMenu:[{
-        id: "home",
-        pointerEvent: true,
-        element: HomeWorkflow
-    }]
+    appMenu:[],
+    nodeTypeConfig: {
+        "html": NodeTypeHtmlConfig,
+        "entryType": NodeTypeEntryTypeConfig
+    },
 }

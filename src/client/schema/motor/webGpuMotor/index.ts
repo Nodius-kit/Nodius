@@ -71,6 +71,15 @@ export class WebGpuMotor implements GraphicalMotor {
     private selectedEdges: Set<string> = new Set();
     private maxZoom: number = 1;
     private minZoom: number = 1;
+    private isDisposed: boolean = false;
+    private animationFrameId: number | null = null;
+
+    // Canvas event listener references for cleanup
+    private canvasMouseMoveListener: ((e: MouseEvent) => void) | null = null;
+    private canvasMouseDownListener: (() => void) | null = null;
+    private canvasMouseMoveForDragListener: (() => void) | null = null;
+    private canvasClickListener: ((e: MouseEvent) => void) | null = null;
+    private didDrag: boolean = false;
 
     // Renderers
     private nodeRenderer: NodeRenderer | null = null;
@@ -204,7 +213,7 @@ export class WebGpuMotor implements GraphicalMotor {
         if (!this.canvas) return;
 
         // Mouse move for hover detection
-        this.canvas.addEventListener("mousemove", (e) => {
+        this.canvasMouseMoveListener = (e: MouseEvent) => {
             const rect = this.canvas!.getBoundingClientRect();
             const sx = e.clientX - rect.left;
             const sy = e.clientY - rect.top;
@@ -230,24 +239,24 @@ export class WebGpuMotor implements GraphicalMotor {
                     this.requestRedraw();
                 }
             }
-        });
+        };
 
         // Track if user dragged to prevent click events after pan
-        let didDrag = false;
-        this.canvas.addEventListener("mousedown", () => {
-            didDrag = false;
-        });
-        this.canvas.addEventListener("mousemove", () => {
+        this.canvasMouseDownListener = () => {
+            this.didDrag = false;
+        };
+
+        this.canvasMouseMoveForDragListener = () => {
             if (this.inputHandler?.getIsPanning()) {
-                didDrag = true;
+                this.didDrag = true;
             }
-        });
+        };
 
         // Click for selection
-        this.canvas.addEventListener("click", (e) => {
+        this.canvasClickListener = (e: MouseEvent) => {
             // Don't emit click events if user was dragging/panning
-            if (didDrag) {
-                didDrag = false;
+            if (this.didDrag) {
+                this.didDrag = false;
                 return;
             }
 
@@ -261,35 +270,22 @@ export class WebGpuMotor implements GraphicalMotor {
                 for(const edges of this.scene.edges.values()) {
                     for (const edge of edges) {
                         if (this.isPointNearEdge(world, edge)) {
-                            // Toggle selection
-                            if (e.ctrlKey) {
-                                this.toggleEdgeSelection(edge._key);
-                            } else {
-                                this.setSelectedEdges([edge._key]);
-                            }
                             this.emit("edgeClick", edge, edge._key, e.ctrlKey);
                             return;
                         }
                     }
                 }
 
-                // Check nodes
-                for (const node of this.scene.nodes.values()) {
-                    if (
-                        world.x >= node.posX &&
-                        world.x <= node.posX + node.size.width &&
-                        world.y >= node.posY &&
-                        world.y <= node.posY + node.size.height
-                    ) {
-                        this.emit("nodeClick", node, node._key, e.ctrlKey);
-                        return;
-                    }
-                }
-
                 // If we get here, nothing was clicked - emit canvas click
                 this.emit("canvasClick");
             }
-        });
+        };
+
+        // Add all event listeners
+        this.canvas.addEventListener("mousemove", this.canvasMouseMoveListener);
+        this.canvas.addEventListener("mousedown", this.canvasMouseDownListener);
+        this.canvas.addEventListener("mousemove", this.canvasMouseMoveForDragListener);
+        this.canvas.addEventListener("click", this.canvasClickListener);
     }
 
     private isPointNearLine(p: Point, a: Point, b: Point, threshold: number): boolean {
@@ -369,8 +365,13 @@ export class WebGpuMotor implements GraphicalMotor {
     }
 
     private renderLoop = (): void => {
+        // Stop rendering if disposed
+        if (this.isDisposed) {
+            return;
+        }
+
         if (!this.device || !this.context || !this.dirty) {
-            requestAnimationFrame(this.renderLoop);
+            this.animationFrameId = requestAnimationFrame(this.renderLoop);
             return;
         }
         this.edgeRenderer!.setHoveredEdge(this.hoveredEdge?._key ?? null);
@@ -445,20 +446,90 @@ export class WebGpuMotor implements GraphicalMotor {
             msTexture.destroy();
         }
 
-        requestAnimationFrame(this.renderLoop);
+        this.animationFrameId = requestAnimationFrame(this.renderLoop);
     };
 
+    /**
+     * Clean up all GPU resources and event listeners
+     * IMPORTANT: Call this when hot reloading or unmounting to prevent crashes
+     */
     public dispose(): void {
-        if (this.resizeObserver) this.resizeObserver.disconnect();
-        if (this.canvas) this.canvas.remove();
-        if (this.context) this.context.unconfigure();
-        if (this.device) this.device.destroy();
-        if (this.uniformBuffer) this.uniformBuffer.destroy();
+        // Mark as disposed to stop render loop
+        this.isDisposed = true;
+
+        // Cancel animation frame
+        if (this.animationFrameId !== null) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+
+        // Remove resize observer
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+
+        // Remove canvas event listeners
+        if (this.canvas) {
+            if (this.canvasMouseMoveListener) {
+                this.canvas.removeEventListener("mousemove", this.canvasMouseMoveListener);
+                this.canvasMouseMoveListener = null;
+            }
+            if (this.canvasMouseDownListener) {
+                this.canvas.removeEventListener("mousedown", this.canvasMouseDownListener);
+                this.canvasMouseDownListener = null;
+            }
+            if (this.canvasMouseMoveForDragListener) {
+                this.canvas.removeEventListener("mousemove", this.canvasMouseMoveForDragListener);
+                this.canvasMouseMoveForDragListener = null;
+            }
+            if (this.canvasClickListener) {
+                this.canvas.removeEventListener("click", this.canvasClickListener);
+                this.canvasClickListener = null;
+            }
+        }
+
+        // Dispose input handler (cleans up all mouse and keyboard listeners)
+        this.inputHandler?.dispose();
+        this.inputHandler = null;
+
+        // Dispose renderers
         this.nodeRenderer?.dispose();
+        this.nodeRenderer = null;
         this.edgeRenderer?.dispose();
+        this.edgeRenderer = null;
         this.backgroundRenderer?.dispose();
-        this.inputHandler?.disposeKeyboardShortcut();
+        this.backgroundRenderer = null;
+
+        // Dispose camera animator
+        this.cameraAnimator = null;
+
+        // Destroy GPU resources
+        if (this.uniformBuffer) {
+            this.uniformBuffer.destroy();
+            this.uniformBuffer = null;
+        }
+        this.bindGroup = null;
+
+        // Unconfigure and destroy GPU context/device
+        if (this.context) {
+            this.context.unconfigure();
+            this.context = null;
+        }
+        if (this.device) {
+            this.device.destroy();
+            this.device = null;
+        }
+
+        // Clean up canvas (but don't remove from DOM - let React handle that)
+        // this.canvas?.remove(); // REMOVED - React should manage DOM
+        this.canvas = null;
+
+        // Clear event listeners and scene
         this.eventListeners = {};
+        this.scene = undefined;
+        this.hoveredEdge = null;
+        this.selectedEdges.clear();
     }
 
     public setScene(scene: MotorScene): void {
@@ -466,17 +537,6 @@ export class WebGpuMotor implements GraphicalMotor {
         requestAnimationFrame(() => {
             this.requestRedraw();
         });
-    }
-
-    public updateNode(id: string, updates: Partial<Pick<Node<any>, 'posX' | 'posY' | 'size'>>): void {
-        if (!this.scene) return;
-        const node = this.scene.nodes.get(id);
-        if (!node) return;
-        if (updates.posX !== undefined) node.posX = updates.posX;
-        if (updates.posY !== undefined) node.posY = updates.posY;
-        if (updates.size !== undefined && typeof updates.size !== "string") node.size = updates.size;
-        this.dirty = true;
-        this.emit("nodeChange", node, node._key);
     }
 
     public getScene(): MotorScene | undefined {
@@ -581,11 +641,6 @@ export class WebGpuMotor implements GraphicalMotor {
         return this.interactiveEnabled;
     }
 
-    public setSelectedEdges(edgeKeys: string[]): void {
-        this.selectedEdges = new Set(edgeKeys);
-        this.requestRedraw();
-    }
-
     public getSelectedEdges(): string[] {
         return Array.from(this.selectedEdges);
     }
@@ -659,5 +714,10 @@ export class WebGpuMotor implements GraphicalMotor {
 
     public removeCameraAreaLock(): void {
         this.cameraAnimator?.removeCameraAreaLock();
+    }
+
+    public setSelectedEdges(edges:string[]) {
+        this.edgeRenderer?.setSelectedEdges(edges);
+        this.requestRedraw();
     }
 }

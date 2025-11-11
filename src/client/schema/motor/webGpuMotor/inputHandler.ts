@@ -38,6 +38,13 @@ export class InputHandler {
     private onUserMove: () => void;
     private onConstrainTransform?: () => void;
 
+    // Event listener references for cleanup
+    private mouseDownListener: ((e: MouseEvent) => void) | null = null;
+    private mouseMoveListener: ((e: MouseEvent) => void) | null = null;
+    private mouseUpListener: ((e: MouseEvent) => void) | null = null;
+    private mouseOutListener: (() => void) | null = null;
+    private wheelListener: ((e: WheelEvent) => void) | null = null;
+
     public getIsPanning(): boolean {
         return this.isPanning;
     }
@@ -73,7 +80,7 @@ export class InputHandler {
     }
 
     public setupMouseEvents(): void {
-        this.canvas.addEventListener("mousedown", (e) => {
+        this.mouseDownListener = (e: MouseEvent) => {
             if (!this.interactiveEnabled) return;
             if (e.button === 1) {
                 this.isPanning = true;
@@ -81,9 +88,9 @@ export class InputHandler {
                 this.lastMouseY = e.clientY;
                 this.onUserMove();
             }
-        });
+        };
 
-        window.addEventListener("mousemove", (e) => {
+        this.mouseMoveListener = (e: MouseEvent) => {
             if (!this.interactiveEnabled) {
                 this.isPanning = false;
                 return;
@@ -99,21 +106,21 @@ export class InputHandler {
                 this.onDirty();
                 this.onPan(this.transform);
             }
-        });
+        };
 
-
-        window.addEventListener("mouseup", (e) => {
+        this.mouseUpListener = (e: MouseEvent) => {
             if(e.button === 1) {
                 if (!this.interactiveEnabled) return;
                 this.isPanning = false;
             }
-        });
-        window.addEventListener("mouseout", () => {
+        };
+
+        this.mouseOutListener = () => {
             if (!this.interactiveEnabled) return;
             this.isPanning = false;
-        });
+        };
 
-        this.canvas.addEventListener("wheel", (e) => {
+        this.wheelListener = (e: WheelEvent) => {
             if (!this.interactiveEnabled) return;
             e.preventDefault();
 
@@ -153,7 +160,14 @@ export class InputHandler {
             this.onUserMove();
             this.onDirty();
             this.onZoom(this.transform);
-        }, { passive: false });
+        };
+
+        // Add event listeners
+        this.canvas.addEventListener("mousedown", this.mouseDownListener);
+        window.addEventListener("mousemove", this.mouseMoveListener);
+        window.addEventListener("mouseup", this.mouseUpListener);
+        window.addEventListener("mouseout", this.mouseOutListener);
+        this.canvas.addEventListener("wheel", this.wheelListener, { passive: false });
     }
 
     private handleKeyDown = (e: KeyboardEvent) => {
@@ -199,5 +213,48 @@ export class InputHandler {
     public disposeKeyboardShortcut(): void {
         window.removeEventListener("keydown", this.handleKeyDown);
         window.removeEventListener("keyup", this.handleKeyUp);
+    }
+
+    /**
+     * Clean up all event listeners and intervals
+     * Called during hot reload or component unmount
+     */
+    public dispose(): void {
+        // Clear all keyboard intervals
+        for (const key in this.pressed) {
+            const id = this.pressed[key];
+            if (id) {
+                clearInterval(id);
+            }
+        }
+        this.pressed = {};
+
+        // Remove keyboard listeners
+        this.disposeKeyboardShortcut();
+
+        // Remove mouse event listeners
+        if (this.mouseDownListener) {
+            this.canvas.removeEventListener("mousedown", this.mouseDownListener);
+            this.mouseDownListener = null;
+        }
+        if (this.mouseMoveListener) {
+            window.removeEventListener("mousemove", this.mouseMoveListener);
+            this.mouseMoveListener = null;
+        }
+        if (this.mouseUpListener) {
+            window.removeEventListener("mouseup", this.mouseUpListener);
+            this.mouseUpListener = null;
+        }
+        if (this.mouseOutListener) {
+            window.removeEventListener("mouseout", this.mouseOutListener);
+            this.mouseOutListener = null;
+        }
+        if (this.wheelListener) {
+            this.canvas.removeEventListener("wheel", this.wheelListener);
+            this.wheelListener = null;
+        }
+
+        // Reset panning state
+        this.isPanning = false;
     }
 }

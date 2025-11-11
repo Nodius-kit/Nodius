@@ -126,9 +126,10 @@ export const HomeHtmlWorkflow = memo(({
     const itemCardClass = useDynamicClass(`
         & {
             padding: 20px;
-            border: 1px solid var(--nodius-grey-700);
+            border: 1px solid var(--nodius-grey-500);
             border-radius: 10px;
             background-color: var(--nodius-background-paper);
+            box-shadow: var(--nodius-shadow-1);
             display: flex;
             flex-direction: column;
             gap: 12px;

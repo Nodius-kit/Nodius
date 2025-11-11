@@ -75,9 +75,9 @@ export class BackgroundRenderer {
 			let offset = frac - vec2<f32>(0.5);
 			let dist = length(offset) * spacing;
 			if (dist < radius) {
-			  return vec4<f32>(0.7, 0.7, 0.7, 1.0); // Light gray dots
+			  return vec4<f32>(0.6, 0.6, 0.6, 1.0); // Light gray dots
 			}
-			return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+			return vec4<f32>(0.95, 0.95, 0.95, 1.0);
 		  }
 		`;
         const bgModule = this.device.createShaderModule({ code: bgShaderCode });

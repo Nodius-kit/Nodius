@@ -79,6 +79,7 @@ export const CategoryManager = memo(({
         & {
             background-color: var(--nodius-background-paper);
             padding: 16px;
+            margin:2px;
             border-radius: 8px;
             box-shadow: var(--nodius-shadow-1);
             margin-bottom: 16px;
