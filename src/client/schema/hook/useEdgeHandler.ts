@@ -13,8 +13,7 @@ import {ActionContext, ProjectContext} from "../../hooks/contexts/ProjectContext
 import {Edge, Node, handleSide} from "../../../utils/graph/graphType";
 import {getHandleInfo, getHandlePosition, HandleInfo} from "../../../utils/graph/handleUtils";
 
-interface useEdgeHandlerOptions {
-}
+
 
 interface ClosestHandleResult {
     node: Node<any>;
@@ -24,8 +23,7 @@ interface ClosestHandleResult {
     position: Point;
 }
 
-export const useEdgeHandler = ({
-                               }:useEdgeHandlerOptions) => {
+export const useEdgeHandler = () => {
 
     const Project = useContext(ProjectContext);
 

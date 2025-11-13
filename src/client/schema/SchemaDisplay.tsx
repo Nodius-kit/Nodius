@@ -11,6 +11,7 @@ import {NodeAnimationManager} from "./manager/nodeAnimation";
 import {useNodeResize} from "./hook/useNodeResize";
 import {useNodeSelector} from "./hook/useNodeSelector";
 import {HtmlRender} from "../../process/html/HtmlRender";
+import { useHandleRenderer } from "./hook/useHandleRenderer";
 
 interface SchemaNodeInfo {
     node: Node<any>;
@@ -221,6 +222,10 @@ export const SchemaDisplay = memo(() => {
         deInitSelectorContainer
     } = useNodeSelector();
 
+    const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
+        getNode: getNode,
+    });
+
     useEffect(() => {
         if(Project.state.getMotor?.() && containerRef.current) {
             initSelectorContainer(Project.state.getMotor().getContainerDraw(), containerRef.current);
@@ -235,6 +240,8 @@ export const SchemaDisplay = memo(() => {
         const schema = inSchemaNode.current.get(node._key);
         if(schema) {
             schema.element.remove();
+
+            cleanupHandleOverlay(node._key);
 
             const htmlRenders = projectRef.current.state.getHtmlRenderOfNode(node._key);
             for(const htmlRender of htmlRenders) {
@@ -340,7 +347,7 @@ export const SchemaDisplay = memo(() => {
 
         nodeDisplayContainer.current!.appendChild(nodeHTML);
         forwardMouseEvents(nodeHTML, projectRef.current.state.getMotor().getContainerDraw());
-
+        updateHandleOverlay(node, nodeHTML);
         updateNodePosition(node._key);
     }
 
@@ -425,7 +432,6 @@ export const SchemaDisplay = memo(() => {
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
         }
 
-        updateNodePosition(nodeId);
 
 
         if (
@@ -440,8 +446,12 @@ export const SchemaDisplay = memo(() => {
                 () => {
                     projectRef.current.state.getMotor().requestRedraw();
                     updateNodePosition(nodeId);
+                    updateHandleOverlay(node, schema.element);
                 }
             );
+        } else {
+            updateNodePosition(nodeId);
+            updateHandleOverlay(node, schema.element);
         }
 
 
@@ -476,6 +486,14 @@ export const SchemaDisplay = memo(() => {
             }
         }
     }, [Project.state.selectedNode]);
+
+    useEffect(() => {
+        for(const nodeSchema of inSchemaNode.current.values()) {
+            // re render handle
+            cleanupHandleOverlay(nodeSchema.node._key);
+            updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
+        }
+    }, [Project.state.editedNodeConfig]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', position:"absolute", inset:"0", pointerEvents:"none"}} >

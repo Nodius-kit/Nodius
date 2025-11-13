@@ -197,13 +197,13 @@ export const ThemeContextDefaultValue: ThemeContextType = {
             primary: "rgba(0, 0, 0, 0.87)",
             secondary: "rgba(0, 0, 0, 0.6)",
             disabled: "rgba(0, 0, 0, 0.38)",
-            divider: "rgba(0, 0, 0, 0.12)"
+            divider: "rgba(0, 0, 0, 0.15)"
         },
         dark: {
             primary: "#fff",
             secondary: "rgba(255, 255, 255, 0.7)",
             disabled: "rgba(255, 255, 255, 0.5)",
-            divider: "rgba(255, 255, 255, 0.12)"
+            divider: "rgba(255, 255, 255, 0.15)"
         }
     },
     background: {

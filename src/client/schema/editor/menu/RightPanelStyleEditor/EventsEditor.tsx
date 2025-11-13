@@ -27,6 +27,7 @@ import {GraphInstructions} from "../../../../../utils/sync/wsObject";
 import {useStableProjectRef} from "../../../../hooks/useStableProjectRef";
 import {generateUniqueHandlePointId} from "../../../hook/useHandleRenderer";
 import {getHandlePosition} from "../../../../../utils/graph/handleUtils";
+import {deepCopy} from "../../../../../utils/objectUtils";
 
 // Common DOM event types
 const COMMON_DOM_EVENTS = [
@@ -198,24 +199,30 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
 
         const newInstruction = baseInstruction.clone();
         newInstruction.key("domEvents").index(index).key("call");
-        console.log([...newInstruction.instruction.p!]);
         Project.dispatch({
             field: "editedCode",
             value: [...Project.state.editedCode, {
-                /*nodeId: nodeId,
-                title: event.name,
-                path: [...newInstruction.instruction.p!],
-                baseText: event.call,
-                onUpdate: onUpdate*/
                 nodeId: nodeId,
                 title: event.name,
                 onChange: async (instructions) => {
-                    console.log("on update", instructions);
-                    return onUpdate(instructions)
+                    const clonedInstructions = deepCopy(Array.isArray(instructions) ? instructions : [instructions]);
+                    for(const instruction of clonedInstructions) {
+                        instruction.p = [...newInstruction.instruction.p??[]]
+                    }
+                    return onUpdate(clonedInstructions)
                 },
                 retrieveText: (node) => {
-
-                    return "";
+                    let object = projectRef.current.state.editedHtml?.htmlRenderContext.retrieveHtmlObject(node) as any;
+                    if(!object) {
+                        projectRef.current.dispatch({
+                            field: "editedCode",
+                            value: projectRef.current.state.editedCode.filter((e) => e.nodeId !== nodeId)
+                        });
+                    }
+                    for(const path of newInstruction.instruction.p ?? []) {
+                        object = object[path];
+                    }
+                    return object;
                 }
             }]
         });
