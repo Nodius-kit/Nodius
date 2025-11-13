@@ -35,6 +35,7 @@ import {ResizeBar} from "../../component/animate/ResizeBar";
 import {CodeEditorModal} from "../../component/code/CodeEditorModal";
 import {LeftPanelComponentEditor} from "./menu/LeftPanelComponentEditor";
 import {LeftPaneComponentTree} from "./menu/LeftPanelComponentTree";
+import {RightPanelComponentEditor} from "./menu/RightPanelComponentEditor";
 
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
@@ -233,6 +234,25 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                     </div>
                 </Fade>
             </div>
+            {/* Right panel for HTML component editing */}
+            <div ref={rightContainer} style={{
+                position:"absolute",
+                top:"0",
+                right:(!Project.state.editedHtml ? -rightPanelWidth : 0)+"px",
+                width:rightPanelWidth+"px",
+                height:"100%",
+                backgroundColor:"var(--nodius-background-default)",
+                boxShadow: "var(--nodius-shadow-4)",
+                transition: "var(--nodius-transition-default)",
+                pointerEvents:"all",
+            }}>
+                <RightPanelComponentEditor
+                    componentsList={componentsList}
+                />
+            </div>
+
+
+
         </div>
     )
 });

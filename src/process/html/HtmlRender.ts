@@ -1145,7 +1145,7 @@ export class HtmlRender {
         this.buildingInteractEventMap.set(type, events.filter((ev) => ev !== callback));
     }
 
-    public pushBuildingInteractEvent(type:"hover"|"select", identifier?:string) {
+    public pushBuildingInteractEvent(type:"hover"|"select", identifier?:string, triggerEventMap:boolean = false) {
         if(identifier) {
             const element = this.superContainer.querySelector("[data-identifier='" + identifier + "']") as HTMLElement;
             if (element) {
@@ -1162,6 +1162,12 @@ export class HtmlRender {
                     }
                 }
                 this.hoverObjectIdentifier = undefined;
+                if(triggerEventMap) {
+                    let events = this.buildingInteractEventMap.get("hover") ?? [];
+                    for(const event of events) {
+                        event(undefined);
+                    }
+                }
             }
             else if(type === "select" && this.selectedObjectIdentifier) {
                 const selectedStorage = this.objectStorage.get(this.selectedObjectIdentifier);
@@ -1169,6 +1175,13 @@ export class HtmlRender {
                     if (selectedStorage.debugOverlay) {
                         selectedStorage.debugOverlay.remove();
                         selectedStorage.debugOverlay = undefined;
+                    }
+                }
+                this.selectedObjectIdentifier = undefined;
+                if(triggerEventMap) {
+                    let events = this.buildingInteractEventMap.get("select") ?? [];
+                    for(const event of events) {
+                        event(undefined);
                     }
                 }
             }

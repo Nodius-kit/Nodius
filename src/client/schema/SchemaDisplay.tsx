@@ -243,6 +243,10 @@ export const SchemaDisplay = memo(() => {
 
             inSchemaNode.current.delete(node._key);
         }
+
+        if(projectRef.current.state.editedHtml && projectRef.current.state.editedHtml.htmlRenderContext.nodeId === node._key) {
+            projectRef.current.state.closeHtmlEditor!();
+        }
     }
 
     const onNodeEnter = (node:Node<any>) => {

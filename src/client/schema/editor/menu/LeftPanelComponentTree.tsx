@@ -311,9 +311,16 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
 
     const onClick = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();
-        setSelectedIdentifier(object.identifier);
-        Project.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', object.identifier);
-    }, [Project.state.editedHtml, object.identifier, setSelectedIdentifier]);
+        if(selectedIdentifier === object.identifier) {
+            setSelectedIdentifier(undefined);
+            Project.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', undefined);
+            setHoverIdentifier(object.identifier);
+            Project.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('hover', object.identifier);
+        } else {
+            setSelectedIdentifier(object.identifier);
+            Project.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', object.identifier);
+        }
+    }, [Project.state.editedHtml, object.identifier, setSelectedIdentifier, selectedIdentifier]);
 
     const onMouseDown = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();

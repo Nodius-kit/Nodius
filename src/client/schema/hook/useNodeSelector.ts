@@ -146,7 +146,7 @@ export const useNodeSelector = () => {
                     projectRef.current.state.getMotor().setSelectedEdges([]);
 
                     if(projectRef.current.state.editedHtml) {
-                        projectRef.current.state.editedHtml.htmlRenderContext.htmlRender.getSelectedObject()
+                        projectRef.current.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', undefined, true);
                     }
                 } else {
                     selectingState.current.rect.remove();

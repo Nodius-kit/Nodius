@@ -32,7 +32,7 @@ import {
     NodeType,
     NodeTypeConfig,
     NodeTypeEntryTypeConfig,
-    NodeTypeHtmlConfig
+    NodeTypeHtmlConfig, handleSide
 } from "../../../utils/graph/graphType";
 import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
 import {Instruction} from "../../../utils/sync/InstructionBuilder";
@@ -61,6 +61,12 @@ export type DisabledNodeInteractionType = Record<string, Partial<{
 
 export interface AppMenuProps {
 }
+
+export type EditedNodeHandle = {
+    nodeId: string;
+    side: handleSide;
+    pointId: string;
+};
 
 export interface EditedCodeContext {
     title: string;
@@ -92,6 +98,8 @@ export interface ProjectContextType {
     appMenu:Array<AppMenu>,
     getMotor: () => GraphicalMotor,
     caughtUpMessage?: WSMessage<any>[],
+
+    editedNodeHandle?: EditedNodeHandle,
 
     initiateNewHtmlRender: (context:htmlRenderContext) => htmlRenderContext|undefined,
     getHtmlRenderWithId: (nodeId:string, renderId:string) => htmlRenderContext|undefined,
