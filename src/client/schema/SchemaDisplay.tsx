@@ -1,19 +1,25 @@
 import {memo, useCallback, useContext, useEffect, useRef} from "react";
-import {ProjectContext} from "../hooks/contexts/ProjectContext";
+import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
 import {Edge, Node} from "../../utils/graph/graphType";
 import {MotorScene} from "./motor/graphicalMotor";
 import {edgeArrayToMap, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {useDynamicClass} from "../hooks/useDynamicClass";
-import {forwardMouseEvents} from "../../utils/objectUtils";
+import {deepCopy, forwardMouseEvents} from "../../utils/objectUtils";
 import { useNodeDragDrop } from "./hook/useNodeDragDrop";
 import {NodeAnimationManager} from "./manager/nodeAnimation";
 import {useNodeResize} from "./hook/useNodeResize";
 import {useNodeSelector} from "./hook/useNodeSelector";
+import {HtmlRender} from "../../process/html/HtmlRender";
 
 interface SchemaNodeInfo {
     node: Node<any>;
     element: HTMLElement;
+    htmlRenderContext: htmlRenderContext
+}
+
+export interface triggerNodeUpdateOption {
+    reRenderNodeConfig?:boolean
 }
 
 export const SchemaDisplay = memo(() => {
@@ -230,6 +236,11 @@ export const SchemaDisplay = memo(() => {
         if(schema) {
             schema.element.remove();
 
+            const htmlRenders = projectRef.current.state.getHtmlRenderOfNode(node._key);
+            for(const htmlRender of htmlRenders) {
+                projectRef.current.state.removeHtmlRender(htmlRender.nodeId, htmlRender.renderId);
+            }
+
             inSchemaNode.current.delete(node._key);
         }
     }
@@ -277,7 +288,7 @@ export const SchemaDisplay = memo(() => {
             internalNodeUpdate(node._key);
         });
 
-        if(projectRef.current.state.selectedNode.includes(node._key) ) {
+        if(projectRef.current.state.selectedNode.includes(node._key)) {
             nodeHTML.classList.add(selectedNodeClass);
         }
 
@@ -293,11 +304,35 @@ export const SchemaDisplay = memo(() => {
         const dragHandler = createDragHandler(node._key, nodeHTML);
         nodeHTML.addEventListener("mousedown", dragHandler);
 
+        const htmlRender = new HtmlRender(nodeHTML, {
+            language: "en",
+            buildingMode: false,
+            workflowMode: true,
+        });
+
+        const context = projectRef.current.state.initiateNewHtmlRender({
+            nodeId: node._key,
+            htmlRender:htmlRender,
+            renderId: "",
+            retrieveNode: () => getNode(node._key),
+            retrieveHtmlObject: (node) => projectRef.current.state.nodeTypeConfig[node.type].content
+        })!;
+
+        console.log("create context", context);
+
+        htmlRender.render(nodeConfig.content);
 
         inSchemaNode.current.set(node._key, {
             node: node,
-            element: nodeHTML
+            element: nodeHTML,
+            htmlRenderContext: context
         });
+
+        if(projectRef.current.state.editedNodeConfig && node._key === "0") {
+            nodeHTML.addEventListener("dblclick", () => {
+                projectRef.current.state.openHtmlEditor!(context, ["content"]);
+            });
+        }
 
         nodeDisplayContainer.current!.appendChild(nodeHTML);
         forwardMouseEvents(nodeHTML, projectRef.current.state.getMotor().getContainerDraw());
@@ -347,6 +382,7 @@ export const SchemaDisplay = memo(() => {
 
         const handleCanvasClickEmpty = () => {
 
+
         };
 
         motor.on("pan", handlePan);
@@ -363,7 +399,7 @@ export const SchemaDisplay = memo(() => {
     }, [projectRef.current.state.getMotor]);
 
 
-    const internalNodeUpdate = (nodeId:string) => {
+    const internalNodeUpdate = async  (nodeId:string, options?:triggerNodeUpdateOption) => {
         const node = getNode(nodeId)as (Node<any> & {
             toPosX?: number;
             toPosY?: number;
@@ -372,8 +408,18 @@ export const SchemaDisplay = memo(() => {
                 toHeight?: number;
             }
         }) | undefined
+
         if(!node) return;
 
+        const schema = inSchemaNode.current.get(nodeId);
+        if(!schema) return;
+
+        const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
+        if(!nodeConfig) return;
+
+        if(options?.reRenderNodeConfig) {
+            await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
+        }
 
         updateNodePosition(nodeId);
 
@@ -394,8 +440,6 @@ export const SchemaDisplay = memo(() => {
             );
         }
 
-        const schema = inSchemaNode.current.get(nodeId);
-        if(!schema) return;
 
         if(!projectRef.current.state.selectedNode.includes(nodeId)  && schema.element.classList.contains(selectedNodeClass)) {
             schema.element.classList.remove(selectedNodeClass);
@@ -406,9 +450,10 @@ export const SchemaDisplay = memo(() => {
 
 
 
+
     useEffect(() => {
-        const triggerNodeUpdate = (nodeId: string) => {
-            internalNodeUpdate(nodeId);
+        const triggerNodeUpdate = async (nodeId: string, options?:triggerNodeUpdateOption) => {
+            await internalNodeUpdate(nodeId, options);
         };
 
         (window as any).triggerNodeUpdate = triggerNodeUpdate;

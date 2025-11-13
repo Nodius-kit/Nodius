@@ -32,6 +32,9 @@ import {LeftPanelMenu} from "./menu/LeftPanelMenu";
 import {LeftPanelTypeEditor} from "./menu/LeftPanelTypeEditor";
 import {LeftPanelEnumEditor} from "./menu/LeftPanelEnumEditor";
 import {ResizeBar} from "../../component/animate/ResizeBar";
+import {CodeEditorModal} from "../../component/code/CodeEditorModal";
+import {LeftPanelComponentEditor} from "./menu/LeftPanelComponentEditor";
+import {LeftPaneComponentTree} from "./menu/LeftPanelComponentTree";
 
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
@@ -144,6 +147,20 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
         }
     }
 
+    // Track previous editing state to auto-open component panel when workflow is opened
+    const noEditingPrevious = useRef<boolean>(true);
+    useEffect(() => {
+        // Auto-open component editor when a workflow is opened
+        if(noEditingPrevious.current && Project.state.editedHtml) {
+            noEditingPrevious.current = false;
+            setEditingPanel("component");
+        } else if(!noEditingPrevious.current && !Project.state.editedHtml) {
+            // Close panel when workflow is closed
+            noEditingPrevious.current = true;
+            setEditingPanel("");
+        }
+    }, [Project.state.editedHtml]);
+
 
     // Map editing panel to MultiFade index for smooth transitions
     const activeFade = editingPanel === "component" ? 0 : (
@@ -174,14 +191,17 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                 display:"flex",
                 flexDirection:"row"
             }}>
+                <CodeEditorModal/>
                 <LeftPanelMenu setEditingPanel={setEditingPanel} editingPanel={editingPanel} setMenuWidth={setSubLeftMenuWidth} />
                 <div style={{flex:"1"}}>
                     <MultiFade active={activeFade} timeout={200}>
 
                         <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px"}}>
+                            <LeftPanelComponentEditor componentsList={componentsList} />
 
                         </div>
                         <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px",}}>
+                            <LeftPaneComponentTree componentsList={componentsList} />
 
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>

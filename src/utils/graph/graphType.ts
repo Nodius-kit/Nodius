@@ -151,7 +151,6 @@ export interface NodeTypeConfig {
     category: string,
     alwaysRendered: boolean,
     node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "typeVersion">,
-    domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap | (typeof HTMLWorkflowEvent[number])>>,
     border: NodeTypeConfigBorder,
     lastUpdatedTime: number,
     createdTime: number,
@@ -242,7 +241,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         },
         data: undefined
     },
-    domEvents: [
+    /*domEvents: [
         {
             name: "dblclick",
             call: `
@@ -288,7 +287,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
             `
         }
 
-    ],
+    ],*/
     border: {
         radius:0,
         width:1,
@@ -364,9 +363,6 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
             _key: undefined
         }
     },
-    domEvents: [
-
-    ],
     border: {
         radius:10,
         width:1,

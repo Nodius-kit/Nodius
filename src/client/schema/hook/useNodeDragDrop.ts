@@ -45,6 +45,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
             if(evt.button !== 0) return;
 
+
             const elements = document.elementsFromPoint(evt.clientX, evt.clientY);
             if(elements.length > 0 && (
                 elements[0].tagName.toLowerCase() === "input" ||
@@ -60,6 +61,9 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
             const currentNode = getNode(nodeKey);
             if (!currentNode) return;
 
+            if(projectRef.current.state.disabledNodeInteraction[currentNode._key]?.moving) {
+                return;
+            }
 
             if (!projectRef.current.state.getMotor().isInteractive()) {
                 return;

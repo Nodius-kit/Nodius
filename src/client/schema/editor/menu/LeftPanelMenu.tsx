@@ -23,8 +23,9 @@ import {editingPanel} from "../SchemaEditor";
 import {BetweenHorizontalStart, Binary, Cable, Code, CopyPlus, Frame, List, Boxes} from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
-import {TextChangeInfo} from "../../../../utils/objectUtils";
+import {EditedCodeContext, ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
+import {GraphInstructions} from "../../../../utils/sync/wsObject";
 
 interface LeftPaneMenuProps {
     setEditingPanel: (value:editingPanel) => void,
@@ -64,6 +65,7 @@ export const LeftPanelMenu = memo((
     const border = "2px solid var(--nodius-background-paper)";
 
     const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
 
     useEffect(() => {
         if(setMenuWidth) {
@@ -96,12 +98,64 @@ export const LeftPanelMenu = memo((
             name: "Build",
             actions: [
                 {
+                    icon: <Code  width={iconSize} height={iconSize} />,
+                    onClick: () => {
+                        if(projectRef.current.state.editedCode.some((ed) => ed.nodeId === "0")) {
+                            Project.dispatch({
+                                field: "editedCode",
+                                value: projectRef.current.state.editedCode.filter((e) => e.nodeId !== "0")
+                            });
+                        } else {
+                            const nodeConfig = projectRef.current.state.nodeTypeConfig[projectRef.current.state.editedNodeConfig ?? ""];
+                            if(!nodeConfig) return;
+                            Project.dispatch({
+                                field: "editedCode",
+                                value: [
+                                    ...projectRef.current.state.editedCode,
+                                    {
+                                        nodeId: "0",
+                                        title: `Node ${nodeConfig.displayName} Logic`,
+                                        onChange: async (instructions) => {
+                                            if(Array.isArray(instructions)) {
+                                                for(const instruction of instructions) {
+                                                    instruction.p = ["process", ...instruction.p ?? []];
+                                                }
+                                                const instructionToGraph: Array<GraphInstructions> = instructions.map((i) => (
+                                                    {
+                                                        nodeId: "0",
+                                                        i: i
+                                                    }
+                                                ));
+                                                const output = await projectRef.current.state.updateGraph!(instructionToGraph);
+                                                return output.status;
+                                            } else {
+                                                instructions.p = ["process", ...instructions.p ?? []];
+                                                const output = await projectRef.current.state.updateGraph!([
+                                                    {
+                                                        i: instructions,
+                                                        nodeId: "0"
+                                                    }
+                                                ]);
+                                                return output.status;
+                                            }
+                                        },
+                                        retrieveText: (node) => node.process
+                                    } as EditedCodeContext
+                                ]
+                            });
+                        }
+                    },
+                    selected: Project.state.editedNodeConfig != undefined && Project.state.editedCode.some((ed) => ed.nodeId === "0"),
+                    disabled: !Project.state.editedNodeConfig || !(Project.state.selectedNode.length === 1 && Project.state.selectedNode[0] === "0"),
+                    hided: !Project.state.editedNodeConfig
+                },
+                {
                     icon: <CopyPlus  width={iconSize} height={iconSize} />,
                     onClick: () => {
                         setEditingPanel(editingPanel === "component" ? "" : "component");
                     },
                     selected: editingPanel === "component",
-                    disabled: true
+                    disabled: Project.state.editedHtml === undefined
                 },
                 {
                     icon: <BetweenHorizontalStart  width={iconSize} height={iconSize} />,
@@ -109,7 +163,7 @@ export const LeftPanelMenu = memo((
                         setEditingPanel(editingPanel === "hierarchy" ? "" : "hierarchy");
                     },
                     selected: editingPanel === "hierarchy",
-                    disabled: true
+                    disabled: Project.state.editedHtml === undefined
                 }
             ]
         },
@@ -155,7 +209,7 @@ export const LeftPanelMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize,  Project.state.selectedNode]);
+    ], [setEditingPanel, editingPanel, iconSize,  Project.state.selectedNode, Project.state.editedCode, Project.state.editedNodeConfig, Project.state.editedHtml]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

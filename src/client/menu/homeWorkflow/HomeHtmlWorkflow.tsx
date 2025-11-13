@@ -178,6 +178,10 @@ export const HomeHtmlWorkflow = memo(({
             gap: 8px;
             margin-top: 8px;
         }
+        
+        & .card-actions > * {
+            flex:1;
+        }
 
     `);
 
@@ -388,13 +392,17 @@ export const HomeHtmlWorkflow = memo(({
                             </div>
                             <div className="card-actions">
                                 <Button
+                                    size={"small"}
                                     onClick={() => handleOpenHtmlClass(item.html, item.graph)}
+                                    fullWidth
                                 >
                                     <Edit3 height={14} width={14}/>
                                     Edit
                                 </Button>
                                 <Button
+                                    size={"small"}
                                     onClick={() => handleDeleteHtmlClass(item.html._key)} color={"error"}
+                                    fullWidth
                                 >
                                     <Trash2 height={14} width={14}/>
                                     Delete

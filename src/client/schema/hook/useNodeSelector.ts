@@ -144,6 +144,10 @@ export const useNodeSelector = () => {
                         value: []
                     });
                     projectRef.current.state.getMotor().setSelectedEdges([]);
+
+                    if(projectRef.current.state.editedHtml) {
+                        projectRef.current.state.editedHtml.htmlRenderContext.htmlRender.getSelectedObject()
+                    }
                 } else {
                     selectingState.current.rect.remove();
                 }

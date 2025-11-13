@@ -8,7 +8,7 @@ import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {api_category_list} from "../../../utils/requests/type/api_workflow.type";
 import toast from "react-hot-toast";
 import {HomeHtmlWorkflow} from "./HomeHtmlWorkflow";
-import {DashboardNodeConfigurations} from "./DashboardNodeConfigurations";
+import {HomeNodeConfigurations} from "./HomeNodeConfigurations";
 
 export interface HtmlClassWithGraph {
     html: HtmlClass;
@@ -272,7 +272,7 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                 />
 
                 {/* Node Configurations Section */}
-                <DashboardNodeConfigurations
+                <HomeNodeConfigurations
                     nodeConfigs={nodeConfigs}
                     selectedCategory={selectedCategoryNodeConfig}
                     categories={categoriesNodeConfig}

@@ -25,6 +25,7 @@ import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
 import {CategoryManager, CategoryData} from "./CategoryManager";
 import {Input} from "../../component/form/Input";
+import {Button} from "../../component/form/Button";
 
 interface DashboardNodeConfigurationsProps {
     nodeConfigs: NodeTypeConfig[];
@@ -34,7 +35,7 @@ interface DashboardNodeConfigurationsProps {
     onCategoryChange: (category: string | null) => void;
 }
 
-export const DashboardNodeConfigurations = memo(({
+export const HomeNodeConfigurations = memo(({
                                                      nodeConfigs,
                                                      selectedCategory,
                                                      categories,
@@ -175,37 +176,8 @@ export const DashboardNodeConfigurations = memo(({
             margin-top: 8px;
         }
 
-        & .card-actions button {
-            flex: 1;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: var(--nodius-transition-default);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-
-        & .btn-edit {
-            background-color: var(--nodius-primary-main);
-            color: white;
-        }
-
-        & .btn-edit:hover {
-            background-color: ${Theme.state.changeBrightness(Theme.state.primary[Theme.state.theme].main, 0.15, "positive")};
-        }
-
-        & .btn-delete {
-            background-color: var(--nodius-error-main);
-            color: white;
-        }
-
-        & .btn-delete:hover {
-            background-color: ${Theme.state.changeBrightness(Theme.state.error[Theme.state.theme].main, 0.15, "positive")};
+        & .card-actions > * {
+            flex:1;
         }
     `);
 
@@ -285,7 +257,6 @@ export const DashboardNodeConfigurations = memo(({
             displayName: displayName,
             category: selectedCategory || "default",
             alwaysRendered: false,
-            domEvents: [],
             content: {
                 type: "block",
                 name: "Container",
@@ -360,12 +331,12 @@ export const DashboardNodeConfigurations = memo(({
      * Delegates to ProjectContext.openNodeConfig for actual opening logic
      */
     const handleOpenNodeConfig = useCallback(async (nodeConfig: NodeTypeConfig) => {
-        /*if (!Project.state.openNodeConfig) return;
+        if (!Project.state.openNodeConfig) return;
         const action = await Project.state.openNodeConfig(nodeConfig);
         if (!action.status) {
             console.error("Failed to open node config:", action.reason);
-        }*/
-    }, []);
+        }
+    }, [Project.state.openNodeConfig]);
 
     /**
      * Deletes a node configuration with confirmation
@@ -413,46 +384,19 @@ export const DashboardNodeConfigurations = memo(({
                     <p>Manage your custom node types</p>
                 </div>
                 <div className="header-actions">
-                    <button
+                    <Button
                         onClick={() => setShowCategoryManager(!showCategoryManager)}
-                        style={{
-                            background: "var(--nodius-info-main)",
-                            color: "white",
-                            padding: "8px 16px",
-                            borderRadius: "6px",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "13px",
-                            fontWeight: "500",
-                            transition: "var(--nodius-transition-default)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px"
-                        }}
                     >
                         <FolderPlus height={16} width={16}/>
                         Categories
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={handleCreateNodeConfig}
-                        style={{
-                            background: "var(--nodius-primary-main)",
-                            color: "white",
-                            padding: "8px 16px",
-                            borderRadius: "6px",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "13px",
-                            fontWeight: "500",
-                            transition: "var(--nodius-transition-default)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px"
-                        }}
+
                     >
                         <Plus height={16} width={16}/>
                         Create
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -507,20 +451,22 @@ export const DashboardNodeConfigurations = memo(({
                                 </p>
                             )}
                             <div className="card-actions">
-                                <button
-                                    className="btn-edit"
+                                <Button
+                                    fullWidth
+                                    size={"small"}
                                     onClick={() => handleOpenNodeConfig(nodeConfig)}
                                 >
                                     <Edit3 height={14} width={14}/>
                                     Edit
-                                </button>
-                                <button
-                                    className="btn-delete"
-                                    onClick={() => handleDeleteNodeConfig(nodeConfig._key)}
+                                </Button>
+                                <Button
+                                    fullWidth
+                                    size={"small"}
+                                    onClick={() => handleDeleteNodeConfig(nodeConfig._key)} color={"error"}
                                 >
                                     <Trash2 height={14} width={14}/>
                                     Delete
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     ))}
@@ -534,14 +480,14 @@ export const DashboardNodeConfigurations = memo(({
                             ? "No node configurations match your current filters. Try adjusting your search or category filter."
                             : "Create your first node configuration to define custom node types for your workflows."}
                     </div>
-                    <button onClick={handleCreateNodeConfig}>
+                    <Button onClick={handleCreateNodeConfig}>
                         <Plus height={16} width={16}/>
                         Create Node Configuration
-                    </button>
+                    </Button>
                 </div>
             )}
         </div>
     );
 });
 
-DashboardNodeConfigurations.displayName = "DashboardNodeConfigurations";
+HomeNodeConfigurations.displayName = "HomeNodeConfigurations";

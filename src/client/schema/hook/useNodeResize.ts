@@ -35,6 +35,8 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
     const projectRef = useStableProjectRef();
 
+
+
     const sizeAnimationDelay = config.sizeAnimationDelay ?? 200;
     const minWidth = config.minWidth ?? 50;
     const minHeight = config.minHeight ?? 50;
@@ -64,6 +66,28 @@ export function useNodeResize(options: UseNodeResizeOptions) {
             let animationFrame: number | undefined;
             let saveInProgress = false;
             let pendingSave: { node: Node<any>, oldWidth: number, oldHeight: number } | null = null;
+
+
+            const sizeDisplayContainer = document.createElement("div");
+            sizeDisplayContainer.style.position = "absolute";
+            sizeDisplayContainer.style.width = "100%";
+            sizeDisplayContainer.style.bottom = "-50px";
+            sizeDisplayContainer.style.left = "0";
+            sizeDisplayContainer.style.display = "flex";
+            sizeDisplayContainer.style.alignItems = "center";
+            sizeDisplayContainer.style.justifyContent = "center";
+            sizeDisplayContainer.style.opacity = "0.8";
+
+            const sizeDisplay = document.createElement("div");
+            sizeDisplay.style.border = "1px solid var(--nodius-grey-500)";
+            sizeDisplay.style.borderRadius = "6px";
+            sizeDisplay.style.fontSize = "16px";
+            sizeDisplay.style.backgroundColor = "var(--nodius-background-default)";
+            sizeDisplay.style.padding = "5px 12px";
+            sizeDisplay.innerText = Math.round(currentNode.size.width)+"x"+Math.round(currentNode.size.height);
+
+            sizeDisplayContainer.appendChild(sizeDisplay);
+            element.appendChild(sizeDisplayContainer);
 
             projectRef.current.state.getMotor().enableInteractive(false);
             disableTextSelection();
@@ -152,6 +176,8 @@ export function useNodeResize(options: UseNodeResizeOptions) {
 
                     (window as any).triggerNodeUpdate(currentNode._key);
 
+                    sizeDisplay.innerText = Math.round(currentNode.size.width)+"x"+Math.round(currentNode.size.height);
+
                     // Only schedule save if there's no save in progress
                     if (!saveInProgress && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {
                         const now = Date.now();
@@ -181,8 +207,11 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                 projectRef.current.state.getMotor().enableInteractive(true);
                 enableTextSelection();
 
+                sizeDisplayContainer.remove();
+
                 const currentNode = getNode(nodeKey);
-                if (currentNode && (currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {
+                if(!currentNode) return;
+                if ((currentNode.size.width !== lastSavedWidth || currentNode.size.height !== lastSavedHeight)) {
                     // Final save on mouse up - if there's already a save in progress, queue it
                     if (saveInProgress) {
                         pendingSave = { node: currentNode, oldWidth: currentNode.size.width, oldHeight: currentNode.size.height };
@@ -190,6 +219,18 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         saveNodeSize(currentNode);
                     }
                 }
+
+
+                const padding = 500;
+                projectRef.current.state.getMotor().lockCameraToArea({
+                    minX: currentNode.posX - padding,
+                    minY: currentNode.posY - padding,
+                    maxX: currentNode.posX + currentNode.size.width + padding,
+                    maxY: currentNode.posY + currentNode.size.height + padding,
+                });
+                projectRef.current.state.getMotor().smoothFitToNode(currentNode._key, {
+                    padding: padding
+                });
             };
 
             window.addEventListener("mouseup", mouseUp);

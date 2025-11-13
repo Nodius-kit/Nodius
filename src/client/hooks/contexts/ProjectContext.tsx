@@ -19,13 +19,15 @@
  * - Unique ID generation for graph elements
  * - WebSocket message catch-up for reconnection scenarios
  */
-import {createContext, Dispatch, JSX, MemoExoticComponent} from "react";
+import {createContext, Dispatch, JSX, MemoExoticComponent, useCallback} from "react";
 import {ActionType} from "../useCreateReducer";
 import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
 import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
-import {GraphInstructions, WSMessage} from "../../../utils/sync/wsObject";
-import {HtmlClass} from "../../../utils/html/htmlType";
+import {GraphInstructions, nodeConfigInstructions, WSMessage} from "../../../utils/sync/wsObject";
+import {HtmlClass, HtmlObject} from "../../../utils/html/htmlType";
 import {
+    Edge,
+    Node,
     Graph,
     NodeType,
     NodeTypeConfig,
@@ -33,6 +35,8 @@ import {
     NodeTypeHtmlConfig
 } from "../../../utils/graph/graphType";
 import {DataTypeClass, EnumClass} from "../../../utils/dataType/dataType";
+import {Instruction} from "../../../utils/sync/InstructionBuilder";
+import {HtmlRender} from "../../../process/html/HtmlRender";
 
 export interface ActionContext {
     timeTaken: number;
@@ -51,7 +55,32 @@ export interface AppMenu {
     id:string
 }
 
+export type DisabledNodeInteractionType = Record<string, Partial<{
+    moving: boolean,
+}>>;
+
 export interface AppMenuProps {
+}
+
+export interface EditedCodeContext {
+    title: string;
+    nodeId: string,
+    onChange: (instruction:Instruction|Instruction[]) => Promise<boolean>;
+    retrieveText: (node:Node<any>) => string;
+    onOutsideChange?: () => void;
+}
+
+export interface htmlRenderContext {
+    nodeId: string,
+    renderId: string,
+    retrieveNode: () => (Node<any>|undefined),
+    retrieveHtmlObject: (node:Node<any>) => HtmlObject,
+    htmlRender: HtmlRender,
+}
+
+export interface EditedHtmlType {
+    htmlRenderContext: htmlRenderContext,
+    updateHtmlObject: (graphInstructions:GraphInstructions[]) => Promise<ActionContext>,
 }
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
@@ -63,17 +92,43 @@ export interface ProjectContextType {
     appMenu:Array<AppMenu>,
     getMotor: () => GraphicalMotor,
     caughtUpMessage?: WSMessage<any>[],
+
+    initiateNewHtmlRender: (context:htmlRenderContext) => htmlRenderContext|undefined,
+    getHtmlRenderWithId: (nodeId:string, renderId:string) => htmlRenderContext|undefined,
+    getHtmlRenderOfNode: (nodeId:string) => htmlRenderContext[],
+    getAllHtmlRender: () => htmlRenderContext[],
+    removeHtmlRender: (nodeId:string, renderId:string) => void,
+
+    editedHtml?: EditedHtmlType,
+    openHtmlEditor?: (context: htmlRenderContext, pathOfEdit:string[]) => Promise<EditedHtmlType>,
+    closeHtmlEditor?: () => Promise<void>,
+
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
+    openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
+
     selectedSheetId?:string,
     graph?:Graph,
     nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     updateGraph?:(instructions:Array<GraphInstructions>) => Promise<ActionContext>,
+    updateNodeConfig?:(instructions:Array<nodeConfigInstructions>) => Promise<ActionContext>,
 
     dataTypes?: DataTypeClass[],
     refreshAvailableDataTypes?:() => Promise<void>,
 
+    editedNodeConfig?: string,
+
+    generateUniqueId?:(amount:number) => Promise<string[]|undefined>,
+
+    editedCode: Array<EditedCodeContext>,
+
     enumTypes?:EnumClass[],
     refreshAvailableEnums?:() => Promise<void>,
+
+    batchCreateElements?:(nodes: Node<any>[], edges: Edge[]) => Promise<ActionContext>,
+    batchDeleteElements?:(nodeKeys: string[], edgeKeys: string[]) => Promise<ActionContext>,
+
+
+    disabledNodeInteraction: DisabledNodeInteractionType,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],
@@ -85,4 +140,14 @@ export const ProjectContextDefaultValue: ProjectContextType = {
         "html": NodeTypeHtmlConfig,
         "entryType": NodeTypeEntryTypeConfig
     },
+
+    initiateNewHtmlRender: (context:htmlRenderContext) => undefined!,
+    getHtmlRenderWithId: (nodeId:string, renderId:string) => undefined!,
+    getHtmlRenderOfNode: (nodeId:string) => undefined!,
+    getAllHtmlRender: () => undefined!,
+    removeHtmlRender: (nodeId:string, renderId:string) => undefined!,
+
+    disabledNodeInteraction: {},
+
+    editedCode: []
 }
