@@ -593,7 +593,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
         return container;
     }, [connectionPointClass])
 
-    const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement) => {
+    const updateHandleOverlay = useCallback((based_node:string|Node<any>, overlayHtml:HTMLElement, selectedPointId?:string) => {
 
         const node = typeof based_node === "string" ?getNode(based_node) : based_node;
         if(!node) return;
@@ -653,14 +653,13 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
 
             // Add new handles
             const existingIds = new Set(overlay.side[side]!.map(h => h.id));
-            console.log(handleGroup);
+
             const newHandles = handleGroup.point
                 .filter(p => !existingIds.has(p.id))
                 .map(point => {
 
                     const handleEl = document.createElement("div");
                     handleEl.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
-                        console.log( projectRef.current.state.editedNodeConfig);
                     const moveableContainer = projectRef.current.state.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
                     // Create text element for accept string
@@ -691,6 +690,13 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                 // Update text content if it changed
                 if(point.textElement) {
                     point.textElement.textContent = handleInfo.point.display ? (handleInfo.point.display+(handleInfo.point.accept ? " ("+handleInfo.point.accept+")":"")) : (handleInfo.point.accept || "");
+                }
+
+                point.element.style.transition = "scale 0.3s ease-in-out";
+                if(selectedPointId && selectedPointId === point.id) {
+                    point.element.style.scale = "1.4";
+                } else {
+                    point.element.style.scale = "1";
                 }
 
                 if (handleInfo.point.type === "out") {

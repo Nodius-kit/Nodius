@@ -89,6 +89,7 @@ export class HtmlRender {
     /* ------------- */
 
 
+
     constructor(container: HTMLElement, option?: HtmlRenderOption) {
         if (!container) {
             throw new Error("HtmlRender: Container is null");

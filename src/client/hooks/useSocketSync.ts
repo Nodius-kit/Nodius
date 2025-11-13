@@ -89,7 +89,7 @@ export const useSocketSync = () => {
     const initiateNewHtmlRender = (context:htmlRenderContext):htmlRenderContext|undefined => {
         const contexts  = htmlRender.current.get(context.nodeId) ?? [];
         if(contexts.some((c) => c.renderId === context.renderId)) {
-            return undefined;
+            return contexts.find((c) => c.renderId === context.renderId);
         }
         contexts.push(context);
         htmlRender.current.set(context.nodeId, contexts);

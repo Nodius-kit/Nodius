@@ -1,5 +1,5 @@
 import {memo, useCallback, useContext, useEffect, useRef} from "react";
-import {htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
+import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
 import {Edge, Node} from "../../utils/graph/graphType";
 import {MotorScene} from "./motor/graphicalMotor";
@@ -254,6 +254,12 @@ export const SchemaDisplay = memo(() => {
         if(projectRef.current.state.editedHtml && projectRef.current.state.editedHtml.htmlRenderContext.nodeId === node._key) {
             projectRef.current.state.closeHtmlEditor!();
         }
+        if(projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === node._key) {
+            projectRef.current.dispatch({
+                field: "editedNodeHandle",
+                value: undefined
+            });
+        }
     }
 
     const onNodeEnter = (node:Node<any>) => {
@@ -329,7 +335,6 @@ export const SchemaDisplay = memo(() => {
             retrieveHtmlObject: (node) => projectRef.current.state.nodeTypeConfig[node.type].content
         })!;
 
-        console.log("create context", context);
 
         htmlRender.render(nodeConfig.content);
 
@@ -432,7 +437,7 @@ export const SchemaDisplay = memo(() => {
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
         }
 
-
+        const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
 
         if (
             (node.toPosX !== undefined && node.toPosX !== node.posX) ||
@@ -446,12 +451,12 @@ export const SchemaDisplay = memo(() => {
                 () => {
                     projectRef.current.state.getMotor().requestRedraw();
                     updateNodePosition(nodeId);
-                    updateHandleOverlay(node, schema.element);
+                    updateHandleOverlay(node, schema.element, handleSelectedPointId);
                 }
             );
         } else {
             updateNodePosition(nodeId);
-            updateHandleOverlay(node, schema.element);
+            updateHandleOverlay(node, schema.element, handleSelectedPointId);
         }
 
 
@@ -494,6 +499,36 @@ export const SchemaDisplay = memo(() => {
             updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
         }
     }, [Project.state.editedNodeConfig]);
+
+
+    const previousEditedNodeHandle = useRef<EditedNodeHandle>(undefined);
+    useEffect(() => {
+        if(previousEditedNodeHandle.current) {
+            const schema = inSchemaNode.current.get(previousEditedNodeHandle.current.nodeId);
+            if(schema) {
+                updateHandleOverlay(getNode(schema.node._key)!, schema.element);
+            }
+        }
+        if(Project.state.editedNodeHandle) {
+            if(Project.state.editedHtml) {
+                Project.state.closeHtmlEditor!();
+            }
+            const schema = inSchemaNode.current.get(Project.state.editedNodeHandle.nodeId);
+            if(schema) {
+                updateHandleOverlay(getNode(schema.node._key)!, schema.element, Project.state.editedNodeHandle.pointId);
+            }
+        }
+        previousEditedNodeHandle.current = deepCopy(Project.state.editedNodeHandle);
+    }, [Project.state.editedNodeHandle]);
+
+    useEffect(() => {
+        if(Project.state.editedHtml && Project.state.editedNodeHandle) {
+            Project.dispatch({
+                field: "editedNodeHandle",
+                value: undefined
+            });
+        }
+    }, [Project.state.editedHtml]);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', position:"absolute", inset:"0", pointerEvents:"none"}} >
