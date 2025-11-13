@@ -523,7 +523,7 @@ export const LeftPanelComponentEditor = memo(({
                                     </div>
                                 </div>
                                 <Collapse in={!hideCategory.includes(category)}>
-                                    <div style={{display:"flex", flexDirection:"row", gap:"12px", flexWrap:"wrap", paddingTop:"4px"}}>
+                                    <div style={{display:"flex", flexDirection:"row", gap:"12px", flexWrap:"wrap", paddingTop:"4px", paddingBottom: "4px"}}>
                                         {components.map((comp, i) => {
                                             const Icon = IconDict[comp.icon] as any;
 

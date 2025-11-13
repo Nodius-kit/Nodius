@@ -22,6 +22,7 @@ export interface RightPanelStyleEditorProps {
     onUpdateEvents: (eventsInstruction: Instruction | Instruction[]) => Promise<boolean>;
     onUpdateContent?: (contentInstruction: Instruction | Instruction[]) => Promise<boolean>;
     onUpdateTag: (tagInstruction: Instruction | Instruction[]) => Promise<boolean>;
+    onUpdateHtml?: (htmlInstruction: Instruction | Instruction[]) => Promise<boolean>;
     selectedIdentifier?: string
 }
 

@@ -198,6 +198,27 @@ export const RightPanelComponentEditor = memo(({
         return false;
     }, [currentEditables.content, Project.state.editedHtml]);
 
+    const updateHtml = useCallback(async (contentInstruction: Instruction[] | Instruction) => {
+        if(currentEditables.content) {
+            const output = await Project.state.editedHtml?.updateHtmlObject(
+                Array.isArray(contentInstruction) ? contentInstruction.map((i) => ({
+                    i: i,
+                    applyUniqIdentifier: "identifier",
+                    triggerHtmlRender: true,
+                })) : [
+                    {
+                        i: contentInstruction,
+                        applyUniqIdentifier: "identifier",
+                        triggerHtmlRender: true,
+                    }
+                ]
+
+            );
+            return output?.status ?? false;
+        }
+        return false;
+    }, [currentEditables.content, Project.state.editedHtml]);
+
     useEffect(() => {
         if(Project.state.editedHtml) {
             Project.state.editedHtml.htmlRenderContext.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
@@ -312,6 +333,7 @@ export const RightPanelComponentEditor = memo(({
                         onUpdateCss={updateCss}
                         onUpdateEvents={updateEvents}
                         onUpdateContent={updateContent}
+                        onUpdateHtml={updateHtml}
                         onUpdateTag={updateTag}
                         selectedIdentifier={selectedIdentifier}
                     />

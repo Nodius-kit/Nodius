@@ -9,6 +9,7 @@ export const useNodeSelector = () => {
     const selectorContainer = useRef<{eventContainer:HTMLElement, drawingContainer:HTMLElement}>(undefined);
     const selectingState = useRef<{isSelecting:boolean, startX: number, startY:number, endX:number, endY:number, rect?:HTMLElement}>({isSelecting:false, startX: 0, startY:0, endX:0, endY:0, rect:undefined})
 
+    const lastMouseUp = useRef<number>(0);
 
     const mouseDown = (e:MouseEvent) => {
         if(e.button !== 0) return;
@@ -148,6 +149,22 @@ export const useNodeSelector = () => {
                     if(projectRef.current.state.editedHtml) {
                         projectRef.current.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', undefined, true);
                     }
+
+                    if(projectRef.current.state.editedNodeHandle) {
+                        projectRef.current.dispatch({
+                            field: "editedNodeHandle",
+                            value: undefined
+                        });
+                    }
+
+                    if((Date.now() - lastMouseUp.current) < 200) {
+                        // double click
+                        if(projectRef.current.state.editedHtml) {
+                            projectRef.current.state.closeHtmlEditor!();
+                        }
+                    }
+
+                    lastMouseUp.current = Date.now();
                 } else {
                     selectingState.current.rect.remove();
                 }
