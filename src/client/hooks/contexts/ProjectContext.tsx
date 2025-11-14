@@ -142,6 +142,7 @@ export interface ProjectContextType {
     disabledNodeInteraction: DisabledNodeInteractionType,
 
     computeVisibility?: () => void,
+    fetchMissingNodeConfig?: (nodeType: string, workspace: string) => Promise<NodeTypeConfig | undefined>,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],

@@ -86,6 +86,86 @@ export const useSocketSync = () => {
 
     const htmlRender = useRef<Map<string, htmlRenderContext[]>>(new Map());
 
+    /* ---------------------------- MISSING NODE CONFIG QUEUE SYSTEM ------------------------- */
+    const fetchingNodeConfigs = useRef<Set<string>>(new Set());
+    const fetchNodeConfigAbortControllers = useRef<Map<string, AbortController>>(new Map());
+
+    const fetchMissingNodeConfig = useCallback(async (nodeType: string, workspace: string): Promise<NodeTypeConfig | undefined> => {
+        // Check if already fetching
+        if (fetchingNodeConfigs.current.has(nodeType)) {
+            return undefined;
+        }
+
+        // Check if already loaded
+        if (projectRef.current.state.nodeTypeConfig[nodeType]) {
+            return projectRef.current.state.nodeTypeConfig[nodeType];
+        }
+
+        // Mark as fetching
+        fetchingNodeConfigs.current.add(nodeType);
+
+        // Cancel any previous request for this node type
+        const existingController = fetchNodeConfigAbortControllers.current.get(nodeType);
+        if (existingController) {
+            existingController.abort();
+        }
+
+        // Create new abort controller
+        const abortController = new AbortController();
+        fetchNodeConfigAbortControllers.current.set(nodeType, abortController);
+
+        try {
+            const response = await fetch('/api/nodeconfig/get', {
+                method: "POST",
+                signal: abortController.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: workspace,
+                    _key: nodeType
+                } as api_node_config_get),
+            });
+
+            if (response.status === 200) {
+                const nodeConfig = await response.json() as NodeTypeConfig;
+                if (nodeConfig) {
+                    // Store in state
+                    projectRef.current.state.nodeTypeConfig[nodeConfig._key] = nodeConfig;
+                    Project.dispatch({
+                        field: "nodeTypeConfig",
+                        value: { ...projectRef.current.state.nodeTypeConfig }
+                    });
+
+                    // Trigger visibility recompute to render nodes that were waiting for this config
+                    projectRef.current.state.computeVisibility?.();
+
+                    return nodeConfig;
+                }
+            } else {
+                console.warn(`Failed to fetch node config for type "${nodeType}": HTTP ${response.status}`);
+            }
+        } catch (error) {
+            if ((error as Error).name !== 'AbortError') {
+                console.error(`Error fetching node config for type "${nodeType}":`, error);
+            }
+        } finally {
+            // Remove from fetching set
+            fetchingNodeConfigs.current.delete(nodeType);
+            fetchNodeConfigAbortControllers.current.delete(nodeType);
+        }
+
+        return undefined;
+    }, []);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "fetchMissingNodeConfig",
+            value: fetchMissingNodeConfig
+        });
+    }, [fetchMissingNodeConfig]);
+    /* ----------------------------------------------------------------------------------------------------------- */
+
     const initiateNewHtmlRender = (context:htmlRenderContext):htmlRenderContext|undefined => {
         const contexts  = htmlRender.current.get(context.nodeId) ?? [];
         if(contexts.some((c) => c.renderId === context.renderId)) {

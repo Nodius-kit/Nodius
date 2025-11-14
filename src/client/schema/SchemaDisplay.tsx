@@ -151,6 +151,14 @@ export const SchemaDisplay = memo(() => {
 
         for (const [id, node] of graph.nodeMap.entries()) {
             const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
+
+            // If nodeConfig is missing, fetch it and skip this node for now
+            if (!nodeConfig) {
+                console.warn(`Node type "${node.type}" config not present, fetching...`);
+                projectRef.current.state.fetchMissingNodeConfig?.(node.type, projectRef.current.state.graph?.workspace ?? "root");
+                continue;
+            }
+
             if(nodeConfig.alwaysRendered) {
                 visibleNodes.current.add(node);
                 visibleNodeId.add(id);
