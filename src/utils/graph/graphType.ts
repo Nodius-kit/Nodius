@@ -183,7 +183,48 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 content: "",
                 name: "html render",
                 tag: "div",
-                domEvents: [],
+                domEvents: [
+                    {
+                        name: "dblclick",
+                        call: `
+                            const render_id = "main";
+                            const context = getHtmlRenderWithId(nodeId, render_id);
+                            if(!context) return; 
+                            
+                            gpuMotor.smoothFitToNode(nodeId, {
+                                padding: 500
+                            });
+                            openHtmlEditor(context, ["data"]);
+                            
+                        `,
+                        description: "Open HTML Editor for the current node"
+                    },
+                    {
+                        name: "nodeEnter",
+                        call: `
+                            // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
+                            const render_id = "main"; // unique render id in the node
+                            if(getHtmlRenderWithId(nodeId, render_id)) return; // avoid dupling
+         
+                            const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute
+                            
+                            const htmlRender = new HtmlRender(renderContainer, {
+                                language: "en",
+                                buildingMode: false,
+                                workflowMode: true,
+                            });
+                            
+                            const context = initiateNewHtmlRender({
+                                nodeId: nodeId, 
+                                htmlRender: htmlRender,
+                                renderId: render_id,
+                                retrieveNode: () => getNode(nodeId),
+                                retrieveHtmlObject: (node) => node.data
+                            });
+                            htmlRender.render(getNode(nodeId).data);
+                        `
+                    }
+                ],
                 attribute: {
                     mainRender: "",
                 },
@@ -241,53 +282,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
         },
         data: undefined
     },
-    /*domEvents: [
-        {
-            name: "dblclick",
-            call: `
-            
-                const render_id = "main";
-                const htmlRenderer = getHtmlRenderer(node)?.[render_id];
-                if(!htmlRenderer) return; 
-                
-                gpuMotor.smoothFitToNode(node._key, {
-                    padding: 500
-                });
-                
-                
-                openHtmlEditor(node._key, htmlRenderer, () => {
-                    // on close
-                    container.style.cursor = "cursor";
-                    htmlRenderer.htmlMotor.setBuildingMode(false);
-                });
-                container.style.cursor = "initial";
-                
-                htmlRenderer.htmlMotor.setBuildingMode(true);
-                
-            `,
-            description: "Open HTML Editor for the current node"
-        },
-        {
-            name: "nodeEnter",
-            call: `
-                // because this node is "alwaysRendered", this event will be trigger and the htmlRenderer is still initialized, avoid dupling:
-                const render_id = "main"; // unique render id in the node
-                if(getHtmlRenderer(node)?.[render_id]) return; // avoid dupling
 
-                storage.workflowMode ??= false; // default init workflow mode as false, so the graph will not be interpreted
-
-                const pathOfRender = ["data"]; // path inside the node where is stored the html
-                const renderContainer = container.querySelector("[mainRender]"); // where render the html in the DOM, mainRender is set as custom attribute
-                const htmlRenderer = await initiateNewHtmlRenderer(node, render_id, renderContainer, pathOfRender, {
-                    workflowMode: storage.workflowMode
-                });
-
-                // To remove a renderer when done (e.g., on nodeLeave or cleanup):
-                // removeHtmlRenderer(node._key, render_id);
-            `
-        }
-
-    ],*/
     border: {
         radius:0,
         width:1,

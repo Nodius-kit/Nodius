@@ -14,7 +14,7 @@ export interface HtmlBase {
     id?: string; // user generated
     tag: string;
     css:CSSBlock[],
-    domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
+    domEvents: Array<HTMLDomEvent<keyof HTMLElementEventMap | typeof HTMLWorkflowEvent[number]>>,
     //workflowEvents: Array<HTMLWorkFlowEvent<HTMLWorkflowEventType>>,
     name:string,
     temporary?:boolean,

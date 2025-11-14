@@ -254,14 +254,10 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                     // Add click blocker in capture phase for all affected nodes
                     selectedNodeIds.forEach(id => {
-                        const nodeElement = document.querySelector(`[data-node-key="${id}"]`);
-                        const overlayElement = document.querySelector(`[data-node-overlay-key="${id}"]`);
+                        const nodeElement = document.querySelector(`[data-node-schema-element="${id}"]`);
 
                         if (nodeElement) {
                             nodeElement.addEventListener("click" as any, preventClick, { capture: true, once: true });
-                        }
-                        if (overlayElement) {
-                            overlayElement.addEventListener("click" as any, preventClick, { capture: true, once: true });
                         }
                     });
                 }

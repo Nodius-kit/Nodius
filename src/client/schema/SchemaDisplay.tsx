@@ -360,6 +360,11 @@ export const SchemaDisplay = memo(() => {
             retrieveHtmlObject: (node) => projectRef.current.state.nodeTypeConfig[node.type].content
         })!;
 
+        inSchemaNode.current.set(node._key, {
+            node: node,
+            element: nodeHTML,
+            htmlRenderContext: context
+        });
 
         htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
         htmlRender.render(nodeConfig.content).then(() => {
@@ -371,11 +376,6 @@ export const SchemaDisplay = memo(() => {
             }
         });
 
-        inSchemaNode.current.set(node._key, {
-            node: node,
-            element: nodeHTML,
-            htmlRenderContext: context
-        });
 
         if(projectRef.current.state.editedNodeConfig && node._key === "0") {
             nodeHTML.addEventListener("dblclick", () => {
@@ -392,6 +392,8 @@ export const SchemaDisplay = memo(() => {
     }
 
     const getExtraRenderVariable = (node:Node<any>) => {
+        const schema = inSchemaNode.current.get(node._key);
+        if(!schema) return {};
         return {
             getNode: getNode,
             nodeId: node._key,
@@ -409,7 +411,16 @@ export const SchemaDisplay = memo(() => {
                 }
                 return true;
             },
-            updateGraph: projectRef.current.state.updateGraph!
+            updateGraph: projectRef.current.state.updateGraph!,
+            gpuMotor: projectRef.current.state.getMotor(),
+            initiateNewHtmlRender: projectRef.current.state.initiateNewHtmlRender,
+            getHtmlRenderWithId: projectRef.current.state.getHtmlRenderWithId,
+            getHtmlRenderOfNode: projectRef.current.state.getHtmlRenderOfNode,
+            getAllHtmlRender: projectRef.current.state.getAllHtmlRender,
+            removeHtmlRender: projectRef.current.state.removeHtmlRender,
+            openHtmlEditor: projectRef.current.state.openHtmlEditor,
+            HtmlRender: HtmlRender,
+            container: schema.element
         }
     }
 
@@ -569,6 +580,9 @@ export const SchemaDisplay = memo(() => {
             // re render handle
             cleanupHandleOverlay(nodeSchema.node._key);
             updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
+
+            clearActionButton(nodeSchema.node._key);
+            createActionButton(nodeSchema);
         }
     }, [Project.state.editedNodeConfig]);
 

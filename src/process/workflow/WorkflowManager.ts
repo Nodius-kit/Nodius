@@ -1,7 +1,7 @@
-import {Edge, Node, NodeType, NodeTypeConfig} from "../../utils/graph/graphType";
-import {HtmlObject} from "../../utils/html/htmlType";
 import {Instruction} from "../../utils/sync/InstructionBuilder";
-import * as workflowExecutor from './workflowWorker';
+import {HtmlObject} from "../../utils/html/htmlType";
+import {Edge, Node, NodeType, NodeTypeConfig} from "../../utils/graph/graphType";
+import * as workflowExecutor from './WorkflowWorker';
 
 export interface WorkflowCallbacks {
     onData?: (nodeKey: string | undefined, data: any, timestamp: number) => void;
@@ -13,12 +13,13 @@ export interface WorkflowCallbacks {
     onDomEvent?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void;
 }
 
+
 export class WorkflowManager {
-
     private isExecuting: boolean = false;
-    private currentCallbacks: WorkflowCallbacks | null = null;
+    private currentCallbacks?: WorkflowCallbacks;
 
-    constructor() {
+    constructor(callbacks?: WorkflowCallbacks) {
+        this.currentCallbacks = callbacks;
         // Set up message handler for workflow executor
         workflowExecutor.setMessageHandler((message: any) => {
             this.handleMessage(message);
@@ -28,48 +29,38 @@ export class WorkflowManager {
     public async cancelExecution() {
         if (this.isExecuting) {
             console.log('[WorkflowManager] Cancelling execution');
-            workflowExecutor.cancelExecution();
             this.isExecuting = false;
+            // wait end
         }
     }
+
 
     public sendDomEvent(nodeKey: string, pointId: string, eventType: string, eventData: any) {
         if (!this.isExecuting) {
             console.warn('[WorkflowManager] Cannot send DOM event: workflow not executing');
             return;
         }
-
         console.log('[WorkflowManager] Sending DOM event:', eventType, 'for node:', nodeKey, 'point:', pointId);
-
-        workflowExecutor.handleDomEvent(nodeKey, pointId, eventType, eventData);
     }
 
-    /**
-     * Execute workflow with given nodes and edges
-     */
     public async executeWorkflow(
         nodes: Node<any>[],
         edges: Edge[],
         entryNodeId: string,
         entryData: any,
         nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
-        callbacks: WorkflowCallbacks
     ) {
         console.log('[WorkflowManager] Starting workflow execution', {
             nodeCount: nodes.length,
             edgeCount: edges.length
         });
 
-        this.currentCallbacks = callbacks;
-
-        // Cancel any existing execution
         if (this.isExecuting) {
             console.log('[WorkflowManager] Cancelling previous execution');
             await this.cancelExecution();
         }
 
         this.isExecuting = true;
-
         try {
             await workflowExecutor.executeWorkflow(
                 nodes,
@@ -83,6 +74,7 @@ export class WorkflowManager {
             this.handleError(error instanceof Error ? error.message : String(error));
         }
     }
+
 
     /**
      * Handle workflow errors
@@ -103,11 +95,7 @@ export class WorkflowManager {
             this.isExecuting = false;
             console.log('[WorkflowManager] Execution completed in', message.totalTimeMs, 'ms');
             this.currentCallbacks?.onComplete?.(message.totalTimeMs, message.data);
-            this.currentCallbacks = null;
-        } else if(message.type === "yieldData") {
-            console.log('[WorkflowManager] YieldData:', message.data, "from", message.nodeKey);
-            this.currentCallbacks?.onData?.(message.nodeKey, message.data, message.timestamp);
-        } else if(message.type === "initHtml") {
+        }  if(message.type === "initHtml") {
             console.log('[WorkflowManager] initHtml:', message.html, "with render id",message.id,"on element selector",message.containerSelector);
             this.currentCallbacks?.onInitHtml?.(message.html, message.id, message.containerSelector);
         } else if(message.type === "applyHtmlInstruction") {
@@ -119,6 +107,7 @@ export class WorkflowManager {
     public dispose() {
         console.log('[WorkflowManager] Disposing workflow manager');
         this.isExecuting = false;
-        this.currentCallbacks = null;
+        this.currentCallbacks = undefined;
     }
+
 }
