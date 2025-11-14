@@ -1,9 +1,9 @@
 import {memo, useCallback, useContext, useEffect, useRef} from "react";
 import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
-import {Edge, Node} from "../../utils/graph/graphType";
+import {Edge, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {MotorScene} from "./motor/graphicalMotor";
-import {edgeArrayToMap, nodeArrayToMap} from "../../utils/graph/nodeUtils";
+import {edgeArrayToMap, findNodeConnected, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {deepCopy, forwardMouseEvents} from "../../utils/objectUtils";
 import { useNodeDragDrop } from "./hook/useNodeDragDrop";
@@ -12,8 +12,10 @@ import {useNodeResize} from "./hook/useNodeResize";
 import {useNodeSelector} from "./hook/useNodeSelector";
 import {HtmlRender} from "../../process/html/HtmlRender";
 import { useHandleRenderer } from "./hook/useHandleRenderer";
-import {generateInstructionsToMatch} from "../../utils/sync/InstructionBuilder";
+import {generateInstructionsToMatch, Instruction} from "../../utils/sync/InstructionBuilder";
 import {useNodeActionButton} from "./hook/useNodeActionButton";
+import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/WorkflowManager";
+import {HtmlObject} from "../../utils/html/htmlType";
 
 export interface SchemaNodeInfo {
     node: Node<any>;
@@ -37,6 +39,99 @@ export const SchemaDisplay = memo(() => {
     const prevVisibleNodes = useRef<Set<Node<any>>>(new Set());
     const visibleEdges = useRef<Edge[]>([]);
 
+
+    const getWorkflowCallback = ():WorkflowCallbacks => ({
+        onComplete: (totalTimeMs: number, data: any) => {
+            console.log(`[SchemaDisplay] Workflow completed in ${totalTimeMs}ms`, data);
+        },
+        onData: (nodeKey: string | undefined, data: any, timestamp: number) => {
+            console.log(`[SchemaDisplay] Data from node ${nodeKey}:`, data);
+        },
+        onLog: (message: string, timestamp: number) => {
+            console.log(`[SchemaDisplay] [${new Date(timestamp).toISOString()}] ${message}`);
+        },
+        onError: (error: string, timestamp: number) => {
+            console.error(`[SchemaDisplay] Workflow error:`, error);
+        },
+        onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+            console.log(`[SchemaDisplay] DOM event: ${eventType} from node ${nodeKey}, point ${pointId}`, eventData);
+        },
+        onInitHtml: async (html: HtmlObject, id?: string, containerSelector?: string) => {
+            console.log('[SchemaDisplay] Init HTML render', { id, containerSelector });
+
+            const renderId = id || '';
+            const rootSchemaNode = inSchemaNode.current.get('root');
+            if (!rootSchemaNode) return;
+
+            // Determine container
+            let container: HTMLElement;
+            if (containerSelector) {
+                const selected = rootSchemaNode.element.querySelector(containerSelector);
+                container = selected as HTMLElement || rootSchemaNode.element;
+            } else {
+                container = rootSchemaNode.element;
+            }
+
+            // Remove existing renderer with same ID
+
+            const existingRenderer = projectRef.current.state.getHtmlRenderWithId("root", renderId);
+            if (existingRenderer) {
+                existingRenderer.htmlRender.dispose();
+                projectRef.current.state.removeHtmlRender("root", renderId);
+            }
+
+            // Create new workflow HTML renderer
+            const rootNode = getNode('root');
+            if (rootNode) {
+
+                const htmlRender = new HtmlRender(container, {
+                    language: "en",
+                    buildingMode: false,
+                    workflowMode: true,
+                    onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+                        // Forward DOM event to workflow manager
+                        if (workflowManager.current) {
+                            workflowManager.current.sendDomEvent(nodeKey, pointId, eventType, eventData);
+                        }
+                    }
+                });
+                const context = projectRef.current.state.initiateNewHtmlRender({
+                    nodeId: rootNode._key,
+                    htmlRender:htmlRender,
+                    renderId: `workflow-${renderId}`,
+                    retrieveNode: () => getNode("root"),
+                    retrieveHtmlObject: (node) => html
+                })!;
+
+                if (context) {
+                    // Set the node key for event tracking
+                    context.htmlRender.setNodeKey(rootNode._key);
+                    await context.htmlRender.render(html);
+                }
+            }
+        },
+        onUpdateHtml: async (instructions: Instruction[], id?: string) => {
+            console.log('[SchemaDisplay] Update HTML render', { id, instructions });
+
+            const renderId = id || '';
+            const renderer =  projectRef.current.state.getHtmlRenderWithId("root", renderId);
+
+            if (!renderer) {
+                console.warn(`[SchemaDisplay] No workflow renderer found with id: ${renderId}`);
+                return;
+            }
+
+            // Apply instructions to the renderer's HTML object
+            for (const instruction of instructions) {
+                //await renderer.htmlMotor.applyInstruction(instruction);
+            }
+        }
+    });
+
+    const workflowManager = useRef<WorkflowManager>(new WorkflowManager(getWorkflowCallback()));
+
+
+
     const animationManager = useRef<NodeAnimationManager>(new NodeAnimationManager({
         springStiffness: 100,
         damping: 2 * Math.sqrt(100)
@@ -57,6 +152,7 @@ export const SchemaDisplay = memo(() => {
                 schema.element.remove();
             }
             inSchemaNode.current = new Map();
+            workflowManager.current.dispose();
         }
     }, [Project.state.graph]);
 
@@ -508,8 +604,6 @@ export const SchemaDisplay = memo(() => {
 
         const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
 
-
-
         updateActionButton(schema);
 
         if (
@@ -615,6 +709,72 @@ export const SchemaDisplay = memo(() => {
             });
         }
     }, [Project.state.editedHtml]);
+
+    const executeWorkflow = () => {
+        const sheet = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId ?? ""];
+        if (!sheet) {
+            return;
+        }
+
+        const rootSchemaNode = inSchemaNode.current.get('root');
+        if (!rootSchemaNode) return;
+        const rootNode = getNode("root");
+        if(!rootNode) return;
+
+        // clean
+        if(rootSchemaNode.node.type === "html") {
+            for(const [key, context] of Object.entries(projectRef.current.state.getHtmlRenderOfNode("root") ?? {})) {
+                context.htmlRender.dispose();
+                projectRef.current.state.removeHtmlRender("root", context.renderId);
+            }
+        }
+
+        const nodes = Array.from(sheet.nodeMap.values());
+        const edges: Edge[] = [];
+        for(const key of sheet.edgeMap.keys()) {
+            if(key.startsWith("source-")) {
+                edges.push(...sheet.edgeMap.get(key)!);
+            }
+        }
+
+        let nodeTypeEntry: Node<NodeTypeEntryType> | undefined = undefined;
+        if(! (!rootNode || rootNode.handles["0"] == undefined || rootNode.handles["0"].point.length == 0)) {
+            const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph!, rootNode, "in");
+            nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+        }
+
+        workflowManager.current.executeWorkflow(
+            nodes,
+            edges,
+            "root",
+            nodeTypeEntry?.data?.fixedValue || {},
+            projectRef.current.state.nodeTypeConfig,
+        );
+    }
+
+    const stopWorkflow = async () => {
+        if(workflowManager.current) {
+            await workflowManager.current.cancelExecution();
+        }
+        const rootSchemaNode = inSchemaNode.current.get('root');
+        if (!rootSchemaNode) return;
+
+        // clean
+        if(rootSchemaNode.node.type === "html") {
+            for(const [key, context] of Object.entries(projectRef.current.state.getHtmlRenderOfNode("root") ?? {})) {
+                context.htmlRender.dispose();
+                projectRef.current.state.removeHtmlRender("root", context.renderId);
+            }
+        }
+    }
+
+    const resetWorkflow = () => {
+        // Stop current execution
+        stopWorkflow().then(() => {
+           executeWorkflow()
+        });
+    };
+
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', position:"absolute", inset:"0", pointerEvents:"none"}} >
