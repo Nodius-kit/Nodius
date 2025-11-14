@@ -4,6 +4,7 @@ import { EditorView, crosshairCursor, drawSelection, highlightActiveLine,
     highlightActiveLineGutter, keymap, rectangularSelection } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
+import {html} from "@codemirror/lang-html"
 import { autocompletion,  completionKeymap, closeBrackets, closeBracketsKeymap, Completion, CompletionContext } from '@codemirror/autocomplete';
 import { Fade } from "../animate/Fade";
 import {
@@ -253,7 +254,7 @@ export const EditorBlock = memo(({index}:EditorBlockProps) => {
                     ...lintKeymap,
                     indentWithTab
                 ]),
-                javascript(),
+                currentEditor.type === "HTML" ? html() : javascript(),
                 autocompletion({ override: [customSource] }),
                 EditorView.updateListener.of(async (update) => {
                     if (update.docChanged) {

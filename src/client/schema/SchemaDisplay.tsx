@@ -12,8 +12,10 @@ import {useNodeResize} from "./hook/useNodeResize";
 import {useNodeSelector} from "./hook/useNodeSelector";
 import {HtmlRender} from "../../process/html/HtmlRender";
 import { useHandleRenderer } from "./hook/useHandleRenderer";
+import {generateInstructionsToMatch} from "../../utils/sync/InstructionBuilder";
+import {useNodeActionButton} from "./hook/useNodeActionButton";
 
-interface SchemaNodeInfo {
+export interface SchemaNodeInfo {
     node: Node<any>;
     element: HTMLElement;
     htmlRenderContext: htmlRenderContext
@@ -116,6 +118,13 @@ export const SchemaDisplay = memo(() => {
         computeVisibility();
     }, [Project.state.graph, Project.state.selectedSheetId]);
 
+    useEffect(() => {
+        Project.dispatch({
+            field: "computeVisibility",
+            value: computeVisibility
+        })
+    }, []);
+
     const computeVisibility = () => {
         if(!projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) {
             for(const node of visibleNodes.current) {
@@ -216,6 +225,13 @@ export const SchemaDisplay = memo(() => {
         },
         updateZIndex: updateZIndex
     });
+
+    const {
+        createActionButton,
+        clearActionButton,
+        updateActionButton,
+        setCallBackWhenNodeChange
+    } = useNodeActionButton();
 
     const {
         initSelectorContainer,
@@ -327,6 +343,7 @@ export const SchemaDisplay = memo(() => {
             workflowMode: true,
         });
 
+
         const context = projectRef.current.state.initiateNewHtmlRender({
             nodeId: node._key,
             htmlRender:htmlRender,
@@ -336,7 +353,15 @@ export const SchemaDisplay = memo(() => {
         })!;
 
 
-        htmlRender.render(nodeConfig.content);
+        htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
+        htmlRender.render(nodeConfig.content).then(() => {
+            const updateTrigger = nodeHTML.querySelectorAll('[data-workflow-event*="nodeEnter"]');
+            for(const element of updateTrigger) {
+                element.dispatchEvent(new CustomEvent("nodeEnter", {
+                    bubbles: false
+                }))
+            }
+        });
 
         inSchemaNode.current.set(node._key, {
             node: node,
@@ -354,6 +379,30 @@ export const SchemaDisplay = memo(() => {
         forwardMouseEvents(nodeHTML, projectRef.current.state.getMotor().getContainerDraw());
         updateHandleOverlay(node, nodeHTML);
         updateNodePosition(node._key);
+        createActionButton(inSchemaNode.current.get(node._key)!);
+
+    }
+
+    const getExtraRenderVariable = (node:Node<any>) => {
+        return {
+            getNode: getNode,
+            nodeId: node._key,
+            updateNode:async (newNode:Node<any>) => {
+                const baseNode = getNode(node._key);
+                const diffs = generateInstructionsToMatch(baseNode, newNode);
+                if(diffs.length > 0) {
+                    const output = await projectRef.current.state.updateGraph!(diffs.map((d) => (
+                        {
+                            i: d,
+                            nodeId: node._key,
+                        }
+                    )));
+                    return output.status;
+                }
+                return true;
+            },
+            updateGraph: projectRef.current.state.updateGraph!
+        }
     }
 
     const updateNodePosition = (nodeId:string) => {
@@ -434,10 +483,15 @@ export const SchemaDisplay = memo(() => {
         if(!nodeConfig) return;
 
         if(options?.reRenderNodeConfig) {
+            schema.htmlRenderContext.htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
         }
 
         const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
+
+
+
+        updateActionButton(schema);
 
         if (
             (node.toPosX !== undefined && node.toPosX !== node.posX) ||
@@ -465,8 +519,18 @@ export const SchemaDisplay = memo(() => {
         } else if(projectRef.current.state.selectedNode.includes(nodeId) && !schema.element.classList.contains(selectedNodeClass)) {
             schema.element.classList.add(selectedNodeClass);
         }
+
+        const updateTrigger = schema.element.querySelectorAll('[data-workflow-event*="nodeUpdate"]');
+        for(const element of updateTrigger) {
+            element.dispatchEvent(new CustomEvent("nodeUpdate", {
+                bubbles: false
+            }))
+        }
     }
 
+    useEffect(() => {
+        setCallBackWhenNodeChange(internalNodeUpdate);
+    }, []);
 
 
 

@@ -21,7 +21,7 @@
  */
 
 import {HtmlObject, HtmlBase, HTMLWorkflowEvent} from "../../utils/html/htmlType";
-import {deepCopy} from "../../utils/objectUtils";
+import {deepCopy, deepEqual} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/htmlCss";
 import {modalManager} from "../modal/ModalManager";
@@ -31,8 +31,6 @@ export interface ObjectStorage {
     object: HtmlObject,
     domEvents: Map<string, Array<((event: any) => void)>>,
     //workflowEvents: Map<string, Array<((event: any) => void)>>,
-    storage: Record<string, any>,
-    extraVariable: Record<string, any>,
     debugEvents: Map<string, Array<((event: any) => void)>>,
     debugOverlay?: HTMLElement,
     // Track external changes for three-way merge
@@ -46,8 +44,7 @@ export interface ObjectStorage {
 }
 
 interface ChildInfo {
-    obj: HtmlObject,
-    extra: Record<string, any>,
+    obj: HtmlObject
 }
 
 export interface HtmlRenderOption {
@@ -70,8 +67,12 @@ export class HtmlRender {
     private readonly superContainer: HTMLElement;
     private previousObject: HtmlObject | undefined;
     private readonly objectStorage: Map<string, ObjectStorage> = new Map<string, ObjectStorage>();
-    private globalStorage: Record<string, any> = {};
     //private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
+
+    private globalStorage: Record<string, any> = {};
+
+    private extraEventVariable: Record<string, any> = {};
+
     private language: string = "en";
 
     private workflowMode: boolean = true;
@@ -125,10 +126,14 @@ export class HtmlRender {
         });
     }
 
-    public setVariableInGlobalStorage(key: string, value: any) {
-        this.globalStorage[key] = value;
+    public setExtraEventVariable = (extra:Record<string, any>) => {
+        this.extraEventVariable = extra;
     }
 
+
+    public isWorkflowMode(): boolean {
+        return this.workflowMode;
+    }
 
     public async setWorkflowMode(value: boolean) {
         if (!this.container) {
@@ -222,7 +227,7 @@ export class HtmlRender {
         this.onDomEventCallback = callback;
     }
 
-    public async render(object: HtmlObject, extraVariable?: Record<string, any>) {
+    public async render(object: HtmlObject) {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
         }
@@ -230,11 +235,11 @@ export class HtmlRender {
         const existingRoot = this.container.firstElementChild as HTMLElement | null;
         if (!this.previousObject || !existingRoot || existingRoot.dataset.identifier !== object.identifier) {
             this.container.innerHTML = "";
-            await this.renderCreate(object, this.container, extraVariable);
+            await this.renderCreate(object, this.container);
         } else {
             const storage = this.objectStorage.get(object.identifier);
             if (storage) {
-                await this.updateDOM(object, storage.element, storage, extraVariable);
+                await this.updateDOM(object, storage.element, storage);
             }
         }
         if (this.previousObject == undefined) {
@@ -247,7 +252,7 @@ export class HtmlRender {
         //console.trace();
     }
 
-    private async renderCreate(object: HtmlObject, parent: HTMLElement, extraVar: Record<string, any> = {}, insertBefore: Node | null = null) {
+    private async renderCreate(object: HtmlObject, parent: HTMLElement,  insertBefore: Node | null = null) {
         const element = document.createElement(object.tag);
         element.dataset.identifier = object.identifier;
 
@@ -255,20 +260,6 @@ export class HtmlRender {
             element: element,
             object: object,
             domEvents: new Map(),
-            //workflowEvents: new Map(),
-            storage: new Proxy({}, {
-                set: (target:any, prop: string, val) => {
-                    target[prop] = val;
-                    const variableChange = new CustomEvent("variableChange", {
-                        detail: { variable: prop, value: val }
-                    });
-
-                    this.dispatchDomEvent(variableChange, false);
-                    //this.dispatchWorkFlowEvent("variableChange", { variable: prop, value: val });
-                    return true;
-                }
-            }),
-            extraVariable: extraVar,
             debugEvents: new Map(),
             externalChanges: {
                 attributes: new Set<string>(),
@@ -296,6 +287,7 @@ export class HtmlRender {
         }
 
         if(object.domEvents && this.workflowMode) {
+
             object.domEvents.forEach((event) => {
                 const caller = (evt: Event) => {
                     this.callDOMEvent(evt, storage, event.call);
@@ -307,7 +299,7 @@ export class HtmlRender {
 
                 if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
                     if(element.hasAttribute("data-workflow-event")) {
-                        if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
+                        if(!element.getAttribute("data-workflow-event")!.includes(event.name)) {
                             element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
                         }
                     } else {
@@ -344,9 +336,9 @@ export class HtmlRender {
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
         } else {
-            const childrenInfo = await this.getChildrenInfo(object, extraVar, storage);
+            const childrenInfo = await this.getChildrenInfo(object, storage);
             for (const childInfo of childrenInfo) {
-                await this.renderCreate(childInfo.obj, element, childInfo.extra);
+                await this.renderCreate(childInfo.obj, element);
             }
         }
 
@@ -354,7 +346,7 @@ export class HtmlRender {
         this.setupExternalChangeTracking(storage);
     }
 
-    private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage, extraVar: Record<string, any> = {}) {
+    private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage) {
         const oldObject = storage.object;
 
         if (newObject.tag !== oldObject.tag) {
@@ -511,7 +503,6 @@ export class HtmlRender {
         }*/
 
         storage.object = newObject;
-        storage.extraVariable = extraVar;
 
         if (newObject.type === "text") {
             const newText = await this.parseContent(newObject.content[this.language], storage);
@@ -556,7 +547,7 @@ export class HtmlRender {
         }
 
         // Reconcile children for block, list, array
-        const newChildrenInfo = await this.getChildrenInfo(newObject, extraVar, storage);
+        const newChildrenInfo = await this.getChildrenInfo(newObject, storage);
 
         const oldChildMap: Map<string, { element: HTMLElement, storage: ObjectStorage }> = new Map();
         for (const child of Array.from(element.children) as HTMLElement[]) {
@@ -578,7 +569,7 @@ export class HtmlRender {
             const idf = childInfo.obj.identifier;
             const old = oldChildMap.get(idf);
             if (old) {
-                await this.updateDOM(childInfo.obj, old.element, old.storage, childInfo.extra);
+                await this.updateDOM(childInfo.obj, old.element, old.storage);
                 if (old.element.previousSibling !== lastInserted) {
                     element.insertBefore(old.element, lastInserted ? lastInserted.nextSibling : element.firstChild);
                 }
@@ -586,7 +577,7 @@ export class HtmlRender {
                 oldChildMap.delete(idf);
             } else {
                 const nextNode = lastInserted ? lastInserted.nextSibling : element.firstChild;
-                await this.renderCreate(childInfo.obj, element, childInfo.extra, element.contains(nextNode) ? nextNode : null);
+                await this.renderCreate(childInfo.obj, element, element.contains(nextNode) ? nextNode : null);
                 const newStorage = this.objectStorage.get(idf)!;
                 lastInserted = newStorage.element;
             }
@@ -709,29 +700,27 @@ export class HtmlRender {
         storage.mutationObserver = observer;
     }
 
-    private async getChildrenInfo(object: HtmlObject, extraVar: Record<string, any>, storage: ObjectStorage): Promise<ChildInfo[]> {
+    private async getChildrenInfo(object: HtmlObject,storage: ObjectStorage): Promise<ChildInfo[]> {
         const env = {
             currentElement: storage.element,
             htmlObject: object,
-            currentStorage: storage.storage,
             globalStorage: this.globalStorage,
             element: storage.element,
             modalManager: modalManager,
-            ...extraVar
         };
         if (object.type === "block") {
             if (object.content) {
-                return [{ obj: object.content, extra: extraVar }];
+                return [{ obj: object.content, }];
             }
             return [];
         } else if (object.type === "list") {
-            return (object.content ?? []).map(c => ({ obj: c, extra: extraVar }));
+            return (object.content ?? []).map(c => ({ obj: c,  }));
         } else if (object.type === "array") {
             const codeNumberOfContent = object.content.numberOfContent.trim().startsWith("return") ? object.content.numberOfContent : "return " + object.content.numberOfContent;
             const length = await this.callFunction(codeNumberOfContent, env);
             if (length === 0) {
                 if (object.content.noContent) {
-                    return [{ obj: object.content.noContent, extra: extraVar }];
+                    return [{ obj: object.content.noContent }];
                 }
                 return [];
             } else if (object.content.content) {
@@ -739,8 +728,8 @@ export class HtmlRender {
                 for (let i = 0; i < length; i++) {
                     const newObject = deepCopy(object.content.content);
                     newObject.identifier = object.content.content.identifier + "-" + i;
-                    const childExtra = { ...extraVar, [object.content.indexVariableName]: i };
-                    children.push({ obj: newObject, extra: childExtra });
+                    const childExtra = { [object.content.indexVariableName]: i };
+                    children.push({ obj: newObject,  });
                 }
                 return children;
             }
@@ -898,7 +887,7 @@ export class HtmlRender {
     public renderElementWithIdentifier = (identifier: string) => {
         const storage = this.objectStorage.get(identifier);
         if (!storage) return;
-        this.updateDOM(storage.object, storage.element, storage, storage.extraVariable);
+        this.updateDOM(storage.object, storage.element, storage);
     }
 
     /**
@@ -912,9 +901,10 @@ export class HtmlRender {
         return {
             currentElement: storage.element,
             htmlObject: storage.object,
-            currentStorage: storage.storage,
             globalStorage: this.globalStorage,
-            ...storage.extraVariable,
+            deepCopy: deepCopy,
+            deepEqual: deepEqual,
+            ...this.extraEventVariable,
             renderElementWithId: this.renderElementWithId,
             renderElementWithIdentifier: this.renderElementWithIdentifier,
             renderElement: () => this.renderElementWithIdentifier(storage.object.identifier),
@@ -950,8 +940,8 @@ export class HtmlRender {
         descriptions.set("renderElement", "Function to re-render the current element: renderElement()");
 
         // Extra variables (from array context, etc.)
-        for (const key of Object.keys(storage.extraVariable)) {
-            const value = storage.extraVariable[key];
+        for (const key of Object.keys(this.extraEventVariable)) {
+            const value = this.extraEventVariable[key];
             const type = typeof value;
             descriptions.set(key, `Extra variable (${type}): ${JSON.stringify(value)}`);
         }
@@ -978,11 +968,10 @@ export class HtmlRender {
                     {
                         currentElement: objectStorage.element,
                         htmlObject: objectStorage.object,
-                        currentStorage: objectStorage.storage,
                         globalStorage: this.globalStorage,
                         element: objectStorage.element,
                         modalManager: modalManager,
-                        ...objectStorage.extraVariable,
+                        ...this.extraEventVariable,
                     }
                 );
             })

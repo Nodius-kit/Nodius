@@ -32,6 +32,7 @@
     "vite": "^7.1.12"
   },
   "dependencies": {
+    "@codemirror/lang-html": "^6.4.11",
     "@codemirror/lang-javascript": "^6.2.4",
     "@codemirror/language": "^6.11.3",
     "@codemirror/theme-one-dark": "^6.1.3",

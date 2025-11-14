@@ -237,6 +237,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
             };
 
             const mouseUp = (evt: MouseEvent) => {
+                evt.stopPropagation();
                 if (animationFrame) cancelAnimationFrame(animationFrame);
                 if (timeoutSave) clearTimeout(timeoutSave);
                 window.removeEventListener("mousemove", mouseMove);

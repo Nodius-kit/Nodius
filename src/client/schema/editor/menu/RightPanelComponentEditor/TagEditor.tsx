@@ -1,10 +1,10 @@
 import {memo, useContext, useMemo} from "react";
-import {Instruction, InstructionBuilder} from "src/utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {Tag} from "lucide-react";
 import {CurrentEditObject} from "../RightPanelComponentEditor";
+import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 
 
 export interface EditableTag {

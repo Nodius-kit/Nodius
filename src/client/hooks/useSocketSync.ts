@@ -9,13 +9,13 @@ import {
 import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";
 import {useWebSocket} from "./useWebSocket";
 import {HtmlClass, HtmlObject} from "../../utils/html/htmlType";
-import {Graph, NodeTypeConfig, Node, Edge} from "../../utils/graph/graphType";
+import {Graph, NodeTypeConfig, Node, Edge, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {api_graph_html} from "../../utils/requests/type/api_workflow.type";
 import {
     createNodeFromConfig,
     edgeArrayToMap,
     findEdgeByKey,
-    findFirstNodeWithId,
+    findFirstNodeWithId, findNodeConnected,
     nodeArrayToMap
 } from "../../utils/graph/nodeUtils";
 import {
@@ -805,6 +805,8 @@ export const useSocketSync = () => {
 
             projectRef.current.state.getMotor().requestRedraw();
 
+            refreshCurrentEntryDataType();
+
             return undefined;
         } else {
             return instructionOutput.error ?? "Unknown error"
@@ -1129,6 +1131,9 @@ export const useSocketSync = () => {
         // Redraw the graph if GPU motor is available
         projectRef.current.state.getMotor()?.requestRedraw();
 
+        refreshCurrentEntryDataType();
+        projectRef.current.state.computeVisibility?.();
+
         return {
             status: true,
         };
@@ -1239,6 +1244,9 @@ export const useSocketSync = () => {
 
         // Redraw the graph if GPU motor is available
         projectRef.current.state.getMotor()?.requestRedraw();
+
+        refreshCurrentEntryDataType();
+        projectRef.current.state.computeVisibility?.();
 
         return {
             status: true,
@@ -1433,4 +1441,40 @@ export const useSocketSync = () => {
             value: generateUniqueId
         })
     }, [generateUniqueId]);
+
+    const refreshCurrentEntryDataType = () => {
+        const emptyCurrentDataType = () => {
+            projectRef.current.dispatch({
+                field: "currentEntryDataType",
+                value: undefined
+            });
+        }
+
+        if(!projectRef.current.state.graph || !projectRef.current.state.dataTypes) {
+            return emptyCurrentDataType();
+        }
+
+        const nodeRoot = findFirstNodeWithId(projectRef.current.state.graph, "root")!;
+        if(!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0) return emptyCurrentDataType();
+
+        const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph, nodeRoot, "in");
+        let nodeType = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+
+        if(nodeType) {
+            projectRef.current.dispatch({
+                field: "currentEntryDataType",
+                value: projectRef.current.state.dataTypes.find((type) => type._key === nodeType.data!._key)
+            });
+        } else {
+            return emptyCurrentDataType();
+        }
+    }
+
+    useEffect(() => {
+        refreshCurrentEntryDataType();
+        Project.dispatch({
+            field: "refreshCurrentEntryDataType",
+            value: refreshCurrentEntryDataType,
+        });
+    }, [Project.state.graph]);
 }

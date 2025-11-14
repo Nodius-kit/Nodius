@@ -84,6 +84,7 @@ export const RightPanelComponentEditor = memo(({
     }, [Project.state.editedHtml, selectedIdentifier]);
 
 
+
     useEffect(() => {
         if(Project.state.editedHtml) {
             Project.state.editedHtml.htmlRenderContext.htmlRender.addBuildingInteractEventMap("select", onBuildingSelect);
@@ -265,7 +266,7 @@ export const RightPanelComponentEditor = memo(({
                                 <MousePointer height={18} width={18} />
                                 <span>Events</span>
                             </div>
-                            {currentEditable.object.type === "html" || currentEditable.object.type === "text" && (
+                            {(currentEditable.object.type === "html" || currentEditable.object.type === "text") && (
                                 <div
                                     className={`${tabClass} ${activeTab === 'content' ? 'active' : ''}`}
                                     onClick={() => setActiveTab('content')}

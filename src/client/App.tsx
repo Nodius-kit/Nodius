@@ -13,6 +13,7 @@ import {documentHaveActiveElement} from "../utils/objectUtils";
 import {getInverseInstruction, Instruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 import {GraphInstructions} from "../utils/sync/wsObject";
+import {getHandleInfo} from "../utils/graph/handleUtils";
 
 
 export const App = () => {
@@ -197,6 +198,27 @@ export const App = () => {
                 } else if(Project.state.selectedEdge.length > 0 || Project.state.selectedNode.length > 0 && Project.state.batchDeleteElements) {
 
                     await Project.state.batchDeleteElements!(Project.state.selectedNode.filter((n) => n !== "root"),Project.state.selectedEdge );
+                } else if(Project.state.editedNodeHandle) {
+                    const node = Project.state.graph?.sheets[Project.state.selectedSheetId ?? ""].nodeMap.get(Project.state.editedNodeHandle.nodeId);
+                    if(!node) return;
+                    const handleInfo = getHandleInfo(node, Project.state.editedNodeHandle.pointId);
+                    if(!handleInfo) return;
+
+                    const instruction = new InstructionBuilder();
+                    instruction.key("handles")
+                        .key(Project.state.editedNodeHandle.side)
+                        .key("point")
+                        .index(handleInfo.index).remove();
+
+                    await Project.state.updateGraph!([{
+                        nodeId: Project.state.editedNodeHandle.nodeId,
+                        i: instruction.instruction,
+                        targetedIdentifier: handleInfo.point.id
+                    }]);
+                    Project.dispatch({
+                        field: "editedNodeHandle",
+                        value: undefined
+                    });
                 }
             }
         }
@@ -204,7 +226,7 @@ export const App = () => {
         return () => {
             document.removeEventListener("keydown", keyDown);
         }
-    }, [Project.state.editedHtml, Project.state.selectedNode, Project.state.batchDeleteElements, Project.state.graph, Project.state.selectedSheetId, Project.state.updateGraph]);
+    }, [Project.state.editedHtml, Project.state.selectedNode, Project.state.batchDeleteElements, Project.state.graph, Project.state.selectedSheetId, Project.state.updateGraph, Project.state.editedNodeHandle]);
 
 
     return (

@@ -74,6 +74,7 @@ export interface EditedCodeContext {
     onChange: (instruction:Instruction|Instruction[]) => Promise<boolean>;
     retrieveText: (node:Node<any>) => string;
     onOutsideChange?: () => void;
+    type?: "JS" | "HTML"
 }
 
 export interface htmlRenderContext {
@@ -135,8 +136,12 @@ export interface ProjectContextType {
     batchCreateElements?:(nodes: Node<any>[], edges: Edge[]) => Promise<ActionContext>,
     batchDeleteElements?:(nodeKeys: string[], edgeKeys: string[]) => Promise<ActionContext>,
 
+    currentEntryDataType?:DataTypeClass,
+    refreshCurrentEntryDataType?:() => void,
 
     disabledNodeInteraction: DisabledNodeInteractionType,
+
+    computeVisibility?: () => void,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],

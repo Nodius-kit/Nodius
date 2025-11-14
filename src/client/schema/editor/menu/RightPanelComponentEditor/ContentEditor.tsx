@@ -10,12 +10,15 @@
  */
 
 import {memo, useContext} from "react";
-import {Type} from "lucide-react";
+import {Edit3, Type} from "lucide-react";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {CurrentEditObject} from "../RightPanelComponentEditor";
 import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
+import {deepCopy} from "../../../../../utils/objectUtils";
+import {ProjectContext} from "../../../../hooks/contexts/ProjectContext";
+import {useStableProjectRef} from "../../../../hooks/useStableProjectRef";
 
 
 // ============================================================================
@@ -32,6 +35,8 @@ export interface ContentEditorProps {
  */
 export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => {
     const Theme = useContext(ThemeContext);
+    const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
 
     const contentEditorClass = useDynamicClass(`
         & {
@@ -93,6 +98,91 @@ export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => 
     };
 
 
+    const actionButtonClass = useDynamicClass(`
+        & {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.2)};
+            border-radius: 8px;
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            color: var(--nodius-text-primary);
+            cursor: pointer;
+            transition: var(--nodius-transition-default);
+            font-size: 13px;
+            font-weight: 500;
+            flex: 1;
+            min-width: 140px;
+            justify-content: center;
+        }
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+            border-color: var(--nodius-primary-main);
+            transform: translateY(-1px);
+            box-shadow: var(--nodius-shadow-1);
+        }
+        &:active {
+            transform: translateY(0);
+        }
+        &.primary {
+            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.15)};
+            border-color: var(--nodius-primary-main);
+            color: var(--nodius-primary-main);
+        }
+        &.primary:hover {
+            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.25)};
+        }
+        &.secondary {
+            background-color: ${Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].main, 0.15)};
+            border-color: var(--nodius-secondary-main);
+            color: var(--nodius-secondary-main);
+        }
+        &.secondary:hover {
+            background-color: ${Theme.state.changeOpacity(Theme.state.secondary[Theme.state.theme].main, 0.25)};
+        }
+    `);
+
+    const editInCodeEditor = () => {
+        if(object.object.type !== "html") return;
+
+
+        let nodeId = Project.state.editedHtml?.htmlRenderContext.nodeId;
+
+        if(!nodeId) return;
+
+
+        const newInstruction = new InstructionBuilder(object.instruction);
+        newInstruction.key("content");
+        Project.dispatch({
+            field: "editedCode",
+            value: [...Project.state.editedCode, {
+                nodeId: nodeId,
+                type: "HTML",
+                title: "Html content",
+                onChange: async (instructions) => {
+                    const clonedInstructions = deepCopy(Array.isArray(instructions) ? instructions : [instructions]);
+                    for(const instruction of clonedInstructions) {
+                        instruction.p = [...newInstruction.instruction.p??[]]
+                    }
+                    return onUpdate(clonedInstructions)
+                },
+                retrieveText: (node) => {
+                    let object = projectRef.current.state.editedHtml?.htmlRenderContext.retrieveHtmlObject(node) as any;
+                    if(!object) {
+                        projectRef.current.dispatch({
+                            field: "editedCode",
+                            value: projectRef.current.state.editedCode.filter((e) => e.nodeId !== nodeId)
+                        });
+                    }
+                    for(const path of newInstruction.instruction.p ?? []) {
+                        object = object[path];
+                    }
+                    return object;
+                }
+            }]
+        });
+    }
 
     return (
         <div className={contentEditorClass}>
@@ -106,14 +196,16 @@ export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => 
                         <EditableDiv value={value} placeholder={`Enter ${key} content...`} onChange={(e) => updateTextContent(key, e)}/>
                     </div>
                 ))
-
             ): object.object.type === "html" ?(
                 <div  className={contentFieldClass}>
                     <label>
                         <Type height={16} width={16} />
                         HTML
                     </label>
-                    edit
+                    <button className={`${actionButtonClass} primary`} onClick={editInCodeEditor}>
+                        <Edit3 height={16} width={16} />
+                        <span>Edit in Code Editor</span>
+                    </button>
                 </div>
             ) : null}
         </div>

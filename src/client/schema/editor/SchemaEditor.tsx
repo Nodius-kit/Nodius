@@ -37,6 +37,8 @@ import {LeftPanelComponentEditor} from "./menu/LeftPanelComponentEditor";
 import {LeftPaneComponentTree} from "./menu/LeftPanelComponentTree";
 import {RightPanelComponentEditor} from "./menu/RightPanelComponentEditor";
 import {RightPanelHandleConfig} from "./menu/RightPanelHandleConfig";
+import {LeftPanelEntryTypeSelect} from "./menu/LeftPanelEntryTypeSelect";
+import {LeftPanelNodeLibrary} from "./menu/LeftPanelNodeLibrary";
 
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
@@ -211,6 +213,12 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
                             <LeftPanelEnumEditor />
+                        </div>
+                        <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
+                            <LeftPanelEntryTypeSelect />
+                        </div>
+                        <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
+                            <LeftPanelNodeLibrary nodeConfigsList={nodeConfigsList} />
                         </div>
 
                     </MultiFade>
