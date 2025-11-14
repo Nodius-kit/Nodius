@@ -133,6 +133,7 @@ const executeTask = async (task: Task): Promise<any> => {
         entryData: entryData,
         nodeTypeConfig: nodeTypeConfig,
         incoming: incoming,
+        global: globalData,
         initHtml: WF_initHtml,
         updateHtml: WF_updateHtml,
         log: (message: string, data?: any) => sendLog(message, node._key, data),
@@ -157,6 +158,41 @@ const executeTask = async (task: Task): Promise<any> => {
                 }
             }
             return Promise.all(childPromises);
+        },
+        branch: async (targetNodeId: string, incomingPointId: string, data?: any): Promise<any> => {
+            const targetNode = nodeMap!.get(targetNodeId);
+            if (!targetNode) {
+                throw new Error(`Branch target node ${targetNodeId} not found`);
+            }
+
+            const branchIncoming: incomingWorkflowNode = {
+                pointId: incomingPointId,
+                data: deepCopy(data),
+                node: node,
+            };
+
+            sendLog(`Starting branch from ${node._key} to ${targetNodeId}`, node._key, undefined);
+
+            const branchTask = createTask(targetNode, branchIncoming);
+            queueMicrotask(() => startTask(branchTask));
+            return branchTask.promise;
+        },
+        continueAndDelay: async (pointId: string, immediateData: any, delayedCallback: () => Promise<any>): Promise<void> => {
+            // Continue execution with immediate data
+            const continuePromise = env.next(pointId, immediateData);
+
+            // Execute delayed callback and re-execute path with new data
+            queueMicrotask(async () => {
+                try {
+                    const delayedData = await delayedCallback();
+                    sendLog(`Delayed execution completed for node ${node._key}, re-executing path`, node._key, delayedData);
+                    await env.next(pointId, delayedData);
+                } catch (error) {
+                    sendLog(`Delayed execution error for node ${node._key}: ${error}`, node._key, undefined);
+                }
+            });
+
+            await continuePromise;
         }
     };
 
