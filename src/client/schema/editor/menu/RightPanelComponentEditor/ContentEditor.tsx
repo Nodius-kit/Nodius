@@ -13,18 +13,24 @@ import {memo, useContext} from "react";
 import {Type} from "lucide-react";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
-import {ContentEditorProps} from "./types";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
+import {CurrentEditObject} from "../RightPanelComponentEditor";
+import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 
 
 // ============================================================================
 // CONTENT EDITOR
 // ============================================================================
 
+export interface ContentEditorProps {
+    object: CurrentEditObject;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+}
+
 /**
  * Content Editor - Edits text content for HtmlText components
  */
-export const ContentEditor = memo(({ content, onUpdate }: ContentEditorProps) => {
+export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => {
     const Theme = useContext(ThemeContext);
 
     const contentEditorClass = useDynamicClass(`
@@ -80,23 +86,36 @@ export const ContentEditor = memo(({ content, onUpdate }: ContentEditorProps) =>
         }
     `);
 
-    const updateContent = async (key: string, value: string) => {
-        const newInstruction = content.instruction.clone();
+    const updateTextContent = async (key: string, value: string) => {
+        const newInstruction = new InstructionBuilder(object.instruction);
         newInstruction.key("content").key(key).set(value);
         await onUpdate(newInstruction.instruction);
     };
 
+
+
     return (
         <div className={contentEditorClass}>
-            {Object.entries(content.content).map(([key, value]) => (
-                <div key={key} className={contentFieldClass}>
+            {object.object.type === "text" ? (
+                Object.entries(object.object.content).map(([key, value]) => (
+                    <div key={key} className={contentFieldClass}>
+                        <label>
+                            <Type height={16} width={16} />
+                            {key}
+                        </label>
+                        <EditableDiv value={value} placeholder={`Enter ${key} content...`} onChange={(e) => updateTextContent(key, e)}/>
+                    </div>
+                ))
+
+            ): object.object.type === "html" ?(
+                <div  className={contentFieldClass}>
                     <label>
                         <Type height={16} width={16} />
-                        {key}
+                        HTML
                     </label>
-                    <EditableDiv value={value} placeholder={`Enter ${key} content...`} onChange={(e) => updateContent(key, e)}/>
+                    edit
                 </div>
-            ))}
+            ) : null}
         </div>
     );
 });

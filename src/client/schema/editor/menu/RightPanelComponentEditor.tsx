@@ -20,33 +20,38 @@
  * component editing experience.
  */
 
-import {CSSProperties, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
-import {HtmlBuilderCategoryType, HtmlBuilderComponent} from "../../../../utils/html/htmlType";
+import {memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
+import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
 import {Instruction, InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import {ObjectStorage} from "../../../../process/html/HtmlRender";
-import {EditableCss, EditableEvents, EditableContent, EditableTag, RightPanelStyleEditor} from "./RightPanelStyleEditor";
 import {searchElementWithIdentifier} from "../../../../utils/html/htmlUtils";
-import {HTMLDomEvent} from "../../../../utils/html/htmlType";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
-import {Paintbrush, Info} from "lucide-react";
-import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
+import {Paintbrush, Info, Code, MousePointer, Type} from "lucide-react";
+import { TagEditor } from "./RightPanelComponentEditor/TagEditor";
+import {CssEditor} from "./RightPanelComponentEditor/CssEditor";
+import {EventsEditor} from "./RightPanelComponentEditor/EventsEditor";
+import {ContentEditor} from "./RightPanelComponentEditor/ContentEditor";
 
 interface RightPanelComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
 }
 
+export interface CurrentEditObject {object: HtmlObject, instruction:Instruction}
+
 
 export const RightPanelComponentEditor = memo(({
-                                                   componentsList
-                                               }: RightPanelComponentEditorProps) => {
+    componentsList
+}: RightPanelComponentEditorProps) => {
 
     const Project = useContext(ProjectContext);
     const Theme = useContext(ThemeContext);
 
     const [hoverIdentifier, setHoverIdentifier] = useState<string|undefined>(undefined);
     const [selectedIdentifier, setSelectedIdentifier] = useState<string|undefined>(undefined);
+
+    const [activeTab, setActiveTab] = useState<'css' | 'events' | 'content'>("css");
 
     const onBuildingHover = (objectStorage?:ObjectStorage) => {
         setHoverIdentifier(objectStorage?.object.identifier);
@@ -56,168 +61,28 @@ export const RightPanelComponentEditor = memo(({
         setSelectedIdentifier(objectStorage?.object.identifier);
     }
 
-    const projectRef = useStableProjectRef();
 
 
-    const currentEditables = useMemo(() => {
+    const currentEditable:CurrentEditObject|undefined = useMemo(() => {
         if(!selectedIdentifier || !Project.state.editedHtml) {
-            return {
-                css: undefined,
-                events: undefined,
-                tag: undefined,
-                content: undefined
-            };
+            setActiveTab("css"); // reset;
+            return undefined;
         }
 
         const node = Project.state.editedHtml.htmlRenderContext.retrieveNode();
-        if(!node) return {
-            css: undefined,
-            events: undefined,
-            tag: undefined,
-            content: undefined
-        };
+        if(!node) return undefined;
 
         const instruction = new InstructionBuilder();
         const object = searchElementWithIdentifier(selectedIdentifier, Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction);
 
-        if(!object) {
-            return {
-                css: undefined,
-                events: undefined,
-                tag: undefined,
-                content: undefined
-            };
+        if(!object) return undefined;
+
+        return {
+            object: object,
+            instruction: instruction.instruction
         }
-
-        const css: EditableCss = {
-            css: object.css ?? [],
-            instruction: instruction.clone()
-        };
-
-
-        const events: EditableEvents = {
-            events: (object.domEvents ?? []) as Array<HTMLDomEvent<keyof HTMLElementEventMap>>,
-            instruction: instruction.clone()
-        };
-
-        const tag: EditableTag = {
-            tag: object.tag,
-            instruction: instruction.clone()
-        };
-
-        const content: EditableContent | undefined = object.type === "text" ? {
-            content: object.content,
-            instruction: instruction.clone(),
-            isTextType: true
-        } : undefined;
-
-        return { css, events, tag, content };
     }, [Project.state.editedHtml, selectedIdentifier]);
 
-    const updateCss = useCallback(async (cssInstruction: Instruction[] | Instruction) => {
-        if(currentEditables.css) {
-            const output = await Project.state.editedHtml?.updateHtmlObject(
-                Array.isArray(cssInstruction) ? cssInstruction.map((i) => ({
-                    i: i,
-                    applyUniqIdentifier: "identifier",
-                    triggerHtmlRender: true,
-                })) : [
-                    {
-                        i: cssInstruction,
-                        applyUniqIdentifier: "identifier",
-                        triggerHtmlRender: true,
-                    }
-                ]
-
-            );
-            return output?.status ?? false;
-        }
-        return false;
-    }, [currentEditables.css, Project.state.editedHtml]);
-
-    const updateEvents = useCallback(async (eventsInstruction: Instruction[] | Instruction) => {
-        if(currentEditables.events) {
-            const output = await Project.state.editedHtml?.updateHtmlObject(
-                Array.isArray(eventsInstruction) ? eventsInstruction.map((i) => ({
-                    i: i,
-                    applyUniqIdentifier: "identifier",
-                    triggerHtmlRender: true,
-                })) : [
-                    {
-                        i: eventsInstruction,
-                        applyUniqIdentifier: "identifier",
-                        triggerHtmlRender: true,
-                    }
-                ]
-
-            );
-            return output?.status ?? false;
-        }
-        return false;
-    }, [currentEditables.events, Project.state.editedHtml]);
-
-    const updateTag = useCallback(async (tagInstruction: Instruction[] | Instruction) => {
-        if(currentEditables.tag) {
-            const output = await Project.state.editedHtml?.updateHtmlObject(
-                Array.isArray(tagInstruction) ? tagInstruction.map((i) => ({
-                    i: i,
-                    applyUniqIdentifier: "identifier",
-                    triggerHtmlRender: true,
-                })) : [
-                    {
-                        i: tagInstruction,
-                        applyUniqIdentifier: "identifier",
-                        triggerHtmlRender: true,
-                    }
-                ]
-
-            );
-            return output?.status ?? false;
-        }
-        return false;
-    }, [currentEditables.tag, Project.state.editedHtml]);
-
-    const updateContent = useCallback(async (contentInstruction: Instruction[] | Instruction) => {
-        if(currentEditables.content) {
-            const output = await Project.state.editedHtml?.updateHtmlObject(
-                Array.isArray(contentInstruction) ? contentInstruction.map((i) => ({
-                    i: i,
-                    applyUniqIdentifier: "identifier",
-                    triggerHtmlRender: true,
-                })) : [
-                    {
-                        i: contentInstruction,
-                        applyUniqIdentifier: "identifier",
-                        triggerHtmlRender: true,
-                    }
-                ]
-
-            );
-            return output?.status ?? false;
-        }
-        return false;
-    }, [currentEditables.content, Project.state.editedHtml]);
-
-    const updateHtml = useCallback(async (contentInstruction: Instruction[] | Instruction) => {
-        if(currentEditables.content) {
-            const output = await Project.state.editedHtml?.updateHtmlObject(
-                Array.isArray(contentInstruction) ? contentInstruction.map((i) => ({
-                    i: i,
-                    applyUniqIdentifier: "identifier",
-                    triggerHtmlRender: true,
-                })) : [
-                    {
-                        i: contentInstruction,
-                        applyUniqIdentifier: "identifier",
-                        triggerHtmlRender: true,
-                    }
-                ]
-
-            );
-            return output?.status ?? false;
-        }
-        return false;
-    }, [currentEditables.content, Project.state.editedHtml]);
 
     useEffect(() => {
         if(Project.state.editedHtml) {
@@ -282,6 +147,59 @@ export const RightPanelComponentEditor = memo(({
         }
     `);
 
+    const tabsContainerClass = useDynamicClass(`
+        & {
+            display: flex;
+            gap: 8px;
+            border-bottom: 2px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            padding: 8px 0;
+            margin-bottom: 8px;
+        }
+    `);
+
+    const tabClass = useDynamicClass(`
+        & {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: var(--nodius-transition-default);
+            font-weight: 500;
+            font-size: 14px;
+            background-color: transparent;
+            color: var(--nodius-text-primary);
+        }
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            color: var(--nodius-text-primary);
+        }
+        &.active {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.06)};
+            color: var(--nodius-primary-main);
+            border-bottom: 2px solid var(--nodius-primary-main);
+        }
+    `);
+
+    const updateObject = useCallback(async (contentInstruction: Instruction[] | Instruction) => {
+        const output = await Project.state.editedHtml?.updateHtmlObject(
+            Array.isArray(contentInstruction) ? contentInstruction.map((i) => ({
+                i: i,
+                applyUniqIdentifier: "identifier",
+                triggerHtmlRender: true,
+            })) : [
+                {
+                    i: contentInstruction,
+                    applyUniqIdentifier: "identifier",
+                    triggerHtmlRender: true,
+                }
+            ]
+
+        );
+        return output?.status ?? false;
+    }, [currentEditable, Project.state.editedHtml]);
+
     return (
         <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
             {/* Header Section */}
@@ -324,19 +242,46 @@ export const RightPanelComponentEditor = memo(({
 
             {/* Content */}
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
-                {(currentEditables.css && currentEditables.events && currentEditables.tag) ? (
-                    <RightPanelStyleEditor
-                        css={currentEditables.css}
-                        events={currentEditables.events}
-                        content={currentEditables.content}
-                        tag={currentEditables.tag}
-                        onUpdateCss={updateCss}
-                        onUpdateEvents={updateEvents}
-                        onUpdateContent={updateContent}
-                        onUpdateHtml={updateHtml}
-                        onUpdateTag={updateTag}
-                        selectedIdentifier={selectedIdentifier}
-                    />
+                {(currentEditable) ? (
+                    <div style={{width: "100%", height: "100%", display: "flex", flexDirection: "column"}}>
+                        {/* Tag Editor - Always visible at top */}
+                        <div style={{marginBottom: "16px"}}>
+                            <TagEditor object={currentEditable} onUpdate={updateObject} />
+                        </div>
+
+                        {/* Tabs */}
+                        <div className={tabsContainerClass}>
+                            <div
+                                className={`${tabClass} ${activeTab === 'css' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('css')}
+                            >
+                                <Code height={18} width={18} />
+                                <span>CSS</span>
+                            </div>
+                            <div
+                                className={`${tabClass} ${activeTab === 'events' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('events')}
+                            >
+                                <MousePointer height={18} width={18} />
+                                <span>Events</span>
+                            </div>
+                            {currentEditable.object.type === "html" || currentEditable.object.type === "text" && (
+                                <div
+                                    className={`${tabClass} ${activeTab === 'content' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('content')}
+                                >
+                                    <Type height={18} width={18} />
+                                    <span>Content</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
+                            {activeTab === 'css' && <CssEditor object={currentEditable} onUpdate={updateObject} />}
+                            {activeTab === 'events' && <EventsEditor object={currentEditable} onUpdate={updateObject}/>}
+                            {activeTab === 'content' && <ContentEditor object={currentEditable}  onUpdate={updateObject} />}
+                        </div>
+                    </div>
                 ) : (
                     <div className={emptyStateClass}>
                         <Paintbrush height={48} width={48} style={{margin:"0 auto 16px", opacity:0.6}}/>

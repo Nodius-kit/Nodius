@@ -13,21 +13,21 @@
  * - Direct code editing with syntax highlighting
  */
 
-import {memo, useContext, useEffect, useMemo, useState} from "react";
+import {memo, useContext, useState} from "react";
 import {ChevronDown, ChevronRight, Plus, Trash2, Code2, Workflow, Edit3} from "lucide-react";
 import {HTMLDomEvent} from "../../../../../utils/html/htmlType";
-import {InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
+import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {ProjectContext} from "../../../../hooks/contexts/ProjectContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
-import {EventEditorProps, EventsEditorProps} from "./types";
-import {Collapse} from "../../../../component/animate/Collapse";
-import {EditableDiv} from "../../../../component/form/EditableDiv";
-import {GraphInstructions} from "../../../../../utils/sync/wsObject";
+import {CurrentEditObject} from "../RightPanelComponentEditor";
 import {useStableProjectRef} from "../../../../hooks/useStableProjectRef";
+import {deepCopy} from "../../../../../utils/objectUtils";
 import {generateUniqueHandlePointId} from "../../../hook/useHandleRenderer";
 import {getHandlePosition} from "../../../../../utils/graph/handleUtils";
-import {deepCopy} from "../../../../../utils/objectUtils";
+import {EditableDiv} from "../../../../component/form/EditableDiv";
+import {Collapse} from "../../../../component/animate/Collapse";
+
 
 // Common DOM event types
 const COMMON_DOM_EVENTS = [
@@ -45,10 +45,25 @@ const COMMON_DOM_EVENTS = [
 // EVENT EDITOR
 // ============================================================================
 
+
+export interface EventEditorProps {
+    event: HTMLDomEvent<keyof HTMLElementEventMap>;
+    index: number;
+    baseInstruction: Instruction;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+    object: CurrentEditObject;
+}
+
+export interface EventsEditorProps {
+    object: CurrentEditObject;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+}
+
+
 /**
  * Individual event editor
  */
-export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, selectedIdentifier }: EventEditorProps) => {
+export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, object }: EventEditorProps) => {
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
     const projectRef = useStableProjectRef();
@@ -179,13 +194,13 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
     `);
 
     const deleteEvent = async () => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("domEvents").arrayRemoveIndex(index);
         await onUpdate(newInstruction.instruction);
     };
 
     const updateEventName = async (newName: string) => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("domEvents").index(index).key("name").set(newName);
         await onUpdate(newInstruction.instruction);
     };
@@ -197,7 +212,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
         if(!nodeId) return;
 
 
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("domEvents").index(index).key("call");
         Project.dispatch({
             field: "editedCode",
@@ -249,7 +264,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
                     id:handlePointId,
                     accept: "HtmlEvent",
                     display: "",
-                    linkedHtmlId: selectedIdentifier
+                    linkedHtmlId: object.object.identifier
                 }]
             });
         } else {
@@ -258,7 +273,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
                 id:handlePointId,
                 accept: "HtmlEvent",
                 display: "",
-                linkedHtmlId: selectedIdentifier
+                linkedHtmlId: object.object.identifier
             });
         }
         const output = await Project.state.updateGraph([{
@@ -267,7 +282,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
         }]);
         if(output.status) {
 
-            const newInstruction = baseInstruction.clone();
+            const newInstruction = new InstructionBuilder(baseInstruction);
             newInstruction.key("domEvents").index(index).key("call").set("[!]CALL-HANDLE-"+handlePointId);
             await onUpdate(newInstruction.instruction);
 
@@ -275,7 +290,6 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
             if(!node) return;
 
             const handleInfoPoint = getHandlePosition(node, handlePointId);
-            console.log(handleInfoPoint);
             if(!handleInfoPoint) return;
             projectRef.current.state.getMotor().smoothFitToArea({
                 maxX: handleInfoPoint.x+20,
@@ -313,7 +327,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, sele
         }]);
         if(output.status) {
 
-            const newInstruction = baseInstruction.clone();
+            const newInstruction = new InstructionBuilder(baseInstruction);
             newInstruction.key("domEvents").index(index).key("call").set("");
             await onUpdate(newInstruction.instruction);
         }
@@ -388,7 +402,7 @@ EventEditor.displayName = 'EventEditor';
 /**
  * Events Editor - Manages all DOM events
  */
-export const EventsEditor = memo(({ events, onUpdate, selectedIdentifier }: EventsEditorProps) => {
+export const EventsEditor = memo(({ object, onUpdate }: EventsEditorProps) => {
     const Theme = useContext(ThemeContext);
 
     const newEventButtonClass = useDynamicClass(`
@@ -425,21 +439,21 @@ export const EventsEditor = memo(({ events, onUpdate, selectedIdentifier }: Even
             name: "click",
             call: ""
         };
-        const newInstruction = events.instruction.clone();
+        const newInstruction = new InstructionBuilder(object.instruction);
         newInstruction.key("domEvents").arrayAdd(emptyEvent);
         await onUpdate(newInstruction.instruction);
     };
 
     return (
         <div style={{width: "100%", height: "100%", padding: "8px 0", display: "flex", flexDirection: "column", gap: "16px"}}>
-            {events.events.map((event, i) => (
+            {object.object.domEvents.map((event, i) => (
                 <EventEditor
                     key={i}
                     event={event}
                     index={i}
-                    baseInstruction={events.instruction}
+                    baseInstruction={object.instruction}
                     onUpdate={onUpdate}
-                    selectedIdentifier={selectedIdentifier}
+                    object={object}
                 />
             ))}
             <div className={newEventButtonClass} onClick={newEvent}>

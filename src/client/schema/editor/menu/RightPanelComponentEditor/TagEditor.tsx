@@ -1,29 +1,25 @@
-/**
- * @file TagEditor.tsx
- * @description HTML tag type editor component
- * @module dashboard/Editor/RightPanelStyleEditor
- *
- * Features:
- * - Edit HTML tag type (div, span, button, etc.)
- * - Common HTML tags autocomplete
- * - Real-time updates via InstructionBuilder
- */
-
 import {memo, useContext, useMemo} from "react";
-import {Tag} from "lucide-react";
+import {Instruction, InstructionBuilder} from "src/utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
-import {TagEditorProps} from "./types";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
+import {Tag} from "lucide-react";
+import {CurrentEditObject} from "../RightPanelComponentEditor";
 
-// ============================================================================
-// TAG EDITOR
-// ============================================================================
 
-/**
- * Tag Editor - Edits HTML tag type
- */
-export const TagEditor = memo(({ tag, onUpdate }: TagEditorProps) => {
+export interface EditableTag {
+    tag: string;
+    instruction: InstructionBuilder;
+}
+
+export interface TagEditorProps {
+    object: CurrentEditObject;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+}
+
+
+
+export const TagEditor = memo(({ object, onUpdate }: TagEditorProps) => {
     const Theme = useContext(ThemeContext);
 
     // Common HTML tags for autocomplete
@@ -67,7 +63,7 @@ export const TagEditor = memo(({ tag, onUpdate }: TagEditorProps) => {
     `);
 
     const updateTag = async (newTag: string) => {
-        const newInstruction = tag.instruction.clone();
+        const newInstruction = new InstructionBuilder(object.instruction);
         newInstruction.key("tag").set(newTag);
         await onUpdate(newInstruction.instruction);
     };
@@ -80,7 +76,7 @@ export const TagEditor = memo(({ tag, onUpdate }: TagEditorProps) => {
             </label>
             <EditableDiv
                 removeSpecialChar={true}
-                value={tag.tag}
+                value={object.object.tag}
                 completion={commonTags}
                 placeholder="Enter HTML tag..."
                 onChange={updateTag}

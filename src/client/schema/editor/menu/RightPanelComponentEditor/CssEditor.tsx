@@ -11,18 +11,46 @@
 
 import {memo, useContext, useMemo, useState} from "react";
 import {ChevronDown, ChevronRight, Plus, Trash2} from "lucide-react";
-import {InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {useDynamicCssListing} from "../../../../hooks/useDynamicCssListing";
-import {CssBlockEditorProps, CssEditorProps, CssRuleEditorProps} from "./types";
+import {CurrentEditObject} from "../RightPanelComponentEditor";
+import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
+import {CSSBlock} from "../../../../../utils/html/htmlCss";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {Collapse} from "../../../../component/animate/Collapse";
-import {CSSBlock} from "../../../../../utils/html/htmlCss";
 
 // ============================================================================
 // CSS RULE EDITOR
 // ============================================================================
+
+
+export interface CssBlockEditorProps {
+    block: CSSBlock;
+    index: number;
+    baseInstruction: Instruction;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+    availableCss: Record<string, string[]>;
+    aditionalCss: string[];
+    variableColor: string[];
+}
+
+export interface CssRuleEditorProps {
+    blockIndex: number;
+    ruleIndex: number;
+    keyStr: string;
+    valueStr: string;
+    availableCss: Record<string, string[]>;
+    aditionalCss: string[];
+    variableColor: string[];
+    baseInstruction: Instruction;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+}
+
+export interface CssEditorProps {
+    object: CurrentEditObject;
+    onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
+}
 
 /**
  * Renders a single CSS rule (property: value pair)
@@ -73,7 +101,7 @@ export const CssRuleEditor = memo(({
     `);
 
     const onEditKeyRule = async (newKey: string|undefined) => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         if(newKey === undefined) {
             if(keyStr !== "") return;
             newInstruction.key("css").index(blockIndex).key("rules").arrayRemoveIndex(ruleIndex);
@@ -84,7 +112,7 @@ export const CssRuleEditor = memo(({
     };
 
     const onEditValueRule = async (newValue: string) => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction)
         newInstruction.key("css").index(blockIndex).key("rules").index(ruleIndex).index(1).set(newValue);
         await onUpdate(newInstruction.instruction);
     };
@@ -228,19 +256,19 @@ export const CssBlockEditor = memo(({
     `);
 
     const newRule = async () => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("css").index(index).key("rules").arrayAdd(["", ""]);
         await onUpdate(newInstruction.instruction);
     };
 
     const onEditSelector = async (value: string) => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("css").index(index).key("selector").set(value);
         await onUpdate(newInstruction.instruction);
     };
 
     const deleteSelector = async () => {
-        const newInstruction = baseInstruction.clone();
+        const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("css").arrayRemoveIndex(index);
         await onUpdate(newInstruction.instruction);
     };
@@ -298,7 +326,7 @@ CssBlockEditor.displayName = 'CssBlockEditor';
 /**
  * CSS Editor - Manages all CSS blocks
  */
-export const CssEditor = memo(({ css, onUpdate }: CssEditorProps) => {
+export const CssEditor = memo(({ object, onUpdate }: CssEditorProps) => {
     const Theme = useContext(ThemeContext);
     const { availableCss, aditionalCss, variableColor } = useDynamicCssListing();
 
@@ -336,19 +364,19 @@ export const CssEditor = memo(({ css, onUpdate }: CssEditorProps) => {
             selector: "&",
             rules: [],
         };
-        const newInstruction = css.instruction.clone();
+        const newInstruction = new InstructionBuilder(object.instruction);
         newInstruction.key("css").arrayAdd(emptyBlock);
         await onUpdate(newInstruction.instruction);
     };
 
     return (
         <div style={{width: "100%", height: "100%", padding: "8px 0", display: "flex", flexDirection: "column", gap: "16px"}}>
-            {css.css.map((block, i) => (
+            {object.object.css.map((block, i) => (
                 <CssBlockEditor
                     key={i}
                     block={block}
                     index={i}
-                    baseInstruction={css.instruction}
+                    baseInstruction={object.instruction}
                     onUpdate={onUpdate}
                     availableCss={availableCss as Record<string, string[]>}
                     aditionalCss={aditionalCss}

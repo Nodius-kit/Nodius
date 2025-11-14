@@ -66,8 +66,8 @@ type Result<T> = { success: true; value: T } | { success: false; error: string }
 export class InstructionBuilder {
     public instruction: Instruction;
 
-    constructor() {
-        this.instruction = { o: OpType.SET, p: [] };
+    constructor(instruction?: Instruction) {
+        this.instruction = instruction ? deepCopy(instruction) : { o: OpType.SET, p: [] };
     }
 
     /**
