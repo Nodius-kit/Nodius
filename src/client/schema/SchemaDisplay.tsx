@@ -40,6 +40,7 @@ export const SchemaDisplay = memo(() => {
     const visibleEdges = useRef<Edge[]>([]);
 
 
+
     const getWorkflowCallback = ():WorkflowCallbacks => ({
         onComplete: (totalTimeMs: number, data: any) => {
             console.log(`[SchemaDisplay] Workflow completed in ${totalTimeMs}ms`, data);
@@ -359,6 +360,7 @@ export const SchemaDisplay = memo(() => {
     const onNodeLeave = (node:Node<any>) => {
         const schema = inSchemaNode.current.get(node._key);
         if(schema) {
+            clearActionButton(node._key);
             schema.element.remove();
 
             cleanupHandleOverlay(node._key);
@@ -656,6 +658,7 @@ export const SchemaDisplay = memo(() => {
 
         return () => {
             delete (window as any).triggerNodeUpdate;
+
         };
     }, []);
 
@@ -710,70 +713,9 @@ export const SchemaDisplay = memo(() => {
         }
     }, [Project.state.editedHtml]);
 
-    const executeWorkflow = () => {
-        const sheet = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId ?? ""];
-        if (!sheet) {
-            return;
-        }
+    const startWorkflow = () => {
 
-        const rootSchemaNode = inSchemaNode.current.get('root');
-        if (!rootSchemaNode) return;
-        const rootNode = getNode("root");
-        if(!rootNode) return;
-
-        // clean
-        if(rootSchemaNode.node.type === "html") {
-            for(const [key, context] of Object.entries(projectRef.current.state.getHtmlRenderOfNode("root") ?? {})) {
-                context.htmlRender.dispose();
-                projectRef.current.state.removeHtmlRender("root", context.renderId);
-            }
-        }
-
-        const nodes = Array.from(sheet.nodeMap.values());
-        const edges: Edge[] = [];
-        for(const key of sheet.edgeMap.keys()) {
-            if(key.startsWith("source-")) {
-                edges.push(...sheet.edgeMap.get(key)!);
-            }
-        }
-
-        let nodeTypeEntry: Node<NodeTypeEntryType> | undefined = undefined;
-        if(! (!rootNode || rootNode.handles["0"] == undefined || rootNode.handles["0"].point.length == 0)) {
-            const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph!, rootNode, "in");
-            nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
-        }
-
-        workflowManager.current.executeWorkflow(
-            nodes,
-            edges,
-            "root",
-            nodeTypeEntry?.data?.fixedValue || {},
-            projectRef.current.state.nodeTypeConfig,
-        );
     }
-
-    const stopWorkflow = async () => {
-        if(workflowManager.current) {
-            await workflowManager.current.cancelExecution();
-        }
-        const rootSchemaNode = inSchemaNode.current.get('root');
-        if (!rootSchemaNode) return;
-
-        // clean
-        if(rootSchemaNode.node.type === "html") {
-            for(const [key, context] of Object.entries(projectRef.current.state.getHtmlRenderOfNode("root") ?? {})) {
-                context.htmlRender.dispose();
-                projectRef.current.state.removeHtmlRender("root", context.renderId);
-            }
-        }
-    }
-
-    const resetWorkflow = () => {
-        // Stop current execution
-        stopWorkflow().then(() => {
-           executeWorkflow()
-        });
-    };
 
 
     return (

@@ -7,6 +7,7 @@ interface NodesInfoTypeWorkflowSwitch {
     checkbox: HTMLInputElement;
     slider: HTMLSpanElement;
     sliderBefore: HTMLSpanElement;
+    resetButton?: HTMLButtonElement;
 }
 
 interface nodesInfoType {
@@ -32,6 +33,7 @@ export const useNodeActionButton = () => {
             if((projectRef.current.state.editedNodeConfig && schema.node._key === "0") || (!projectRef.current.state.editedNodeConfig && schema.node._key === "root")) {
 
 
+                let resetButton:HTMLButtonElement|undefined;
                 const switchContainer = document.createElement('div');
                 switchContainer.style.cssText = `
                     position: absolute;
@@ -119,18 +121,70 @@ export const useNodeActionButton = () => {
 
                 switchLabel.appendChild(checkbox);
                 switchLabel.appendChild(slider);
+
+                checkbox.onclick = (e) => clickOnCheckbox(e, nodesInfo.current[schema.node._key], schema);
+
+                if(!projectRef.current.state.editedNodeConfig && schema.node._key === "root") {
+                    resetButton = document.createElement('button');
+                    // Reset button
+                    resetButton.textContent = '↻ Reset';
+                    resetButton.style.cssText = `
+                        padding: 4px 12px;
+                        background-color: var(--nodius-warning-main);
+                        color: var(--nodius-warning-contrastText);
+                        border: none;
+                        border-radius: 6px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: var(--nodius-transition-default);
+                        user-select: none;
+                        align-items: center;
+                        gap: 4px;
+                    `;
+
+
+
+                    if (checkbox.checked) {
+                        resetButton.style.display = "flex";
+                    } else {
+                        resetButton.style.display = "none";
+                    }
+
+                    resetButton.addEventListener('mouseenter', () => {
+                        resetButton!.style.backgroundColor = 'var(--nodius-warning-dark)';
+                        resetButton!.style.transform = 'scale(1.05)';
+                    });
+                    resetButton.addEventListener('mouseleave', () => {
+                        resetButton!.style.backgroundColor = 'var(--nodius-warning-main)';
+                        resetButton!.style.transform = 'scale(1)';
+                    });
+                    resetButton.addEventListener('mousedown', () => {
+                        resetButton!.style.transform = 'scale(0.95)';
+                    });
+                    resetButton.addEventListener('mouseup', () => {
+                        resetButton!.style.transform = 'scale(1.05)';
+                    });
+                    resetButton.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        (window as any).triggerWorkflowReset?.();
+                    });
+                    switchContainer.appendChild(resetButton!);
+                }
+
                 switchContainer.appendChild(label);
                 switchContainer.appendChild(switchLabel);
                 schema.element.appendChild(switchContainer);
+
                 wfSwitch = {
                     checkbox: checkbox,
                     container: switchContainer,
                     slider: slider,
                     sliderBefore: sliderBefore,
+                    resetButton: resetButton,
                 }
-
-                checkbox.onclick = (e) => clickOnCheckbox(e, nodesInfo.current[schema.node._key], schema);
             }
+
             nodesInfo.current[schema.node._key] = {
                 workflowSwitch: wfSwitch
             }
@@ -141,8 +195,16 @@ export const useNodeActionButton = () => {
         const nodeInfo = nodesInfo.current[schema.node._key];
         if(nodeInfo) {
             if(nodeInfo.workflowSwitch) {
-                nodeInfo.workflowSwitch.checkbox.checked = schema.htmlRenderContext.htmlRender.isWorkflowMode();
-                nodeInfo.workflowSwitch.checkbox.onclick = (e) => clickOnCheckbox(e, nodeInfo, schema);
+                const isChecked = schema.htmlRenderContext.htmlRender.isWorkflowMode();
+                if (isChecked) {
+                    nodeInfo.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
+                    nodeInfo.workflowSwitch!.sliderBefore.style.transform = 'translateX(18px)';
+                    if(nodeInfo.workflowSwitch!.resetButton)nodeInfo.workflowSwitch!.resetButton.style.display = "flex";
+                } else {
+                    nodeInfo.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
+                    nodeInfo.workflowSwitch!.sliderBefore.style.transform = 'translateX(0)';
+                    if(nodeInfo.workflowSwitch!.resetButton)nodeInfo.workflowSwitch!.resetButton.style.display = "none";
+                }
             }
         }
     }
@@ -154,9 +216,11 @@ export const useNodeActionButton = () => {
         if (isChecked) {
             node.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
             node.workflowSwitch!.sliderBefore.style.transform = 'translateX(18px)';
+            if(node.workflowSwitch!.resetButton)node.workflowSwitch!.resetButton.style.display = "flex";
         } else {
             node.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
             node.workflowSwitch!.sliderBefore.style.transform = 'translateX(0)';
+            if(node.workflowSwitch!.resetButton)node.workflowSwitch!.resetButton.style.display = "none";
         }
         schema.htmlRenderContext.htmlRender.setWorkflowMode(isChecked).then((s) => {
             callBackWhenChanged.current?.(schema.node._key);

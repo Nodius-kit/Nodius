@@ -249,7 +249,6 @@ export class HtmlRender {
         const end = performance.now();
         const durationMicro = (end - start);
         console.log("Render time taken in MS:", durationMicro);
-        //console.trace();
     }
 
     private async renderCreate(object: HtmlObject, parent: HTMLElement,  insertBefore: Node | null = null) {
@@ -286,9 +285,14 @@ export class HtmlRender {
             applyCSSBlocks(element, object.css);
         }
 
-        if(object.domEvents && this.workflowMode) {
+        if(object.domEvents) {
 
             object.domEvents.forEach((event) => {
+
+                if(!this.workflowMode && !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))) {
+                    return;
+                }
+
                 const caller = (evt: Event) => {
                     this.callDOMEvent(evt, storage, event.call);
                 }
@@ -452,27 +456,30 @@ export class HtmlRender {
         element.removeAttribute("data-workflow-event");
         storage.domEvents.clear();
 
-        if(this.workflowMode) {
-            if (newObject.domEvents) {
-                newObject.domEvents.forEach(event => {
-                    const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
-                    element.addEventListener(event.name, caller);
-                    const events = storage.domEvents.get(event.name) || [];
-                    events.push(caller);
-                    storage.domEvents.set(event.name, events);
 
-                    if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
-                        if(element.hasAttribute("data-workflow-event")) {
-                            if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
-                                element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
-                            }
-                        } else {
-                            element.setAttribute("data-workflow-event", event.name);
+        if (newObject.domEvents) {
+            newObject.domEvents.forEach(event => {
+                if(!this.workflowMode && !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))) {
+                    return;
+                }
+                const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
+                element.addEventListener(event.name, caller);
+                const events = storage.domEvents.get(event.name) || [];
+                events.push(caller);
+                storage.domEvents.set(event.name, events);
+
+                if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
+                    if(element.hasAttribute("data-workflow-event")) {
+                        if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
+                            element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
                         }
+                    } else {
+                        element.setAttribute("data-workflow-event", event.name);
                     }
-                });
-            }
+                }
+            });
         }
+
 
         // Update workflowEvents: remove old from maps, clear, add new
         /*for (const name of storage.workflowEvents.keys()) {
