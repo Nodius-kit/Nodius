@@ -70,11 +70,8 @@ export class HtmlRender {
     //private readonly workflowEventMap: Map<Partial<HTMLWorkflowEventType>, ObjectStorage[]> = new Map();
 
     private globalStorage: Record<string, any> = {};
-
     private extraEventVariable: Record<string, any> = {};
-
     private language: string = "en";
-
     private workflowMode: boolean = true;
 
     /* building mode */

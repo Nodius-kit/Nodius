@@ -27,6 +27,11 @@ export interface triggerNodeUpdateOption {
     reRenderNodeConfig?:boolean
 }
 
+export interface WorkFlowState {
+    active: boolean;
+    autoRestart: boolean;
+}
+
 export const SchemaDisplay = memo(() => {
 
     const Project = useContext(ProjectContext);
@@ -417,6 +422,11 @@ export const SchemaDisplay = memo(() => {
         nodeHTML.style.backgroundColor = 'var(--nodius-background-paper)';
         nodeHTML.style.borderRadius = nodeConfig.border.radius + "px";
         nodeHTML.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
+        nodeHTML.style.setProperty(
+            "transition",
+            "box-shadow 0.2s ease-in-out, scale 0.2s ease-in-out",
+            "important"
+        );
 
         // Mouse enter/leave for border color
         const mouseEnter = () => {
@@ -551,6 +561,7 @@ export const SchemaDisplay = memo(() => {
             },
             nodeId: node._key,
             updateNode:async (newNode:Node<any>) => {
+                console.log(newNode);
                 const baseNode = getNode(node._key);
                 const diffs = generateInstructionsToMatch(baseNode, newNode);
                 if(diffs.length > 0) {
@@ -786,6 +797,8 @@ export const SchemaDisplay = memo(() => {
             internalNodeUpdate(nodeTypeEntry._key, {reRenderNodeConfig: true});
         }
     }, [Project.state.currentEntryDataType]);
+
+
 
 
     return (

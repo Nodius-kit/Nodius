@@ -63,7 +63,7 @@ export class ModalManager {
             width: 100vw;
             height: 100vh;
             pointer-events: none;
-            z-index: 9999;
+            z-index: 99999;
         `;
         document.body.appendChild(this.container);
 
@@ -150,16 +150,22 @@ export class ModalManager {
         const header = document.createElement("div");
         header.className = "modal-header";
         header.style.cssText = `
-            padding: 16px;
+            padding: 16px 16px 0px 16px;
             background: var(--nodius-background-default);
             border-radius: 8px 8px 0 0;
             cursor: move;
             user-select: none;
+        `;
+
+        const headerContainer = document.createElement("div");
+        headerContainer.style.cssText = `
+            border-bottom: 1px solid var(--nodius-text-divider);
+            padding-bottom: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         `;
+        header.appendChild(headerContainer);
 
         const title = document.createElement("div");
         title.className = "modal-title";
@@ -195,8 +201,8 @@ export class ModalManager {
         };
         closeBtn.onclick = () => this.close(id);
 
-        header.appendChild(title);
-        header.appendChild(closeBtn);
+        headerContainer.appendChild(title);
+        headerContainer.appendChild(closeBtn);
 
         // Add drag listeners
         header.addEventListener("mousedown", (e) => this.handleMouseDown(e, id));
@@ -206,7 +212,7 @@ export class ModalManager {
         content.className = "modal-content";
         content.style.cssText = `
             flex: 1;
-            padding: 16px;
+            padding: 0px 16px 16px 16px;
             overflow: auto;
             color: var(--nodius-text-primary);
         `;

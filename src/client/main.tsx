@@ -74,4 +74,3 @@ createRoot(root).render(
     <Main />
 );
 // Render the app
-

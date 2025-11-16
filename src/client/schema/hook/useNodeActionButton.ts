@@ -1,18 +1,18 @@
-import {useCallback, useRef} from "react";
-import {SchemaNodeInfo} from "../SchemaDisplay";
+import {useCallback, useRef, useState} from "react";
+import {SchemaNodeInfo, WorkFlowState} from "../SchemaDisplay";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
 
-interface NodesInfoTypeWorkflowSwitch {
+interface NodesInfoTypeDomEventSwitch {
     container: HTMLElement;
     checkbox: HTMLInputElement;
     slider: HTMLSpanElement;
     sliderBefore: HTMLSpanElement;
-    resetButton?: HTMLButtonElement;
 }
 
 interface nodesInfoType {
-    workflowSwitch?: NodesInfoTypeWorkflowSwitch
+    domEventSwitch?: NodesInfoTypeDomEventSwitch
 }
+
 
 export const useNodeActionButton = () => {
 
@@ -22,6 +22,11 @@ export const useNodeActionButton = () => {
 
     const callBackWhenChanged = useRef<((nodeId:string) => void)>(undefined);
 
+    const [workflowState, setWorkflowState] = useState<WorkFlowState>({
+        active: true,
+        autoRestart: false,
+    });
+
     const setCallBackWhenNodeChange = (callback:((nodeId:string) => void)) => callBackWhenChanged.current = callback;
 
     const createActionButton = (schema:SchemaNodeInfo) => {
@@ -29,11 +34,9 @@ export const useNodeActionButton = () => {
             updateActionButton(schema);
         } else {
 
-            let wfSwitch:NodesInfoTypeWorkflowSwitch|undefined;
+            let wfSwitch:NodesInfoTypeDomEventSwitch|undefined;
             if((projectRef.current.state.editedNodeConfig && schema.node._key === "0") || (!projectRef.current.state.editedNodeConfig && schema.node._key === "root")) {
 
-
-                let resetButton:HTMLButtonElement|undefined;
                 const switchContainer = document.createElement('div');
                 switchContainer.style.cssText = `
                     position: absolute;
@@ -54,7 +57,7 @@ export const useNodeActionButton = () => {
 
                 const label = document.createElement('label');
                 label.htmlFor = 'workflowModeSwitch';
-                label.textContent = 'Execute WorkFlow';
+                label.textContent = 'Enable DOM Event';
                 label.style.cssText = `
                     font-size: 12px;
                     font-weight: 600;
@@ -124,54 +127,6 @@ export const useNodeActionButton = () => {
 
                 checkbox.onclick = (e) => clickOnCheckbox(e, nodesInfo.current[schema.node._key], schema);
 
-                if(!projectRef.current.state.editedNodeConfig && schema.node._key === "root") {
-                    resetButton = document.createElement('button');
-                    // Reset button
-                    resetButton.textContent = '↻ Reset';
-                    resetButton.style.cssText = `
-                        padding: 4px 12px;
-                        background-color: var(--nodius-warning-main);
-                        color: var(--nodius-warning-contrastText);
-                        border: none;
-                        border-radius: 6px;
-                        font-size: 12px;
-                        font-weight: 600;
-                        cursor: pointer;
-                        transition: var(--nodius-transition-default);
-                        user-select: none;
-                        align-items: center;
-                        gap: 4px;
-                    `;
-
-
-
-                    if (checkbox.checked) {
-                        resetButton.style.display = "flex";
-                    } else {
-                        resetButton.style.display = "none";
-                    }
-
-                    resetButton.addEventListener('mouseenter', () => {
-                        resetButton!.style.backgroundColor = 'var(--nodius-warning-dark)';
-                        resetButton!.style.transform = 'scale(1.05)';
-                    });
-                    resetButton.addEventListener('mouseleave', () => {
-                        resetButton!.style.backgroundColor = 'var(--nodius-warning-main)';
-                        resetButton!.style.transform = 'scale(1)';
-                    });
-                    resetButton.addEventListener('mousedown', () => {
-                        resetButton!.style.transform = 'scale(0.95)';
-                    });
-                    resetButton.addEventListener('mouseup', () => {
-                        resetButton!.style.transform = 'scale(1.05)';
-                    });
-                    resetButton.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        (window as any).triggerWorkflowReset?.();
-                    });
-                    switchContainer.appendChild(resetButton!);
-                }
-
                 switchContainer.appendChild(label);
                 switchContainer.appendChild(switchLabel);
                 schema.element.appendChild(switchContainer);
@@ -181,12 +136,11 @@ export const useNodeActionButton = () => {
                     container: switchContainer,
                     slider: slider,
                     sliderBefore: sliderBefore,
-                    resetButton: resetButton,
                 }
             }
 
             nodesInfo.current[schema.node._key] = {
-                workflowSwitch: wfSwitch
+                domEventSwitch: wfSwitch
             }
         }
     }
@@ -194,16 +148,14 @@ export const useNodeActionButton = () => {
     const updateActionButton = (schema:SchemaNodeInfo) => {
         const nodeInfo = nodesInfo.current[schema.node._key];
         if(nodeInfo) {
-            if(nodeInfo.workflowSwitch) {
+            if(nodeInfo.domEventSwitch) {
                 const isChecked = schema.htmlRenderContext.htmlRender.isWorkflowMode();
                 if (isChecked) {
-                    nodeInfo.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
-                    nodeInfo.workflowSwitch!.sliderBefore.style.transform = 'translateX(18px)';
-                    if(nodeInfo.workflowSwitch!.resetButton)nodeInfo.workflowSwitch!.resetButton.style.display = "flex";
+                    nodeInfo.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
+                    nodeInfo.domEventSwitch!.sliderBefore.style.transform = 'translateX(18px)';
                 } else {
-                    nodeInfo.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
-                    nodeInfo.workflowSwitch!.sliderBefore.style.transform = 'translateX(0)';
-                    if(nodeInfo.workflowSwitch!.resetButton)nodeInfo.workflowSwitch!.resetButton.style.display = "none";
+                    nodeInfo.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
+                    nodeInfo.domEventSwitch!.sliderBefore.style.transform = 'translateX(0)';
                 }
             }
         }
@@ -212,15 +164,13 @@ export const useNodeActionButton = () => {
     const clickOnCheckbox = (e:MouseEvent, node:nodesInfoType, schema:SchemaNodeInfo) => {
         e.stopPropagation();
         const isChecked = !schema.htmlRenderContext.htmlRender.isWorkflowMode();
-        node.workflowSwitch!.checkbox.checked = isChecked;
+        node.domEventSwitch!.checkbox.checked = isChecked;
         if (isChecked) {
-            node.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
-            node.workflowSwitch!.sliderBefore.style.transform = 'translateX(18px)';
-            if(node.workflowSwitch!.resetButton)node.workflowSwitch!.resetButton.style.display = "flex";
+            node.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
+            node.domEventSwitch!.sliderBefore.style.transform = 'translateX(18px)';
         } else {
-            node.workflowSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
-            node.workflowSwitch!.sliderBefore.style.transform = 'translateX(0)';
-            if(node.workflowSwitch!.resetButton)node.workflowSwitch!.resetButton.style.display = "none";
+            node.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
+            node.domEventSwitch!.sliderBefore.style.transform = 'translateX(0)';
         }
         schema.htmlRenderContext.htmlRender.setWorkflowMode(isChecked).then((s) => {
             callBackWhenChanged.current?.(schema.node._key);
@@ -230,7 +180,7 @@ export const useNodeActionButton = () => {
     const clearActionButton = (nodeId:string) => {
         const nodeInfo = nodesInfo.current[nodeId];
         if(nodeInfo) {
-            nodeInfo.workflowSwitch?.container.remove();
+            nodeInfo.domEventSwitch?.container.remove();
             delete nodesInfo.current[nodeId];
         }
     }
@@ -240,5 +190,7 @@ export const useNodeActionButton = () => {
         updateActionButton,
         clearActionButton,
         setCallBackWhenNodeChange,
+        workflowState,
+        setWorkflowState
     }
 }

@@ -176,7 +176,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                     saveNodePositions(nodeIdsToSave);
                 }
             };
-
+            let renderStyle = false;
             const mouseMove = (evt: MouseEvent) => {
 
                 if (animationFrame) cancelAnimationFrame(animationFrame);
@@ -184,12 +184,26 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                     const newX = evt.clientX;
                     const newY = evt.clientY;
-                    const deltaX = newX - lastX;
-                    const deltaY = newY - lastY;
+                    const scale = projectRef.current.state.getMotor().getTransform().scale;
+                    const deltaX = (newX - lastX);
+                    const deltaY = (newY - lastY);
 
                     // Mark as dragged if moved more than 3 pixels
-                    if (!hasDragged && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
+
+                    if (!hasDragged && (Math.abs(deltaX/scale) > 3 || Math.abs(deltaY/scale) > 3)) {
                         hasDragged = true;
+                    }
+
+                    if(hasDragged && !renderStyle) {
+                        renderStyle = true;
+                        selectedNodeIds.forEach(id => {
+                            const nodeElement = document.querySelector(`[data-node-schema-element="${id}"]`) as HTMLElement;
+                            if (nodeElement) {
+
+                                nodeElement.style.scale = "1.1";
+                                nodeElement.style.boxShadow = "var(--nodius-shadow-4)";
+                            }
+                        });
                     }
 
                     const worldDeltaX = deltaX / projectRef.current.state.getMotor().getTransform().scale;
@@ -254,10 +268,12 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
                     // Add click blocker in capture phase for all affected nodes
                     selectedNodeIds.forEach(id => {
-                        const nodeElement = document.querySelector(`[data-node-schema-element="${id}"]`);
+                        const nodeElement = document.querySelector(`[data-node-schema-element="${id}"]`) as HTMLElement;
 
                         if (nodeElement) {
                             nodeElement.addEventListener("click" as any, preventClick, { capture: true, once: true });
+                            nodeElement.style.scale = "1";
+                            nodeElement.style.boxShadow = "none";
                         }
                     });
                 }
