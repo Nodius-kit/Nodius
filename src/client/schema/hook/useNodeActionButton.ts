@@ -23,8 +23,7 @@ export const useNodeActionButton = () => {
     const callBackWhenChanged = useRef<((nodeId:string) => void)>(undefined);
 
     const [workflowState, setWorkflowState] = useState<WorkFlowState>({
-        active: true,
-        autoRestart: false,
+        active: true
     });
 
     const setCallBackWhenNodeChange = (callback:((nodeId:string) => void)) => callBackWhenChanged.current = callback;

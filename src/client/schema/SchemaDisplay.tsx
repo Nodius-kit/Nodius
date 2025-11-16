@@ -29,7 +29,6 @@ export interface triggerNodeUpdateOption {
 
 export interface WorkFlowState {
     active: boolean;
-    autoRestart: boolean;
 }
 
 export const SchemaDisplay = memo(() => {
