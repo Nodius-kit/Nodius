@@ -3,7 +3,7 @@ import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/cont
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
 import {Edge, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
 import {MotorScene} from "./motor/graphicalMotor";
-import {edgeArrayToMap, findNodeConnected, nodeArrayToMap} from "../../utils/graph/nodeUtils";
+import {edgeArrayToMap, findFirstNodeWithId, findNodeConnected, nodeArrayToMap} from "../../utils/graph/nodeUtils";
 import {useDynamicClass} from "../hooks/useDynamicClass";
 import {deepCopy, forwardMouseEvents} from "../../utils/objectUtils";
 import { useNodeDragDrop } from "./hook/useNodeDragDrop";
@@ -11,8 +11,8 @@ import {NodeAnimationManager} from "./manager/nodeAnimation";
 import {useNodeResize} from "./hook/useNodeResize";
 import {useNodeSelector} from "./hook/useNodeSelector";
 import {HtmlRender} from "../../process/html/HtmlRender";
-import { useHandleRenderer } from "./hook/useHandleRenderer";
-import {generateInstructionsToMatch, Instruction} from "../../utils/sync/InstructionBuilder";
+import {generateUniqueHandlePointId, useHandleRenderer} from "./hook/useHandleRenderer";
+import {generateInstructionsToMatch, Instruction, InstructionBuilder} from "../../utils/sync/InstructionBuilder";
 import {useNodeActionButton} from "./hook/useNodeActionButton";
 import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/WorkflowManager";
 import {HtmlObject} from "../../utils/html/htmlType";
@@ -244,7 +244,8 @@ export const SchemaDisplay = memo(() => {
         prevVisibleNodes.current = new Set(visibleNodes.current);
         visibleNodes.current.clear();
 
-        let visibleNodeId = new Set<string>();
+        let visibleNodesId = new Set<string>();
+        let notVisibleNodesId = new Set<string>();
 
         for (const [id, node] of graph.nodeMap.entries()) {
             const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
@@ -258,7 +259,7 @@ export const SchemaDisplay = memo(() => {
 
             if(nodeConfig.alwaysRendered) {
                 visibleNodes.current.add(node);
-                visibleNodeId.add(id);
+                visibleNodesId.add(id);
                 continue;
             }
             const nMinX = node.posX;
@@ -267,14 +268,30 @@ export const SchemaDisplay = memo(() => {
             const nMaxY = node.posY + node.size.height;
             if (nMaxX > visMinX && nMinX < visMaxX && nMaxY > visMinY && nMinY < visMaxY) {
                 visibleNodes.current.add(node);
-                visibleNodeId.add(id);
+                visibleNodesId.add(id);
+            } else {
+                notVisibleNodesId.add(id);
+            }
+        }
+
+        for(const notVisibleNodeId of notVisibleNodesId) {
+            for(const edges of graph.edgeMap.values()) {
+                for(const edge of edges) {
+                    if(notVisibleNodeId === edge.source && visibleNodesId.has(edge.target)) {
+                        visibleNodesId.add(notVisibleNodeId);
+                        visibleNodes.current.add(getNode(notVisibleNodeId)!);
+                    } else if(notVisibleNodeId === edge.target && visibleNodesId.has(edge.source)) {
+                        visibleNodesId.add(notVisibleNodeId);
+                        visibleNodes.current.add(getNode(notVisibleNodeId)!);
+                    }
+                }
             }
         }
 
         visibleEdges.current = [];
         for(const edges of graph.edgeMap.values()) {
             for(const edge of edges) {
-                if(visibleNodeId.has(edge.target) || visibleNodeId.has(edge.source)) {
+                if(visibleNodesId.has(edge.target) || visibleNodesId.has(edge.source)) {
                     visibleEdges.current.push(edge);
                 }
             }
@@ -489,11 +506,49 @@ export const SchemaDisplay = memo(() => {
 
     }
 
+    const deletePointId = async (nodeId:string, pointId:string):Promise<boolean> => {
+        const node =  getNode(nodeId);
+        if(!node) return false;
+
+        const intruction = new InstructionBuilder();
+        intruction.key("handles");
+        for(const [side, handle] of Object.entries(node.handles)) {
+            const index = handle.point.findIndex((p) => p.id === pointId);
+            if(index !== -1) {
+                const point = handle.point[index];
+                intruction.key(side).arrayRemoveIndex(index);
+                const edgeMap = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId ?? ""]?.edgeMap;
+                if(!edgeMap) return false;
+                const edge = edgeMap.get(( point.type === "out" ? "source-" : "target-")+nodeId);
+                if(edge) {
+                    const output = await projectRef.current.state.batchDeleteElements!([], edge.map((e) => e._key));
+                    if(!output.status) {
+                        return false;
+                    }
+                }
+                const output = await projectRef.current.state.updateGraph!([{
+                    i: intruction.instruction,
+                    nodeId: nodeId,
+                }]);
+                return output.status;
+            }
+        }
+        return false;
+    }
+
+    const _generateUniqueHandlePointId = (nodeId:string):string => {
+        const node = getNode(nodeId)!;
+        return generateUniqueHandlePointId(node);
+    }
+
     const getExtraRenderVariable = (node:Node<any>) => {
         const schema = inSchemaNode.current.get(node._key);
         if(!schema) return {};
         return {
-            getNode: getNode,
+            getNode: (nodeId:string) => {
+                const node = getNode(nodeId);
+                return node ? deepCopy(node) : undefined
+            },
             nodeId: node._key,
             updateNode:async (newNode:Node<any>) => {
                 const baseNode = getNode(node._key);
@@ -509,6 +564,9 @@ export const SchemaDisplay = memo(() => {
                 }
                 return true;
             },
+            InstructionBuilder: InstructionBuilder,
+            deletePointId: deletePointId,
+            generateUniqueHandlePointId:_generateUniqueHandlePointId,
             updateGraph: projectRef.current.state.updateGraph!,
             gpuMotor: projectRef.current.state.getMotor(),
             initiateNewHtmlRender: projectRef.current.state.initiateNewHtmlRender,
@@ -517,6 +575,7 @@ export const SchemaDisplay = memo(() => {
             getAllHtmlRender: projectRef.current.state.getAllHtmlRender,
             removeHtmlRender: projectRef.current.state.removeHtmlRender,
             openHtmlEditor: projectRef.current.state.openHtmlEditor,
+            currentEntryDataType: projectRef.current.state.currentEntryDataType,
             HtmlRender: HtmlRender,
             container: schema.element
         }
@@ -599,6 +658,7 @@ export const SchemaDisplay = memo(() => {
         const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
         if(!nodeConfig) return;
 
+
         if(options?.reRenderNodeConfig) {
             schema.htmlRenderContext.htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
@@ -636,6 +696,7 @@ export const SchemaDisplay = memo(() => {
         }
 
         const updateTrigger = schema.element.querySelectorAll('[data-workflow-event*="nodeUpdate"]');
+
         for(const element of updateTrigger) {
             element.dispatchEvent(new CustomEvent("nodeUpdate", {
                 bubbles: false
@@ -713,9 +774,18 @@ export const SchemaDisplay = memo(() => {
         }
     }, [Project.state.editedHtml]);
 
-    const startWorkflow = () => {
-
-    }
+    useEffect(() => {
+        if(!Project.state.graph) return;
+        const nodeRoot = findFirstNodeWithId(Project.state.graph, "root")!;
+        let nodeTypeEntry: Node<NodeTypeEntryType> | undefined = undefined;
+        if(! (!nodeRoot || nodeRoot.handles["0"] == undefined || nodeRoot.handles["0"].point.length == 0)) {
+            const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
+            nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+        }
+        if(nodeTypeEntry) {
+            internalNodeUpdate(nodeTypeEntry._key, {reRenderNodeConfig: true});
+        }
+    }, [Project.state.currentEntryDataType]);
 
 
     return (

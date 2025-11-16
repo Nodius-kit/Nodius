@@ -220,17 +220,18 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     }
                 }
 
-
-                const padding = 500;
-                projectRef.current.state.getMotor().lockCameraToArea({
-                    minX: currentNode.posX - padding,
-                    minY: currentNode.posY - padding,
-                    maxX: currentNode.posX + currentNode.size.width + padding,
-                    maxY: currentNode.posY + currentNode.size.height + padding,
-                });
-                projectRef.current.state.getMotor().smoothFitToNode(currentNode._key, {
-                    padding: padding
-                });
+                if(projectRef.current.state.editedNodeConfig && currentNode._key === "0") {
+                    const padding = 500;
+                    projectRef.current.state.getMotor().lockCameraToArea({
+                        minX: currentNode.posX - padding,
+                        minY: currentNode.posY - padding,
+                        maxX: currentNode.posX + currentNode.size.width + padding,
+                        maxY: currentNode.posY + currentNode.size.height + padding,
+                    });
+                    projectRef.current.state.getMotor().smoothFitToNode(currentNode._key, {
+                        padding: padding
+                    });
+                }
             };
 
             window.addEventListener("mouseup", mouseUp);

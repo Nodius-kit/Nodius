@@ -312,24 +312,7 @@ export class HtmlRender {
                 }
             });
         }
-        /*if (object.workflowEvents) {
-            object.workflowEvents.forEach((event) => {
-                const caller = (evt: any) => {
-                    this.callWorkFlowEvent(evt, storage, event.call);
-                }
-                const events = storage.workflowEvents.get(event.name) ?? [];
-                events.push(caller);
-                storage.workflowEvents.set(event.name, events);
-                let listeners = this.workflowEventMap.get(event.name);
-                if (!listeners) {
-                    listeners = [];
-                    this.workflowEventMap.set(event.name, listeners);
-                }
-                if (!listeners.includes(storage)) {
-                    listeners.push(storage);
-                }
-            })
-        }*/
+
         this.objectStorage.set(object.identifier, storage);
         parent.insertBefore(element, insertBefore);
         this.addDebugListeners(storage);
@@ -470,7 +453,7 @@ export class HtmlRender {
 
                 if(HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number])))  {
                     if(element.hasAttribute("data-workflow-event")) {
-                        if(element.getAttribute("data-workflow-event")!.includes(event.name)) {
+                        if(!element.getAttribute("data-workflow-event")!.includes(event.name)) {
                             element.setAttribute("data-workflow-event", element.getAttribute("data-workflow-event") + " " + event.name);
                         }
                     } else {

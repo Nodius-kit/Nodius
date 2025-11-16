@@ -258,18 +258,42 @@ export class WebSocketManager {
                 hasUnsavedChanges: false
             }
         })
+
+        // Initialize ID generator by scanning all existing IDs
         this.uniqueIdGenerator[graphKey] = 0;
         Object.values(this.managedGraph[graphKey]).forEach((sheet: ManagedSheet) => {
+            // Check node._key values
             sheet.nodeMap.forEach((node) => {
-                this.updateMaxIdOnGraph(graphKey, node);  // Traverse node (or node.data if identifiers are only there)
+                // Parse node._key as base-36 and update max
+                try {
+                    const num = parseInt(node._key, 36);
+                    if (!isNaN(num) && num > this.uniqueIdGenerator[graphKey]) {
+                        this.uniqueIdGenerator[graphKey] = num;
+                    }
+                } catch (e) {}
+
+                // Also traverse node data for identifiers
+                this.updateMaxIdOnGraph(graphKey, node);
             });
+
+            // Check edge._key values
             for (const edgeList of sheet.edgeMap.values()) {
                 edgeList.forEach((edge) => {
-                    this.updateMaxIdOnGraph(graphKey, edge);  // Traverse edge (or edge.data if identifiers are only there)
+                    // Parse edge._key as base-36 and update max
+                    try {
+                        const num = parseInt(edge._key, 36);
+                        if (!isNaN(num) && num > this.uniqueIdGenerator[graphKey]) {
+                            this.uniqueIdGenerator[graphKey] = num;
+                        }
+                    } catch (e) {}
+
+                    // Also traverse edge data for identifiers
+                    this.updateMaxIdOnGraph(graphKey, edge);
                 });
             }
         });
         this.uniqueIdGenerator[graphKey] += 1;  // Start from max + 1
+        console.log(`[WebSocketManager] Initialized uniqueIdGenerator for graph ${graphKey} starting at ${this.uniqueIdGenerator[graphKey]}`);
     }
 
     private initNodeConfig = async (nodeConfigKey:string) => {
@@ -1393,13 +1417,44 @@ export class WebSocketManager {
     }
 
     /**
+     * Check if an ID exists as a node or edge key in any sheet of the graph
+     * @param graphKey - The graph key to check in
+     * @param id - The ID to check
+     * @returns true if the ID exists, false otherwise
+     */
+    private idExistsInGraph(graphKey: string, id: string): boolean {
+        const graph = this.managedGraph[graphKey];
+        if (!graph) return false;
+
+        for (const sheetId in graph) {
+            const sheet = graph[sheetId];
+
+            // Check if ID exists as a node key
+            if (sheet.nodeMap.has(id)) {
+                return true;
+            }
+
+            // Check if ID exists as an edge key
+            for (const edgeList of sheet.edgeMap.values()) {
+                if (edgeList.some(edge => edge._key === id)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Get a unique identifier for nodes or edges in a specific graph.
      * This method guarantees that the returned ID will never be reused within the same graph.
      * IDs are generated in base-36 format and are tracked per graph.
+     * The method validates that the generated ID doesn't collide with existing node or edge keys.
      *
      * @param graphKey - The graph key to generate a unique ID for
      * @returns A unique identifier string that has never been used in this graph
      * @throws Error if the graph is not managed by this WebSocketManager
+     * @throws Error if unable to generate a unique ID after 1000 attempts (should never happen)
      */
     public getUniqueId(graphKey: string): string {
         // Check if the graph is managed
@@ -1412,13 +1467,32 @@ export class WebSocketManager {
             this.uniqueIdGenerator[graphKey] = 0;
         }
 
-        // Generate the unique ID and increment the counter
-        const uniqueId = (this.uniqueIdGenerator[graphKey]++).toString(36);
-        if(uniqueId == "root") {
-            return this.getUniqueId(graphKey);
+        let attempts = 0;
+        const maxAttempts = 1000;
+
+        while (attempts < maxAttempts) {
+            // Generate the unique ID and increment the counter
+            const uniqueId = (this.uniqueIdGenerator[graphKey]++).toString(36);
+
+            // Skip reserved keywords
+            if (uniqueId === "root") {
+                attempts++;
+                continue;
+            }
+
+            // Validate that the ID doesn't already exist in the graph
+            if (this.idExistsInGraph(graphKey, uniqueId)) {
+                console.warn(`[WebSocketManager] Generated ID "${uniqueId}" already exists in graph ${graphKey}, regenerating...`);
+                attempts++;
+                continue;
+            }
+
+            // ID is unique and valid
+            return uniqueId;
         }
 
-        return uniqueId;
+        // This should never happen, but handle it gracefully
+        throw new Error(`[WebSocketManager] Failed to generate a unique ID for graph ${graphKey} after ${maxAttempts} attempts. This indicates a serious problem with ID generation.`);
     }
 }
 
