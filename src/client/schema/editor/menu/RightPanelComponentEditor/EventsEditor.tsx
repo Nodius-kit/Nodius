@@ -15,7 +15,7 @@
 
 import {memo, useContext, useState} from "react";
 import {ChevronDown, ChevronRight, Plus, Trash2, Code2, Workflow, Edit3} from "lucide-react";
-import {HTMLDomEvent} from "../../../../../utils/html/htmlType";
+import {HTMLDomEvent, HTMLWorkflowEvent} from "../../../../../utils/html/htmlType";
 import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {ProjectContext} from "../../../../hooks/contexts/ProjectContext";
@@ -47,7 +47,7 @@ const COMMON_DOM_EVENTS = [
 
 
 export interface EventEditorProps {
-    event: HTMLDomEvent<keyof HTMLElementEventMap>;
+    event: HTMLDomEvent<keyof HTMLElementEventMap | typeof HTMLWorkflowEvent[number]>;
     index: number;
     baseInstruction: Instruction;
     onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
@@ -194,6 +194,28 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
     `);
 
     const deleteEvent = async () => {
+        if(!Project.state.graph || !Project.state.selectedSheetId) return;
+        if(event.call.startsWith("[!]CALL-HANDLE-")) {
+            const handlePointId = event.call.substring("[!]CALL-HANDLE-".length);
+            // remove edge
+
+            let nodeId = Project.state.editedHtml?.htmlRenderContext.nodeId;
+
+            if(!nodeId) return;
+
+            const node = Project.state.graph.sheets[Project.state.selectedSheetId].nodeMap.get(nodeId);
+            if(!node) return;
+
+            const edge = Project.state.graph.sheets[Project.state.selectedSheetId].edgeMap.get("source-"+node._key) ?? [];
+            const toRemoveEdgeId = edge.filter((e) => e.sourceHandle === handlePointId).map((e) => e._key);
+            if(toRemoveEdgeId.length > 0) {
+                const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId);
+                if(!output.status) {
+                    return;
+                }
+            }
+        }
+
         const newInstruction = new InstructionBuilder(baseInstruction);
         newInstruction.key("domEvents").arrayRemoveIndex(index);
         await onUpdate(newInstruction.instruction);
@@ -321,10 +343,27 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
 
         const instructionHandle = new InstructionBuilder();
         instructionHandle.key("handles").key("R").key("point").arrayRemoveIndex(handlePointIndex);
+
+
+        // remove edge
+        const edge = Project.state.graph.sheets[Project.state.selectedSheetId].edgeMap.get("source-"+node._key) ?? [];
+        const toRemoveEdgeId = edge.filter((e) => e.sourceHandle === handlePointId).map((e) => e._key);
+        if(toRemoveEdgeId.length > 0) {
+            const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId);
+            if(!output.status) {
+                return;
+            }
+        }
+
+
+
+        // remove handle
         const output = await Project.state.updateGraph([{
             nodeId: nodeId,
             i: instructionHandle.instruction,
         }]);
+
+
         if(output.status) {
 
             const newInstruction = new InstructionBuilder(baseInstruction);

@@ -90,6 +90,11 @@ export interface EditedHtmlType {
     updateHtmlObject: (graphInstructions:GraphInstructions[]) => Promise<ActionContext>,
 }
 
+export interface WorkFlowState {
+    active: boolean;
+    executing: boolean;
+}
+
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 
 export interface ProjectContextType {
@@ -143,6 +148,8 @@ export interface ProjectContextType {
 
     computeVisibility?: () => void,
     fetchMissingNodeConfig?: (nodeType: string, workspace: string) => Promise<NodeTypeConfig | undefined>,
+
+    workFlowState: WorkFlowState,
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],
@@ -163,5 +170,10 @@ export const ProjectContextDefaultValue: ProjectContextType = {
 
     disabledNodeInteraction: {},
 
-    editedCode: []
+    editedCode: [],
+
+    workFlowState: {
+        active: false,
+        executing: false,
+    }
 }

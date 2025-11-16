@@ -41,13 +41,14 @@ export class WorkflowManager {
             return;
         }
         console.log('[WorkflowManager] Sending DOM event:', eventType, 'for node:', nodeKey, 'point:', pointId);
+
     }
 
     public async executeWorkflow(
         nodes: Node<any>[],
         edges: Edge[],
         entryNodeId: string,
-        entryData: any,
+        entryData: Record<string, any>,
         nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
     ) {
         console.log('[WorkflowManager] Starting workflow execution', {
@@ -108,6 +109,7 @@ export class WorkflowManager {
         console.log('[WorkflowManager] Disposing workflow manager');
         this.isExecuting = false;
         this.currentCallbacks = undefined;
+        workflowExecutor.dispose();
     }
 
 }

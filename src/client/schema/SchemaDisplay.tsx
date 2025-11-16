@@ -1,4 +1,4 @@
-import {memo, useCallback, useContext, useEffect, useRef} from "react";
+import {memo, useCallback, useContext, useEffect, useRef, useState} from "react";
 import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
 import {Edge, Node, NodeTypeEntryType} from "../../utils/graph/graphType";
@@ -13,9 +13,9 @@ import {useNodeSelector} from "./hook/useNodeSelector";
 import {HtmlRender} from "../../process/html/HtmlRender";
 import {generateUniqueHandlePointId, useHandleRenderer} from "./hook/useHandleRenderer";
 import {generateInstructionsToMatch, Instruction, InstructionBuilder} from "../../utils/sync/InstructionBuilder";
-import {useNodeActionButton} from "./hook/useNodeActionButton";
 import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/WorkflowManager";
 import {HtmlObject} from "../../utils/html/htmlType";
+import {useWorkflowActionRenderer} from "./hook/useWorkflowActionRenderer";
 
 export interface SchemaNodeInfo {
     node: Node<any>;
@@ -27,9 +27,6 @@ export interface triggerNodeUpdateOption {
     reRenderNodeConfig?:boolean
 }
 
-export interface WorkFlowState {
-    active: boolean;
-}
 
 export const SchemaDisplay = memo(() => {
 
@@ -42,7 +39,6 @@ export const SchemaDisplay = memo(() => {
     const visibleNodes = useRef<Set<Node<any>>>(new Set());
     const prevVisibleNodes = useRef<Set<Node<any>>>(new Set());
     const visibleEdges = useRef<Edge[]>([]);
-
 
 
     const getWorkflowCallback = ():WorkflowCallbacks => ({
@@ -313,7 +309,7 @@ export const SchemaDisplay = memo(() => {
             }
         }
         for (const node of prevVisibleNodes.current) {
-            if (!visibleNodes.current.has(node)) {
+            if (!visibleNodesId.has(node._key)) {
                 onNodeLeave(node);
             }
         }
@@ -353,19 +349,104 @@ export const SchemaDisplay = memo(() => {
     });
 
     const {
-        createActionButton,
-        clearActionButton,
-        updateActionButton,
-        setCallBackWhenNodeChange
-    } = useNodeActionButton();
-
-    const {
         initSelectorContainer,
         deInitSelectorContainer
     } = useNodeSelector();
 
     const { updateHandleOverlay, cleanupHandleOverlay} = useHandleRenderer({
         getNode: getNode,
+    });
+
+    const {
+        renderWorkflowAction,
+        disposeWorkflowAction,
+        updateWorkFlowButton
+    } = useWorkflowActionRenderer({
+        workflowCallback: {
+            start: async () => {
+                console.log("start workflow");
+                projectRef.current.dispatch({
+                    field: "workFlowState",
+                    value: {
+                        ...projectRef.current.state.workFlowState,
+                        active: true,
+                        executing: true
+                    }
+                });
+                if(projectRef.current.state.editedHtml?.htmlRenderContext.nodeId === "root") {
+                    await projectRef.current.state.closeHtmlEditor!();
+                }
+
+                const rootNode = findFirstNodeWithId(projectRef.current.state.graph!, "root")!;
+                if(!rootNode) return
+
+                const schema = inSchemaNode.current.get(rootNode._key);
+                if(!schema) return;
+
+                if(rootNode.type === "html") {
+                    const htmlRender = projectRef.current.state.getHtmlRenderOfNode(rootNode._key);
+                    const main = htmlRender.find((h) => h.renderId === "main");
+                    if(!main) return;
+                    projectRef.current.state.removeHtmlRender(rootNode._key, "main");
+                    // it mean it will render html
+                }
+
+                const nodes: Node<any>[] = [];
+                const edges: Edge[] = [];
+
+                for(const sheet of Object.values(projectRef.current.state.graph!.sheets)) {
+                    nodes.push(...sheet.nodeMap.values());
+                    for(const key of sheet.edgeMap.keys()) {
+                        if(key.startsWith("source-")) {
+                            edges.push(...sheet.edgeMap.get(key)!);
+                        }
+                    }
+                }
+
+                // Get entry data from entryType node
+                let nodeTypeEntry: Node<NodeTypeEntryType> | undefined = undefined;
+                if(! (!rootNode || rootNode.handles["0"] == undefined || rootNode.handles["0"].point.length == 0)) {
+                    const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph!, rootNode, "in");
+                    nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+                }
+                console.log("execute workflow with ",nodes.length,edges.length);
+                await workflowManager.current.executeWorkflow(
+                    nodes,
+                    edges,
+                    "root",
+                    nodeTypeEntry?.data?.fixedValue || {},
+                    projectRef.current.state.nodeTypeConfig
+                )
+                console.log("end");
+                projectRef.current.dispatch({
+                    field: "workFlowState",
+                    value: {
+                        ...projectRef.current.state.workFlowState,
+                        active: true,
+                        executing: false
+                    }
+                });
+            },
+            stop: () => {
+                console.log("stop workflow");
+
+                const rootNode = getNode("root");
+                if(!rootNode) return
+
+                workflowManager.current.dispose();
+
+                onNodeLeave(rootNode);
+                onNodeEnter(rootNode);
+                projectRef.current.dispatch({
+                    field: "workFlowState",
+                    value: {
+                        ...projectRef.current.state.workFlowState,
+                        active: false,
+                        executing: false
+                    }
+                });
+            }
+        }
     });
 
     useEffect(() => {
@@ -381,7 +462,6 @@ export const SchemaDisplay = memo(() => {
     const onNodeLeave = (node:Node<any>) => {
         const schema = inSchemaNode.current.get(node._key);
         if(schema) {
-            clearActionButton(node._key);
             schema.element.remove();
 
             cleanupHandleOverlay(node._key);
@@ -469,6 +549,12 @@ export const SchemaDisplay = memo(() => {
         const dragHandler = createDragHandler(node._key, nodeHTML);
         nodeHTML.addEventListener("mousedown", dragHandler);
 
+
+        if(node._key === "root") {
+            // add workflow interactive
+            renderWorkflowAction(node._key, nodeHTML);
+        }
+
         const htmlRender = new HtmlRender(nodeHTML, {
             language: "en",
             buildingMode: false,
@@ -511,7 +597,6 @@ export const SchemaDisplay = memo(() => {
         forwardMouseEvents(nodeHTML, projectRef.current.state.getMotor().getContainerDraw());
         updateHandleOverlay(node, nodeHTML);
         updateNodePosition(node._key);
-        createActionButton(inSchemaNode.current.get(node._key)!);
 
     }
 
@@ -676,8 +761,6 @@ export const SchemaDisplay = memo(() => {
 
         const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
 
-        updateActionButton(schema);
-
         if (
             (node.toPosX !== undefined && node.toPosX !== node.posX) ||
             (node.toPosY !== undefined && node.toPosY !== node.posY) ||
@@ -714,11 +797,6 @@ export const SchemaDisplay = memo(() => {
         }
     }
 
-    useEffect(() => {
-        setCallBackWhenNodeChange(internalNodeUpdate);
-    }, []);
-
-
 
     useEffect(() => {
         const triggerNodeUpdate = async (nodeId: string, options?:triggerNodeUpdateOption) => {
@@ -748,9 +826,6 @@ export const SchemaDisplay = memo(() => {
             // re render handle
             cleanupHandleOverlay(nodeSchema.node._key);
             updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
-
-            clearActionButton(nodeSchema.node._key);
-            createActionButton(nodeSchema);
         }
     }, [Project.state.editedNodeConfig]);
 
@@ -796,7 +871,6 @@ export const SchemaDisplay = memo(() => {
             internalNodeUpdate(nodeTypeEntry._key, {reRenderNodeConfig: true});
         }
     }, [Project.state.currentEntryDataType]);
-
 
 
 

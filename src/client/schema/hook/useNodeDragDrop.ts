@@ -200,7 +200,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             const nodeElement = document.querySelector(`[data-node-schema-element="${id}"]`) as HTMLElement;
                             if (nodeElement) {
 
-                                nodeElement.style.scale = "1.1";
+                                nodeElement.style.scale = "1.05";
                                 nodeElement.style.boxShadow = "var(--nodius-shadow-4)";
                             }
                         });

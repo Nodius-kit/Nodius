@@ -211,7 +211,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                             const htmlRender = new HtmlRender(renderContainer, {
                                 language: "en",
                                 buildingMode: false,
-                                workflowMode: true,
+                                workflowMode: false,
                             });
                             
                             const context = initiateNewHtmlRender({
@@ -256,7 +256,7 @@ export const NodeTypeHtmlConfig:NodeTypeConfig = {
                 htmlObject = htmlObject[path];
             }
             
-            initHtml(htmlObject);
+            initHtml(htmlObject, "main", "[mainRender]");
         `,
         handles: {
             0: {

@@ -132,6 +132,10 @@ export class HtmlRender {
         return this.workflowMode;
     }
 
+    public getContainer() : HTMLElement {
+        return this.container;
+    }
+
     public async setWorkflowMode(value: boolean) {
         if (!this.container) {
             throw new Error("HtmlRender: Container is null");
@@ -286,7 +290,7 @@ export class HtmlRender {
 
             object.domEvents.forEach((event) => {
 
-                if(!this.workflowMode && !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))) {
+                if(!this.workflowMode /*&& !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))*/) {
                     return;
                 }
 
@@ -439,7 +443,7 @@ export class HtmlRender {
 
         if (newObject.domEvents) {
             newObject.domEvents.forEach(event => {
-                if(!this.workflowMode && !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))) {
+                if(!this.workflowMode /*&& !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))*/) {
                     return;
                 }
                 const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
@@ -800,7 +804,7 @@ export class HtmlRender {
         this.objectStorage.clear();
         //this.workflowEventMap.clear();
         this.globalStorage = {};
-        this.container.innerHTML = "";
+        this.superContainer.remove();
         this.previousObject = undefined;
     }
 
