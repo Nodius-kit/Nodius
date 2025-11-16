@@ -9,9 +9,140 @@ interface NodesInfoTypeDomEventSwitch {
     sliderBefore: HTMLSpanElement;
 }
 
-interface nodesInfoType {
-    domEventSwitch?: NodesInfoTypeDomEventSwitch
+interface NodesInfoTypeWorkflowPanel {
+    container: HTMLElement;
+    checkbox: HTMLInputElement;
+    slider: HTMLSpanElement;
+    sliderBefore: HTMLSpanElement;
+    button: HTMLButtonElement;
 }
+
+interface nodesInfoType {
+    domEventSwitch?: NodesInfoTypeDomEventSwitch;
+    workflowPanel?: NodesInfoTypeWorkflowPanel;
+}
+
+// Reusable style helper functions
+const createPanelContainer = (top: string = '-48px'): HTMLDivElement => {
+    const container = document.createElement('div');
+    container.style.cssText = `
+        position: absolute;
+        top: ${top};
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 6px 10px;
+        background-color: var(--nodius-background-paper);
+        border-radius: 8px;
+        border: 1px solid var(--nodius-primary-dark);
+        box-shadow: var(--nodius-shadow-2);
+        z-index: 10;
+        transition: var(--nodius-transition-default);
+        pointer-events: all;
+    `;
+    return container;
+};
+
+const createLabel = (text: string, htmlFor?: string): HTMLLabelElement => {
+    const label = document.createElement('label');
+    if (htmlFor) label.htmlFor = htmlFor;
+    label.textContent = text;
+    label.style.cssText = `
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--nodius-text-primary);
+        cursor: pointer;
+        user-select: none;
+    `;
+    return label;
+};
+
+const createSwitch = (id: string, checked: boolean): {
+    switchLabel: HTMLLabelElement;
+    checkbox: HTMLInputElement;
+    slider: HTMLSpanElement;
+    sliderBefore: HTMLSpanElement;
+} => {
+    const switchLabel = document.createElement('label');
+    switchLabel.style.cssText = `
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+    `;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = id;
+    checkbox.checked = checked;
+    checkbox.style.cssText = `
+        opacity: 0;
+        width: 0;
+        height: 0;
+    `;
+
+    const slider = document.createElement('span');
+    slider.style.cssText = `
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: ${checked ? 'var(--nodius-success-main)' : 'var(--nodius-grey-600)'};
+        transition: var(--nodius-transition-default);
+        border-radius: 22px;
+    `;
+
+    const sliderBefore = document.createElement('span');
+    sliderBefore.style.cssText = `
+        position: absolute;
+        content: '';
+        height: 16px;
+        width: 16px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: var(--nodius-transition-default);
+        border-radius: 50%;
+        transform: ${checked ? 'translateX(18px)' : 'translateX(0)'};
+    `;
+
+    slider.appendChild(sliderBefore);
+    switchLabel.appendChild(checkbox);
+    switchLabel.appendChild(slider);
+
+    return { switchLabel, checkbox, slider, sliderBefore };
+};
+
+const createButton = (text: string): HTMLButtonElement => {
+    const button = document.createElement('button');
+    button.textContent = text;
+    button.style.cssText = `
+        padding: 4px 12px;
+        background-color: var(--nodius-primary-main);
+        color: var(--nodius-primary-contrastText);
+        border: none;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--nodius-transition-default);
+    `;
+    button.onmouseenter = () => {
+        button.style.backgroundColor = 'var(--nodius-primary-dark)';
+    };
+    button.onmouseleave = () => {
+        button.style.backgroundColor = 'var(--nodius-primary-main)';
+    };
+    return button;
+};
+
+const updateSwitchState = (slider: HTMLSpanElement, sliderBefore: HTMLSpanElement, checked: boolean) => {
+    slider.style.backgroundColor = checked ? 'var(--nodius-success-main)' : 'var(--nodius-grey-600)';
+    sliderBefore.style.transform = checked ? 'translateX(18px)' : 'translateX(0)';
+};
 
 
 export const useNodeActionButton = () => {
@@ -34,95 +165,17 @@ export const useNodeActionButton = () => {
         } else {
 
             let wfSwitch:NodesInfoTypeDomEventSwitch|undefined;
+            let wfPanel:NodesInfoTypeWorkflowPanel|undefined;
+
             if((projectRef.current.state.editedNodeConfig && schema.node._key === "0") || (!projectRef.current.state.editedNodeConfig && schema.node._key === "root")) {
 
-                const switchContainer = document.createElement('div');
-                switchContainer.style.cssText = `
-                    position: absolute;
-                    top: -48px;
-                    right: 8px;
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    padding: 6px 10px;
-                    background-color: var(--nodius-background-paper);
-                    border-radius: 8px;
-                    border: 1px solid var(--nodius-primary-dark);
-                    box-shadow: var(--nodius-shadow-2);
-                    z-index: 10;
-                    transition: var(--nodius-transition-default);
-                    pointer-events: all;
-                `;
-
-                const label = document.createElement('label');
-                label.htmlFor = 'workflowModeSwitch';
-                label.textContent = 'Enable DOM Event';
-                label.style.cssText = `
-                    font-size: 12px;
-                    font-weight: 600;
-                    color: var(--nodius-text-primary);
-                    cursor: pointer;
-                    user-select: none;
-                `;
-
-                const switchLabel = document.createElement('label');
-                switchLabel.style.cssText = `
-                    position: relative;
-                    display: inline-block;
-                    width: 40px;
-                    height: 22px;
-                `;
-
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = 'workflowModeSwitch';
-                checkbox.checked = schema.htmlRenderContext.htmlRender.isWorkflowMode();
-
-
-                checkbox.style.cssText = `
-                    opacity: 0;
-                    width: 0;
-                    height: 0;
-                `;
-
-                const slider = document.createElement('span');
-                slider.style.cssText = `
-                    position: absolute;
-                    cursor: pointer;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: var(--nodius-grey-600);
-                    transition: var(--nodius-transition-default);
-                    border-radius: 22px;
-                `;
-
-                const sliderBefore = document.createElement('span');
-                sliderBefore.style.cssText = `
-                    position: absolute;
-                    content: '';
-                    height: 16px;
-                    width: 16px;
-                    left: 3px;
-                    bottom: 3px;
-                    background-color: white;
-                    transition: var(--nodius-transition-default);
-                    border-radius: 50%;
-                `;
-
-                if (checkbox.checked) {
-                    slider.style.backgroundColor = 'var(--nodius-success-main)';
-                    sliderBefore.style.transform = 'translateX(18px)';
-                } else {
-                    slider.style.backgroundColor = 'var(--nodius-grey-600)';
-                    sliderBefore.style.transform = 'translateX(0)';
-                }
-
-                slider.appendChild(sliderBefore);
-
-                switchLabel.appendChild(checkbox);
-                switchLabel.appendChild(slider);
+                // Create DOM Event Switch Panel
+                const switchContainer = createPanelContainer('-48px');
+                const label = createLabel('Enable DOM Event', 'workflowModeSwitch');
+                const { switchLabel, checkbox, slider, sliderBefore } = createSwitch(
+                    'workflowModeSwitch',
+                    schema.htmlRenderContext.htmlRender.isWorkflowMode()
+                );
 
                 checkbox.onclick = (e) => clickOnCheckbox(e, nodesInfo.current[schema.node._key], schema);
 
@@ -135,11 +188,50 @@ export const useNodeActionButton = () => {
                     container: switchContainer,
                     slider: slider,
                     sliderBefore: sliderBefore,
-                }
+                };
+            }
+
+            if((!projectRef.current.state.editedNodeConfig && schema.node._key === "root")) {
+                // Create Workflow State Panel
+                const workflowPanel = createPanelContainer('-96px');
+                const workflowLabel = createLabel('Workflow Active', 'workflowActiveSwitch');
+                const workflowSwitchElements = createSwitch(
+                    'workflowActiveSwitch',
+                    workflowState.active
+                );
+
+                const executeButton = createButton('Reset');
+                executeButton.onclick = (e) => {
+                    e.stopPropagation();
+                    console.log('Workflow executed!');
+                    // Add your execution logic here
+                };
+
+                workflowSwitchElements.checkbox.onclick = (e) => {
+                    e.stopPropagation();
+                    const newActiveState = !workflowState.active;
+                    setWorkflowState({ active: newActiveState });
+                    workflowSwitchElements.checkbox.checked = newActiveState;
+                    updateSwitchState(workflowSwitchElements.slider, workflowSwitchElements.sliderBefore, newActiveState);
+                };
+
+                workflowPanel.appendChild(workflowLabel);
+                workflowPanel.appendChild(workflowSwitchElements.switchLabel);
+                workflowPanel.appendChild(executeButton);
+                schema.element.appendChild(workflowPanel);
+
+                wfPanel = {
+                    checkbox: workflowSwitchElements.checkbox,
+                    container: workflowPanel,
+                    slider: workflowSwitchElements.slider,
+                    sliderBefore: workflowSwitchElements.sliderBefore,
+                    button: executeButton,
+                };
             }
 
             nodesInfo.current[schema.node._key] = {
-                domEventSwitch: wfSwitch
+                domEventSwitch: wfSwitch,
+                workflowPanel: wfPanel
             }
         }
     }
@@ -147,15 +239,15 @@ export const useNodeActionButton = () => {
     const updateActionButton = (schema:SchemaNodeInfo) => {
         const nodeInfo = nodesInfo.current[schema.node._key];
         if(nodeInfo) {
+            // Update DOM Event Switch
             if(nodeInfo.domEventSwitch) {
                 const isChecked = schema.htmlRenderContext.htmlRender.isWorkflowMode();
-                if (isChecked) {
-                    nodeInfo.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
-                    nodeInfo.domEventSwitch!.sliderBefore.style.transform = 'translateX(18px)';
-                } else {
-                    nodeInfo.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
-                    nodeInfo.domEventSwitch!.sliderBefore.style.transform = 'translateX(0)';
-                }
+                updateSwitchState(nodeInfo.domEventSwitch.slider, nodeInfo.domEventSwitch.sliderBefore, isChecked);
+            }
+
+            // Update Workflow Panel Switch
+            if(nodeInfo.workflowPanel) {
+                updateSwitchState(nodeInfo.workflowPanel.slider, nodeInfo.workflowPanel.sliderBefore, workflowState.active);
             }
         }
     }
@@ -164,13 +256,7 @@ export const useNodeActionButton = () => {
         e.stopPropagation();
         const isChecked = !schema.htmlRenderContext.htmlRender.isWorkflowMode();
         node.domEventSwitch!.checkbox.checked = isChecked;
-        if (isChecked) {
-            node.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-success-main)';
-            node.domEventSwitch!.sliderBefore.style.transform = 'translateX(18px)';
-        } else {
-            node.domEventSwitch!.slider.style.backgroundColor = 'var(--nodius-grey-600)';
-            node.domEventSwitch!.sliderBefore.style.transform = 'translateX(0)';
-        }
+        updateSwitchState(node.domEventSwitch!.slider, node.domEventSwitch!.sliderBefore, isChecked);
         schema.htmlRenderContext.htmlRender.setWorkflowMode(isChecked).then((s) => {
             callBackWhenChanged.current?.(schema.node._key);
         })
@@ -180,6 +266,7 @@ export const useNodeActionButton = () => {
         const nodeInfo = nodesInfo.current[nodeId];
         if(nodeInfo) {
             nodeInfo.domEventSwitch?.container.remove();
+            nodeInfo.workflowPanel?.container.remove();
             delete nodesInfo.current[nodeId];
         }
     }
