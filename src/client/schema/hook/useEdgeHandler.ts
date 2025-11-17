@@ -98,14 +98,23 @@ export const useEdgeHandler = () => {
                     const distanceSq = dx * dx + dy * dy;
 
                     if (distanceSq < closestDistanceSq) {
-                        closestDistanceSq = distanceSq;
-                        closestResult = {
-                            node,
-                            handleInfo,
-                            pointId: point.id,
-                            distance: Math.sqrt(distanceSq),
-                            position: handlePos
-                        };
+                        // Determine source and target based on the from handle type
+                        const sourceNode = fromHandleInfo.point.type === "out" ? fromNode : node;
+                        const sourceHandle = fromHandleInfo.point.type === "out" ? fromHandleInfo : handleInfo;
+                        const targetNode = fromHandleInfo.point.type === "out" ? node : fromNode;
+                        const targetHandle = fromHandleInfo.point.type === "out" ? handleInfo : fromHandleInfo;
+
+                        // Check if this connection is valid before accepting it
+                        if (isValidConnection(sourceNode, sourceHandle, targetNode, targetHandle)) {
+                            closestDistanceSq = distanceSq;
+                            closestResult = {
+                                node,
+                                handleInfo,
+                                pointId: point.id,
+                                distance: Math.sqrt(distanceSq),
+                                position: handlePos
+                            };
+                        }
                     }
                 }
             }
