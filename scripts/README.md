@@ -76,7 +76,11 @@ tsx scripts/export.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
 
 ### Import dans la base de données
 
-Importe les données depuis un fichier JSON et **remplace uniquement** les documents existants.
+Importe les données depuis un fichier JSON dans ArangoDB :
+- **Crée** les collections si elles n'existent pas (avec le bon type : document ou edge)
+- **Remplace** les documents existants (basé sur `_key`)
+- **Insère** les nouveaux documents qui n'existent pas
+- **Ne supprime jamais** les documents existants
 
 ```bash
 # Import avec configuration par défaut
@@ -99,7 +103,7 @@ tsx scripts/import.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
 **Exemple de sortie :**
 
 ```
-🚀 Starting ArangoDB import (replace mode)...
+🚀 Starting ArangoDB import...
 
 📋 Configuration:
    Database: nodius
@@ -115,35 +119,34 @@ tsx scripts/import.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
 
 📂 Processing collection: workflows
    Documents to process: 15
-   ✅ Replaced: 12 | ⏭️  Skipped: 3 | ❌ Errors: 0
+   ✅ Replaced: 12 | ➕ Inserted: 3 | ❌ Errors: 0
 
 📂 Processing collection: nodes
+   📝 Collection does not exist, creating...
+   ✅ Collection created successfully
    Documents to process: 120
-   ✅ Replaced: 120 | ⏭️  Skipped: 0 | ❌ Errors: 0
+   ✅ Replaced: 0 | ➕ Inserted: 120 | ❌ Errors: 0
 
 ...
 
 ✅ Import completed!
 📊 Summary:
    ✅ Documents replaced: 200
-   ⏭️  Documents skipped (not existing): 50
+   ➕ Documents inserted: 50
    ❌ Errors: 0
-
-💡 Note: 50 documents were skipped because they don't exist in the database.
-   This script only REPLACES existing documents, it does not INSERT new ones.
 ```
 
 ## ⚠️ Comportement Important
 
-### Script d'import en mode "replace"
+### Script d'import
 
 Le script d'import a un comportement spécifique :
 
+- 📝 **Crée** les collections si elles n'existent pas (avec le bon type)
 - ✅ **Remplace** les documents existants (basé sur `_key`)
-- ⏭️ **Ignore** les documents du fichier qui n'existent pas dans la base
+- ➕ **Insère** les nouveaux documents du fichier qui n'existent pas dans la base
 - 🔒 **Préserve** les documents de la base qui ne sont pas dans le fichier
-- ❌ **Ne supprime jamais** de documents
-- ❌ **N'insère jamais** de nouveaux documents
+- ❌ **Ne supprime jamais** de documents existants
 
 **Exemple :**
 
@@ -169,7 +172,7 @@ Collection "users":
   - _key: "user1" (données: v2) ← remplacé
   - _key: "user2" (données: v2) ← remplacé
   - _key: "user3" (données: v1) ← préservé (non présent dans le fichier)
-  - (user4 ignoré car n'existe pas dans la base)
+  - _key: "user4" (données: v2) ← inséré
 ```
 
 ## 📁 Structure du fichier d'export
@@ -231,7 +234,7 @@ tsx scripts/import.ts arangodb=http://localhost:8529 input=./prod-data.json
 # Export depuis ancienne base
 tsx scripts/export.ts arangodb_name=nodius_old output=./migration.json
 
-# Import vers nouvelle base (remplace uniquement les documents existants)
+# Import vers nouvelle base (crée collections et insère/remplace documents)
 tsx scripts/import.ts arangodb_name=nodius_new input=./migration.json
 ```
 
@@ -267,14 +270,6 @@ tsx scripts/import.ts arangodb_name=nodius_new input=./migration.json
 ```
 
 **Solution :** Vérifiez que le fichier existe et que le chemin est correct.
-
-### Collection inexistante
-
-```
-⚠️  Collection does not exist, skipping...
-```
-
-**Solution :** C'est un comportement normal. Le script ignore les collections qui n'existent pas dans la base cible.
 
 ## 📝 Notes
 

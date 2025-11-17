@@ -3,13 +3,16 @@
 import { Database } from 'arangojs';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import type { CollectionType } from 'arangojs/collection';
 
 /**
  * ArangoDB Import Script
  *
- * Imports data from a JSON file and replaces existing documents in ArangoDB.
- * Only updates documents that already exist (based on _key).
- * Does NOT delete existing documents or insert new ones.
+ * Imports data from a JSON file to ArangoDB:
+ * - Creates collections if they don't exist (with correct type: document or edge)
+ * - Replaces existing documents (based on _key)
+ * - Inserts new documents that don't exist
+ * - Does NOT delete existing documents
  *
  * Usage:
  *   tsx scripts/import.ts [options]
@@ -117,7 +120,7 @@ async function importDatabase() {
         console.log('✅ Connected to ArangoDB\n');
 
         let totalReplaced = 0;
-        let totalSkipped = 0;
+        let totalInserted = 0;
         let totalErrors = 0;
 
         // Import each collection
@@ -126,19 +129,21 @@ async function importDatabase() {
             console.log(`   Documents to process: ${collectionData.documents.length}`);
 
             try {
-                // Check if collection exists
+                // Check if collection exists, create if not
                 const collections = await db.collections();
                 const collectionExists = collections.some(col => col.name === collectionName);
 
-                if (!collectionExists) {
-                    console.log(`   ⚠️  Collection does not exist, skipping...`);
-                    totalSkipped += collectionData.documents.length;
-                    continue;
-                }
-
                 const collection = db.collection(collectionName);
+
+                if (!collectionExists) {
+                    console.log(`   📝 Collection does not exist, creating...`);
+                    // CollectionType: 2 = document collection, 3 = edge collection
+                    const collectionType = collectionData.type as CollectionType;
+                    await collection.create({ type: collectionType });
+                    console.log(`   ✅ Collection created successfully`);
+                }
                 let replaced = 0;
-                let skipped = 0;
+                let inserted = 0;
                 let errors = 0;
 
                 // Process each document
@@ -152,8 +157,9 @@ async function importDatabase() {
                             await collection.replace(doc._key, doc);
                             replaced++;
                         } else {
-                            // Skip non-existing documents
-                            skipped++;
+                            // Insert new document
+                            await collection.save(doc, { overwriteMode: 'ignore' });
+                            inserted++;
                         }
                     } catch (error) {
                         console.error(`      ❌ Error processing document ${doc._key}:`, error);
@@ -161,10 +167,10 @@ async function importDatabase() {
                     }
                 }
 
-                console.log(`   ✅ Replaced: ${replaced} | ⏭️  Skipped: ${skipped} | ❌ Errors: ${errors}`);
+                console.log(`   ✅ Replaced: ${replaced} | ➕ Inserted: ${inserted} | ❌ Errors: ${errors}`);
 
                 totalReplaced += replaced;
-                totalSkipped += skipped;
+                totalInserted += inserted;
                 totalErrors += errors;
 
             } catch (error) {
@@ -177,13 +183,8 @@ async function importDatabase() {
         console.log(`\n✅ Import completed!`);
         console.log(`📊 Summary:`);
         console.log(`   ✅ Documents replaced: ${totalReplaced}`);
-        console.log(`   ⏭️  Documents skipped (not existing): ${totalSkipped}`);
+        console.log(`   ➕ Documents inserted: ${totalInserted}`);
         console.log(`   ❌ Errors: ${totalErrors}`);
-
-        if (totalSkipped > 0) {
-            console.log(`\n💡 Note: ${totalSkipped} documents were skipped because they don't exist in the database.`);
-            console.log(`   This script only REPLACES existing documents, it does not INSERT new ones.`);
-        }
 
     } catch (error) {
         console.error('\n❌ Import failed:', error);
