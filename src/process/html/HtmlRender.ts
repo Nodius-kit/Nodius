@@ -25,6 +25,7 @@ import {deepCopy, deepEqual} from "../../utils/objectUtils";
 import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/htmlCss";
 import {modalManager} from "../modal/ModalManager";
+import {utilsFunctionList} from "../workflow/utilsFunction";
 
 export interface ObjectStorage {
     element: HTMLElement,
@@ -856,11 +857,11 @@ export class HtmlRender {
     private async callFunction(code: string, env: Record<string, any>): Promise<any> {
         const fct = new AsyncFunction(...[...Object.keys(env), code]);
         let output:any = undefined;
-        //try {
+        try {
             output = await fct(...[...Object.values(env)]);
-        /*} catch(e) {
+        } catch(e) {
             console.error('Error:', e, "in function:", code, "with arg", env);
-        }*/
+        }
         return output;
     }
 
@@ -900,6 +901,7 @@ export class HtmlRender {
             renderElementWithIdentifier: this.renderElementWithIdentifier,
             renderElement: () => this.renderElementWithIdentifier(storage.object.identifier),
             modalManager: modalManager,
+            ...utilsFunctionList
         };
     }
 
@@ -963,6 +965,7 @@ export class HtmlRender {
                         element: objectStorage.element,
                         modalManager: modalManager,
                         ...this.extraEventVariable,
+                        ...utilsFunctionList
                     }
                 );
             })

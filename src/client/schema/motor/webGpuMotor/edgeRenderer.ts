@@ -59,6 +59,9 @@ export class EdgeRenderer {
         this.screenToWorld = screenToWorld;
     }
 
+    public getHoverEdge = () => this.hoveredEdge;
+    public getSelectedEdges = () => this.selectedEdges;
+
     public init(bindGroupLayout: GPUBindGroupLayout): void {
         const edgeShaderCode = /* wgsl */ `
       struct Uniforms {
@@ -321,10 +324,10 @@ export class EdgeRenderer {
 
                     if (isSelected) {
                         // Create multi-layer glow effect for each segment
-                        this.createGlowLineSegment(p1, p2, 8, 0.15 / 2, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 5, 0.3 / 2, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 3, 0.5 / 2, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 1.5, 0.8 / 2, selectedEdgeVertices);
+                        this.createGlowLineSegment(p1, p2, 8, 0.15 / 10, selectedEdgeVertices);
+                        this.createGlowLineSegment(p1, p2, 5, 0.3 / 10, selectedEdgeVertices);
+                        this.createGlowLineSegment(p1, p2, 3, 0.5 / 10, selectedEdgeVertices);
+                        this.createGlowLineSegment(p1, p2, 1.5, 0.8 / 10, selectedEdgeVertices);
                     } else {
                         edgeVertices.push(p1.x, p1.y, p2.x, p2.y);
                     }

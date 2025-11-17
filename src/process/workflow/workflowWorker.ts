@@ -4,7 +4,8 @@ import {HtmlObject} from "../../utils/html/htmlType";
 import {Instruction} from "../../utils/sync/InstructionBuilder";
 import {deepCopy} from "../../utils/objectUtils";
 import {AsyncFunction} from "../html/HtmlRender";
-
+import {utilsFunctionList} from "./utilsFunction";
+import {modalManager} from "../modal/ModalManager";
 
 interface incomingWorkflowNode {
     data: any,
@@ -13,12 +14,11 @@ interface incomingWorkflowNode {
 }
 
 let isExecuting = false;
-let globalData:any = undefined;
+let globalData: Record<string, any>|undefined = undefined;
 let nodeMap: Map<string, Node<any>> | undefined = undefined;
 let edgeMap: Map<string, Edge[]> | undefined = undefined;
 let entryData: Record<string, any> | undefined = undefined;
 let nodeTypeConfig: Record<NodeType, NodeTypeConfig> | undefined = undefined;
-
 
 let executionStepUniqueId = 0;
 
@@ -26,7 +26,11 @@ export interface NodeRoadMapStep {
     incoming?: incomingWorkflowNode
 }
 
-let nodeRoadMap: Map<string, NodeRoadMapStep[]>|undefined = undefined;
+let nodeRoadMap: Map<string, NodeRoadMapStep[]> | undefined = undefined;
+
+let pendingTasks = 0;
+let currentBranchStartTime = 0;
+let completeResolves: ((value: any) => void)[] = [];
 
 export const executeWorkflow = async (
     nodes: Node<any>[],
@@ -38,9 +42,7 @@ export const executeWorkflow = async (
     startPointId?: string,
     startData?: any,
     initialGlobalData?: any
-) => {
-
-    const startTime = Date.now();
+): Promise<any> => {
 
     isExecuting = true;
 
@@ -68,20 +70,73 @@ export const executeWorkflow = async (
         };
     }
 
-    const rootTask = createTask(rootNode, incoming);
-    startTask(rootTask);
-    await rootTask.promise;
+    currentBranchStartTime = Date.now();
 
-    const totalTime = Date.now() - startTime;
-    sendLog(`Workflow execution completed in ${totalTime}ms`, undefined, undefined);
-
-    sendMessage({
-        type: "complete",
-        data: deepCopy(globalData),
-        totalTimeMs: totalTime,
+    const completePromise = new Promise<any>((res) => {
+        completeResolves.push(res);
     });
 
+    const rootTask = createTask(rootNode, incoming);
+    startTask(rootTask);
+
+    return completePromise;
 }
+/*
+const resumeExecution = (nodeKey: string, pointId: string, data: any) => {
+    if (!isExecuting || !nodeMap || !edgeMap || !nodeTypeConfig) {
+        console.warn('[WorkflowWorker] Cannot resume: workflow not initialized or not executing');
+        return;
+    }
+
+    const node = nodeMap.get(nodeKey);
+    if (!node) {
+        console.warn('[WorkflowWorker] Node not found for resume:', nodeKey);
+        return;
+    }
+
+    sendLog(`Resuming execution from node ${nodeKey} at input point ${pointId}`, nodeKey, data);
+
+    const incoming: incomingWorkflowNode = {
+        pointId,
+        data,
+    };
+
+    currentBranchStartTime = Date.now();
+
+    const task = createTask(node, incoming);
+    startTask(task);
+}*/
+
+const resumeExecution = (nodeKey: string, pointId: string, data: any) => {
+    if (!isExecuting || !nodeMap || !edgeMap || !nodeTypeConfig) {
+        console.warn('[WorkflowWorker] Cannot resume: workflow not initialized or not executing');
+        return;
+    }
+    const fromNode = nodeMap.get(nodeKey);
+    if (!fromNode) {
+        console.warn('[WorkflowWorker] From node not found for resume:', nodeKey);
+        return;
+    }
+    sendLog(`Resuming execution from output point ${pointId} of node ${nodeKey}`, nodeKey, data);
+    const validEdges = edgeMap.get(`source-${nodeKey}`)?.filter((e) => e.sourceHandle === pointId) || [];
+    if (validEdges.length === 0) {
+        sendLog(`No outgoing edges found for point ${pointId} from node ${nodeKey}`, nodeKey, undefined);
+        return;
+    }
+    currentBranchStartTime = Date.now();
+    for (const edge of validEdges) {
+        const targetNode = nodeMap.get(edge.target);
+        if (targetNode) {
+            const childIncoming: incomingWorkflowNode = {
+                pointId: edge.targetHandle,
+                data: deepCopy(data),
+                node: fromNode,
+            };
+            const childTask = createTask(targetNode, childIncoming);
+            queueMicrotask(() => startTask(childTask));
+        }
+    }
+};
 
 interface Task {
     node: Node<any>;
@@ -90,6 +145,7 @@ interface Task {
     resolve: (value: any) => void;
     reject: (reason: any) => void;
 }
+
 const createTask = (node: Node<any>, incoming: incomingWorkflowNode | undefined): Task => {
     const task: any = { node, incoming };
     task.promise = new Promise((res, rej) => {
@@ -98,11 +154,27 @@ const createTask = (node: Node<any>, incoming: incomingWorkflowNode | undefined)
     });
     return task;
 };
+
 const startTask = (task: Task) => {
-    executeTask(task).then(task.resolve).catch(task.reject);
+    pendingTasks++;
+    executeTask(task)
+        .then(task.resolve)
+        .catch(task.reject)
+        .finally(() => {
+            pendingTasks--;
+            if (pendingTasks === 0) {
+                const totalTime = Date.now() - currentBranchStartTime;
+                sendLog(`Branch execution completed in ${totalTime}ms`, undefined, undefined);
+                sendMessage({
+                    type: "complete",
+                    data: deepCopy(globalData),
+                    totalTimeMs: totalTime,
+                });
+                completeResolves.forEach(res => res(deepCopy(globalData)));
+                completeResolves = [];
+            }
+        });
 };
-
-
 
 const executeTask = async (task: Task): Promise<any> => {
     if (!isExecuting) {
@@ -116,7 +188,7 @@ const executeTask = async (task: Task): Promise<any> => {
         throw new Error(`Node config id ${node.type} is not provided`);
     }
 
-    sendLog("working on node id "+node._key, node._key, undefined);
+    sendLog("working on node id " + node._key, node._key, undefined);
 
     executionStepUniqueId++;
 
@@ -134,7 +206,9 @@ const executeTask = async (task: Task): Promise<any> => {
         nodeTypeConfig: nodeTypeConfig,
         incoming: incoming,
         global: globalData,
+        parseString: (content:string) => parseString(content, node, incoming),
         initHtml: WF_initHtml,
+        yieldData: WF_yieldData,
         updateHtml: WF_updateHtml,
         log: (message: string, data?: any) => sendLog(message, node._key, data),
         next: async (pointId: string, data?: any): Promise<any[]> => {
@@ -152,6 +226,7 @@ const executeTask = async (task: Task): Promise<any> => {
                         data: deepCopy(data),
                         node: node,
                     };
+
                     const childTask = createTask(_node, childIncoming);
                     queueMicrotask(() => startTask(childTask));
                     childPromises.push(childTask.promise);
@@ -196,11 +271,67 @@ const executeTask = async (task: Task): Promise<any> => {
         }
     };
 
-
     const fct = new AsyncFunction(...Object.keys(env), config.node.process);
     return await fct(...Object.values(env));
 };
 
+export const handleIncomingMessage = (message: any) => {
+    if (message.type === 'domEvent') {
+        const { nodeKey, pointId, eventType, eventData } = message;
+        resumeExecution(nodeKey, pointId, { eventType, eventData });
+    } else if (message.type === 'cancel') {
+        isExecuting = false;
+        // Note: This will cause ongoing tasks to throw on next check; long-running awaits won't be aborted automatically
+    }
+};
+
+export const parseString = async (content:string,  node:Node<any>, incoming?: incomingWorkflowNode,) => {
+    const variable = {
+        incoming:incoming,
+        node: node,
+        ...entryData,
+        ...globalData,
+        ...utilsFunctionList
+    }
+
+    const regex = /\{\{(.*?)\}\}/g; // Non-greedy match for {{content}}
+
+    const matches = [...content.matchAll(regex)];
+    if (matches.length === 0) return content;
+
+
+    const callFunction = async (code: string, env: Record<string, any>) => {
+        const fct = new AsyncFunction(...[...Object.keys(env), code]);
+        let output:any = undefined;
+        try {
+            output = await fct(...[...Object.values(env)]);
+        } catch(e) {
+            console.error('Error:', e, "in function:", code, "with arg", env);
+        }
+        return output;
+    }
+
+    // Process each match asynchronously
+    const replacements = await Promise.all(
+        matches.map(async (match) => {
+            const inner = match[1].trim();
+            return await callFunction(
+                inner.startsWith("return") ? inner : "return " + inner,
+                {
+                   ...variable
+                }
+            );
+        })
+    );
+
+    // Rebuild content with resolved replacements
+    let replaced = content;
+    matches.forEach((match, i) => {
+        replaced = replaced.replace(match[0], replacements[i]);
+    });
+
+    return replaced;
+}
 
 export const dispose = () => {
     isExecuting = false;
@@ -211,13 +342,14 @@ export const dispose = () => {
     nodeTypeConfig = undefined;
     executionStepUniqueId = 0;
     nodeRoadMap = undefined;
-}
-
+    pendingTasks = 0;
+    completeResolves = [];
+};
 
 let messageHandler: ((message: any) => void) | null = null;
 /**
-* Set message handler for communication
-*/
+ * Set message handler for communication
+ */
 export function setMessageHandler(handler: (message: any) => void) {
     messageHandler = handler;
 }
@@ -248,12 +380,11 @@ function WF_updateHtml(instructions: Instruction[], id?: string) {
     });
 }
 
-function WF_yieldData(data: any, nodeKey: string) {
+function WF_yieldData() {
     sendMessage({
-        type: "yieldData",
-        data: data,
-        nodeKey: nodeKey,
-        timestamp: Date.now(),
+        type: "complete",
+        data: deepCopy(globalData),
+        totalTimeMs: 0,
     });
 }
 

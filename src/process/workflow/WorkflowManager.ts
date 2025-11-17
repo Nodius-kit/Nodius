@@ -13,7 +13,6 @@ export interface WorkflowCallbacks {
     onDomEvent?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void;
 }
 
-
 export class WorkflowManager {
     private isExecuting: boolean = false;
     private currentCallbacks?: WorkflowCallbacks;
@@ -29,19 +28,24 @@ export class WorkflowManager {
     public async cancelExecution() {
         if (this.isExecuting) {
             console.log('[WorkflowManager] Cancelling execution');
+            workflowExecutor.handleIncomingMessage({ type: 'cancel' });
             this.isExecuting = false;
-            // wait end
+            // For simplicity, no waiting here; ongoing tasks may throw if they check isExecuting
         }
     }
 
-
     public sendDomEvent(nodeKey: string, pointId: string, eventType: string, eventData: any) {
-        if (!this.isExecuting) {
-            console.warn('[WorkflowManager] Cannot send DOM event: workflow not executing');
-            return;
-        }
         console.log('[WorkflowManager] Sending DOM event:', eventType, 'for node:', nodeKey, 'point:', pointId);
-
+        if (this.currentCallbacks?.onDomEvent) {
+            this.currentCallbacks.onDomEvent(nodeKey, pointId, eventType, eventData);
+        }
+        workflowExecutor.handleIncomingMessage({
+            type: 'domEvent',
+            nodeKey,
+            pointId,
+            eventType,
+            eventData
+        });
     }
 
     public async executeWorkflow(
@@ -49,11 +53,12 @@ export class WorkflowManager {
         edges: Edge[],
         entryNodeId: string,
         entryData: Record<string, any>,
-        nodeTypeConfig:Record<NodeType, NodeTypeConfig>,
+        nodeTypeConfig: Record<NodeType, NodeTypeConfig>,
     ) {
         console.log('[WorkflowManager] Starting workflow execution', {
             nodeCount: nodes.length,
-            edgeCount: edges.length
+            edgeCount: edges.length,
+            entryData: entryData
         });
 
         if (this.isExecuting) {
@@ -76,7 +81,6 @@ export class WorkflowManager {
         }
     }
 
-
     /**
      * Handle workflow errors
      */
@@ -90,16 +94,16 @@ export class WorkflowManager {
      * Handle messages from workflow executor
      */
     private handleMessage(message: any) {
-        if(message.type === "log") {
+        if (message.type === "log") {
             this.currentCallbacks?.onLog?.(message.message, message.timestamp);
-        } else if(message.type === "complete") {
+        } else if (message.type === "complete") {
             this.isExecuting = false;
             console.log('[WorkflowManager] Execution completed in', message.totalTimeMs, 'ms');
             this.currentCallbacks?.onComplete?.(message.totalTimeMs, message.data);
-        }  if(message.type === "initHtml") {
-            console.log('[WorkflowManager] initHtml:', message.html, "with render id",message.id,"on element selector",message.containerSelector);
+        } else if (message.type === "initHtml") {
+            console.log('[WorkflowManager] initHtml:', message.html, "with render id", message.id, "on element selector", message.containerSelector);
             this.currentCallbacks?.onInitHtml?.(message.html, message.id, message.containerSelector);
-        } else if(message.type === "applyHtmlInstruction") {
+        } else if (message.type === "applyHtmlInstruction") {
             console.log('[WorkflowManager] applyHtmlInstruction: ', message.instructions, "on render id", message.id);
             this.currentCallbacks?.onUpdateHtml?.(message.instructions, message.id);
         }
@@ -111,5 +115,4 @@ export class WorkflowManager {
         this.currentCallbacks = undefined;
         workflowExecutor.dispose();
     }
-
 }

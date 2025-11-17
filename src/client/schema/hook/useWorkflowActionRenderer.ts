@@ -3,9 +3,16 @@ import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 
+interface domEventSwitch {
+    applyClass: HTMLElement[];
+    checkbox: HTMLInputElement;
+}
+
 interface WorkflowDisplay {
+    nodeId:string,
     container: HTMLElement;
-    wfButton: HTMLButtonElement;
+    wfButton?: HTMLButtonElement;
+    domEventSwitch?: domEventSwitch;
 }
 
 interface WorkflowCallback {
@@ -21,9 +28,10 @@ export const useWorkflowActionRenderer = ({
     workflowCallback
 }: useWorkflowActionRendererProps) => {
 
-    const workflowDisplay = useRef<WorkflowDisplay>(undefined);
+    const workflowDisplay = useRef<WorkflowDisplay[]>([]);
 
     const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
 
     const callback = useRef<WorkflowCallback>(undefined);
 
@@ -95,7 +103,7 @@ export const useWorkflowActionRenderer = ({
             border-radius: 50%;
             transform: translateX(0);
         }
-        & .sliderBefore.active {
+        & .sliderBefore.checked {
             transform: translateX(18px);
         }
         
@@ -125,82 +133,135 @@ export const useWorkflowActionRenderer = ({
     }, [Project.state.workFlowState]);
 
     const updateWorkFlowButton = () => {
-        if(!workflowDisplay.current) return;
-        if(Project.state.workFlowState.active) {
+        for(const display of workflowDisplay.current) {
+            if (display.wfButton) {
+                if (Project.state.workFlowState.active) {
+                    if (Project.state.workFlowState.executing) {
+                        display.wfButton.innerHTML = `
+                            <div class="rotate">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle-icon lucide-loader-circle"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                            </div>
+                        `;
+                    } else {
+                        display.wfButton.textContent = "Dispose";
+                    }
 
-            if(Project.state.workFlowState.executing) {
-                workflowDisplay.current.wfButton.innerHTML = `
-                    <div class="rotate">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle-icon lucide-loader-circle"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                    </div>
-                `;
-            } else {
-                workflowDisplay.current.wfButton.textContent = "Dispose";
-
+                    display.wfButton.onclick = (e) => {
+                        e.stopPropagation();
+                        if (!callback.current) return;
+                        callback.current.stop();
+                    }
+                } else {
+                    display.wfButton.textContent = "Start WorkFlow";
+                    display.wfButton.onclick = (e) => {
+                        e.stopPropagation();
+                        if (!callback.current) return;
+                        callback.current.start();
+                    }
+                }
             }
 
-            workflowDisplay.current.wfButton.onclick = () => {
-                if(!callback.current) return;
-                callback.current.stop();
-            }
-        } else {
-            workflowDisplay.current.wfButton.textContent = "Start WorkFlow";
-            workflowDisplay.current.wfButton.onclick = () => {
-                if(!callback.current) return;
-                callback.current.start();
+            if (display.domEventSwitch) {
+                console.log(getMainRenderOfNode(display.nodeId)?.htmlRender.isWorkflowMode());
+                if(getMainRenderOfNode(display.nodeId)?.htmlRender.isWorkflowMode()) {
+                    for(const element of display.domEventSwitch.applyClass) {
+                        if(!element.classList.contains("checked")) {
+                            element.classList.add("checked");
+                        }
+                    }
+                    display.domEventSwitch.checkbox.checked = true;
+                } else {
+                    for(const element of display.domEventSwitch.applyClass) {
+                        if(element.classList.contains("checked")) {
+                            element.classList.remove("checked");
+                        }
+                    }
+                    display.domEventSwitch.checkbox.checked = false;
+                }
+                display.domEventSwitch.checkbox.onclick = (e) => {
+                    const render = getMainRenderOfNode(display.nodeId);
+                    if(!render) return;
+                    render.htmlRender.setWorkflowMode(!render.htmlRender.isWorkflowMode());
+                    updateWorkFlowButton();
+                }
             }
         }
 
     }
 
+    const getMainRenderOfNode = (nodeId:string) => {
+        const display = workflowDisplay.current.find((c) => c.nodeId === nodeId);
+        if(!display) return undefined;
+        const renders = projectRef.current.state.getHtmlRenderOfNode(display.nodeId);
+        const mainRender = renders.find((r) => r.renderId === "");
+        return mainRender;
+    }
 
 
     const renderWorkflowAction = (nodeKey:string, nodeContainer:HTMLElement) => {
         const container = document.createElement('div');
         container.className = actionClass;
 
-        /*const switchLabel = document.createElement("label");
-        switchLabel.className = "switchLabel";
+        let domEventSwitch:domEventSwitch|undefined = undefined;
 
-        const checkbox = document.createElement("input");
-        checkbox.id = "workflow-checkbox-"+nodeKey;
+        if(projectRef.current.state.editedNodeConfig && nodeKey === "0") {
 
-        const slider = document.createElement("span");
-        slider.className = "slider";
+            const switchLabel = document.createElement("label");
+            switchLabel.className = "switchLabel";
 
-        const sliderBefore = document.createElement("span");
-        sliderBefore.className = "sliderBefore";
+            const checkbox = document.createElement("input");
+            checkbox.id = "workflow-checkbox-" + nodeKey;
 
-        const label = document.createElement("label");
-        label.className = "label";
-        label.innerHTML = "Start Workflow";
-        label.htmlFor = checkbox.id;
+            const slider = document.createElement("span");
+            slider.className = "slider";
 
-        slider.appendChild(sliderBefore);
-        switchLabel.appendChild(checkbox);
-        switchLabel.appendChild(slider);
+            const sliderBefore = document.createElement("span");
+            sliderBefore.className = "sliderBefore";
 
-        container.appendChild(label);
-        container.appendChild(switchLabel);*/
+            const label = document.createElement("label");
+            label.className = "label";
+            label.innerHTML = "DOM Event";
+            label.htmlFor = checkbox.id;
 
-        const wfButton = document.createElement("button");
-        container.appendChild(wfButton);
+            slider.appendChild(sliderBefore);
+            switchLabel.appendChild(checkbox);
+            switchLabel.appendChild(slider);
 
-        nodeContainer.appendChild(container);
+            container.appendChild(label);
+            container.appendChild(switchLabel);
 
-        workflowDisplay.current = {
-            container: container,
-            wfButton: wfButton,
+            domEventSwitch = {
+                applyClass: [slider, sliderBefore],
+                checkbox: checkbox
+            }
+        }
+
+
+        let wfButton: HTMLButtonElement|undefined = undefined;
+        if(nodeKey === "root") {
+            wfButton = document.createElement("button");
+            container.appendChild(wfButton);
+
+
+        }
+        if(wfButton || domEventSwitch) {
+            nodeContainer.appendChild(container);
+            workflowDisplay.current.push({
+                container: container,
+                wfButton: wfButton,
+                domEventSwitch: domEventSwitch,
+                nodeId: nodeKey,
+            });
         }
         updateWorkFlowButton();
 
     }
 
-    const disposeWorkflowAction = () => {
-        if(workflowDisplay.current) {
-            workflowDisplay.current.container.remove();
-            workflowDisplay.current = undefined;
-        }
+    const disposeWorkflowAction = (nodeId:string) => {
+        const display = workflowDisplay.current.find((c) => c.nodeId === nodeId);
+        if(!display) return;
+        display.container.remove();
+        workflowDisplay.current =  workflowDisplay.current.filter((c) => c.nodeId !== nodeId);
     }
 
 

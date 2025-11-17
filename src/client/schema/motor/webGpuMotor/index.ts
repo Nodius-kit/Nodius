@@ -303,7 +303,7 @@ export class WebGpuMotor implements GraphicalMotor {
         return dist < threshold;
     }
 
-    private isPointNearEdge(point: Point, edge: Edge): boolean {
+    public isPointNearEdge(point: Point, edge: Edge): boolean {
         if (!this.scene) return false;
         const pathPoints = this.edgeRenderer!.getEdgePathPoints(this.scene, edge, 10);
         if (pathPoints.length < 2) return false;
@@ -717,7 +717,7 @@ export class WebGpuMotor implements GraphicalMotor {
     }
 
     public setSelectedEdges(edges:string[]) {
-        this.edgeRenderer?.setSelectedEdges(edges);
+        this.selectedEdges = new Set(edges);
         this.requestRedraw();
     }
 }

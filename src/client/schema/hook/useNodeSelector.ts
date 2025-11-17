@@ -1,6 +1,7 @@
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
 import {useRef} from "react";
 import {deepEqual} from "../../../utils/objectUtils";
+import {Edge} from "../../../utils/graph/graphType";
 
 export const useNodeSelector = () => {
 
@@ -104,6 +105,7 @@ export const useNodeSelector = () => {
                         });
                     }
                     if(!deepEqual(newSelectedEdge, previousSelectedEdge)) {
+                        console.log("aaaa", newSelectedEdge);
                         projectRef.current.dispatch({
                             field: "selectedEdge",
                             value: newSelectedEdge
@@ -136,15 +138,51 @@ export const useNodeSelector = () => {
                 selectingState.current.isSelecting = false;
                 if(!selectingState.current.rect.parentElement) {
                     // it mean it didn't to a selection, only a click
-                    projectRef.current.dispatch({
-                        field: "selectedNode",
-                        value: []
-                    });
-                    projectRef.current.dispatch({
-                        field: "selectedEdge",
-                        value: []
-                    });
-                    projectRef.current.state.getMotor().setSelectedEdges([]);
+
+                    let clickedEdge: Edge | null = null;
+
+                    const motor = projectRef.current.state.getMotor();
+                    const world = motor.screenToWorld({ x: e.clientX,
+                        y: e.clientY });
+                    for (const edges of motor.getScene()!.edges.values()) {
+                        for(const edge of edges) {
+                            if (motor.isPointNearEdge(world, edge)) {
+                                clickedEdge = edge;
+                                break;
+                            }
+                        }
+                    }
+                    if(clickedEdge) {
+                        if(e.ctrlKey) {
+                            projectRef.current.dispatch({
+                                field: "selectedEdge",
+                                value: [...projectRef.current.state.selectedEdge, clickedEdge._key]
+                            });
+                            projectRef.current.state.getMotor().setSelectedEdges([...projectRef.current.state.selectedEdge, clickedEdge._key]);
+                        } else {
+                            projectRef.current.dispatch({
+                                field: "selectedNode",
+                                value: []
+                            });
+                            projectRef.current.dispatch({
+                                field: "selectedEdge",
+                                value: [clickedEdge._key]
+                            });
+                            projectRef.current.state.getMotor().setSelectedEdges([clickedEdge._key]);
+                        }
+                    } else {
+                        projectRef.current.dispatch({
+                            field: "selectedNode",
+                            value: []
+                        });
+                        projectRef.current.dispatch({
+                            field: "selectedEdge",
+                            value: []
+                        });
+                        projectRef.current.state.getMotor().setSelectedEdges([]);
+                    }
+
+
 
                     if(projectRef.current.state.editedHtml) {
                         projectRef.current.state.editedHtml?.htmlRenderContext.htmlRender.pushBuildingInteractEvent('select', undefined, true);

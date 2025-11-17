@@ -93,6 +93,8 @@ export interface EditedHtmlType {
 export interface WorkFlowState {
     active: boolean;
     executing: boolean;
+    entryData?:Record<string, any>,
+    global?:Record<string, any>
 }
 
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);

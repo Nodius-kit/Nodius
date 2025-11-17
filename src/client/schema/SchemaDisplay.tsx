@@ -42,8 +42,29 @@ export const SchemaDisplay = memo(() => {
 
 
     const getWorkflowCallback = ():WorkflowCallbacks => ({
-        onComplete: (totalTimeMs: number, data: any) => {
+        onComplete:async  (totalTimeMs: number, data: Record<string, any>) => {
             console.log(`[SchemaDisplay] Workflow completed in ${totalTimeMs}ms`, data);
+            const rootNode = getNode('root');
+            if (rootNode) {
+                const renders = projectRef.current.state.getHtmlRenderOfNode(rootNode._key);
+                for(const render of renders) {
+                    if(render.renderId !== "") {
+                        render.htmlRender.setExtraEventVariable({
+                            ...data,
+                            entryData: projectRef.current.state.workFlowState.entryData
+                        });
+                        render.htmlRender.setNodeKey(rootNode._key);
+                        await render.htmlRender.render(render.retrieveHtmlObject(rootNode));
+                    }
+                }
+            }
+            projectRef.current.dispatch({
+                field: "workFlowState",
+                value: {
+                    ...projectRef.current.state.workFlowState,
+                    global: data
+                }
+            });
         },
         onData: (nodeKey: string | undefined, data: any, timestamp: number) => {
             console.log(`[SchemaDisplay] Data from node ${nodeKey}:`, data);
@@ -74,40 +95,44 @@ export const SchemaDisplay = memo(() => {
             }
 
             // Remove existing renderer with same ID
-
-            const existingRenderer = projectRef.current.state.getHtmlRenderWithId("root", renderId);
+            /*const existingRenderer = projectRef.current.state.getHtmlRenderWithId("root", renderId);
+            console.log(renderId, projectRef.current.state.getHtmlRenderOfNode("root"));
             if (existingRenderer) {
-                existingRenderer.htmlRender.dispose();
                 projectRef.current.state.removeHtmlRender("root", renderId);
-            }
+            }*/
 
             // Create new workflow HTML renderer
             const rootNode = getNode('root');
             if (rootNode) {
 
-                const htmlRender = new HtmlRender(container, {
-                    language: "en",
-                    buildingMode: false,
-                    workflowMode: true,
-                    onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
-                        // Forward DOM event to workflow manager
-                        if (workflowManager.current) {
-                            workflowManager.current.sendDomEvent(nodeKey, pointId, eventType, eventData);
+                if(rootNode.type === "html") {
+                    const htmlRender = new HtmlRender(container, {
+                        language: "en",
+                        buildingMode: false,
+                        workflowMode: true,
+                        onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+                            // Forward DOM event to workflow manager
+                            if (workflowManager.current) {
+                                workflowManager.current.sendDomEvent(nodeKey, pointId, eventType, eventData);
+                            }
                         }
+                    });
+                    const context = projectRef.current.state.initiateNewHtmlRender({
+                        nodeId: rootNode._key,
+                        htmlRender: htmlRender,
+                        renderId: `${renderId}`,
+                        retrieveNode: () => getNode("root"),
+                        retrieveHtmlObject: (node) => html
+                    })!;
+                    if (context) {
+                        // Set the node key for event tracking
+                        context.htmlRender.setExtraEventVariable({
+                            ...projectRef.current.state.workFlowState.global,
+                            entryData: projectRef.current.state.workFlowState.entryData
+                        })
+                        context.htmlRender.setNodeKey(rootNode._key);
+                        await context.htmlRender.render(html);
                     }
-                });
-                const context = projectRef.current.state.initiateNewHtmlRender({
-                    nodeId: rootNode._key,
-                    htmlRender:htmlRender,
-                    renderId: `workflow-${renderId}`,
-                    retrieveNode: () => getNode("root"),
-                    retrieveHtmlObject: (node) => html
-                })!;
-
-                if (context) {
-                    // Set the node key for event tracking
-                    context.htmlRender.setNodeKey(rootNode._key);
-                    await context.htmlRender.render(html);
                 }
             }
         },
@@ -365,14 +390,6 @@ export const SchemaDisplay = memo(() => {
         workflowCallback: {
             start: async () => {
                 console.log("start workflow");
-                projectRef.current.dispatch({
-                    field: "workFlowState",
-                    value: {
-                        ...projectRef.current.state.workFlowState,
-                        active: true,
-                        executing: true
-                    }
-                });
                 if(projectRef.current.state.editedHtml?.htmlRenderContext.nodeId === "root") {
                     await projectRef.current.state.closeHtmlEditor!();
                 }
@@ -405,19 +422,40 @@ export const SchemaDisplay = memo(() => {
 
                 // Get entry data from entryType node
                 let nodeTypeEntry: Node<NodeTypeEntryType> | undefined = undefined;
+                let entryData:Record<string, any> = {};
                 if(! (!rootNode || rootNode.handles["0"] == undefined || rootNode.handles["0"].point.length == 0)) {
                     const connectedNodeToEntry = findNodeConnected(projectRef.current.state.graph!, rootNode, "in");
                     nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
+                    if(nodeTypeEntry) {
+                        const dataType = projectRef.current.state.dataTypes?.find((d) => d._key === nodeTypeEntry!.data!._key);
+                        if(dataType) {
+                            for(const type of dataType.types) {
+                                if(nodeTypeEntry.data?.fixedValue?.[type.name]) {
+                                    entryData[type.name] = nodeTypeEntry.data?.fixedValue?.[type.name];
+                                } else if(type.defaultValue !== undefined) {
+                                    entryData[type.name] = type.defaultValue
+                                }
+                            }
+                        }
+                    }
                 }
-                console.log("execute workflow with ",nodes.length,edges.length);
+                projectRef.current.dispatch({
+                    field: "workFlowState",
+                    value: {
+                        ...projectRef.current.state.workFlowState,
+                        active: true,
+                        executing: true,
+                        entryData: entryData,
+                        global: {}
+                    }
+                });
                 await workflowManager.current.executeWorkflow(
                     nodes,
                     edges,
                     "root",
-                    nodeTypeEntry?.data?.fixedValue || {},
+                    entryData,
                     projectRef.current.state.nodeTypeConfig
                 )
-                console.log("end");
                 projectRef.current.dispatch({
                     field: "workFlowState",
                     value: {
@@ -550,10 +588,9 @@ export const SchemaDisplay = memo(() => {
         nodeHTML.addEventListener("mousedown", dragHandler);
 
 
-        if(node._key === "root") {
-            // add workflow interactive
-            renderWorkflowAction(node._key, nodeHTML);
-        }
+        // add workflow interactive
+        renderWorkflowAction(node._key, nodeHTML);
+
 
         const htmlRender = new HtmlRender(nodeHTML, {
             language: "en",
@@ -576,7 +613,7 @@ export const SchemaDisplay = memo(() => {
             htmlRenderContext: context
         });
 
-        htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
+        htmlRender.setExtraEventVariable(getExtraRenderGraphVariable(node));
         htmlRender.render(nodeConfig.content).then(() => {
             const updateTrigger = nodeHTML.querySelectorAll('[data-workflow-event*="nodeEnter"]');
             for(const element of updateTrigger) {
@@ -635,7 +672,7 @@ export const SchemaDisplay = memo(() => {
         return generateUniqueHandlePointId(node);
     }
 
-    const getExtraRenderVariable = (node:Node<any>) => {
+    const getExtraRenderGraphVariable = (node:Node<any>) => {
         const schema = inSchemaNode.current.get(node._key);
         if(!schema) return {};
         return {
@@ -645,7 +682,6 @@ export const SchemaDisplay = memo(() => {
             },
             nodeId: node._key,
             updateNode:async (newNode:Node<any>) => {
-                console.log(newNode);
                 const baseNode = getNode(node._key);
                 const diffs = generateInstructionsToMatch(baseNode, newNode);
                 if(diffs.length > 0) {
@@ -714,6 +750,7 @@ export const SchemaDisplay = memo(() => {
         const handleEdgeClick = (edge: Edge, edgeKey: string, ctrlKey: boolean) => {
             // If not ctrl, clear node selection when selecting edge
             console.log("edge click");
+            console.trace();
         };
 
         const handleCanvasClickEmpty = () => {
@@ -733,6 +770,7 @@ export const SchemaDisplay = memo(() => {
             motor.off("canvasClick", handleCanvasClickEmpty);
         };
     }, [projectRef.current.state.getMotor]);
+
 
 
     const internalNodeUpdate = async  (nodeId:string, options?:triggerNodeUpdateOption) => {
@@ -755,9 +793,11 @@ export const SchemaDisplay = memo(() => {
 
 
         if(options?.reRenderNodeConfig) {
-            schema.htmlRenderContext.htmlRender.setExtraEventVariable(getExtraRenderVariable(node));
+            schema.htmlRenderContext.htmlRender.setExtraEventVariable(getExtraRenderGraphVariable(node));
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
         }
+
+
 
         const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
 
@@ -779,6 +819,12 @@ export const SchemaDisplay = memo(() => {
         } else {
             updateNodePosition(nodeId);
             updateHandleOverlay(node, schema.element, handleSelectedPointId);
+            const renders = projectRef.current.state.getHtmlRenderOfNode(nodeId);
+            for(const render of renders) {
+                if(render.renderId !== "") {
+                    render.htmlRender.render(render.retrieveHtmlObject(node));
+                }
+            }
         }
 
 
@@ -826,6 +872,9 @@ export const SchemaDisplay = memo(() => {
             // re render handle
             cleanupHandleOverlay(nodeSchema.node._key);
             updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
+
+            disposeWorkflowAction(nodeSchema.node._key);
+            renderWorkflowAction(nodeSchema.node._key, nodeSchema.element);
         }
     }, [Project.state.editedNodeConfig]);
 

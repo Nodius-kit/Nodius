@@ -37,6 +37,7 @@ import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
 import {deepCopy} from "../../utils/objectUtils";
 import {triggerNodeUpdateOption} from "../schema/SchemaDisplay";
+import {modalManager} from "../../process/modal/ModalManager";
 
 export const useSocketSync = () => {
     const Project = useContext(ProjectContext);
@@ -461,9 +462,14 @@ export const useSocketSync = () => {
         const rootNode = findFirstNodeWithId(htmlGraph, "root");
         projectRef.current.state.getMotor().removeCameraAreaLock();
         if(rootNode) {
-            projectRef.current.state.getMotor().smoothFitToNode(rootNode._key, {
+            projectRef.current.state.getMotor().smoothFitToArea({
+                minX: rootNode.posX,
+                maxX: rootNode.posX+rootNode.size.width,
+                minY: rootNode.posY,
+                maxY: rootNode.posY+rootNode.size.height
+            }, {
                 padding: 100
-            });
+            })
         } else {
             projectRef.current.state.getMotor().resetViewport();
         }
@@ -673,9 +679,14 @@ export const useSocketSync = () => {
             maxX: baseNode.posX + baseNode.size.width + padding,
             maxY: baseNode.posY + baseNode.size.height + padding,
         });
-        projectRef.current.state.getMotor().smoothFitToNode(baseNode._key, {
+        projectRef.current.state.getMotor().smoothFitToArea({
+            minX: baseNode.posX,
+            minY: baseNode.posY,
+            maxX: baseNode.posX + baseNode.size.width,
+            maxY: baseNode.posY + baseNode.size.height,
+        }, {
             padding: padding
-        });
+        })
 
         projectRef.current.dispatch({
             field: "activeAppMenuId",
@@ -1114,7 +1125,7 @@ export const useSocketSync = () => {
                 field: "dataTypes",
                 value: json
             });
-        }else {
+        } else {
             Project.dispatch({
                 field: "dataTypes",
                 value: undefined
@@ -1172,6 +1183,14 @@ export const useSocketSync = () => {
                 field: "disabledNodeInteraction",
                 value: {}
             });
+            Project.dispatch({
+                field: "workFlowState",
+                value: {
+                    active: false,
+                    executing: false
+                }
+            })
+            modalManager.closeAll();
             getAllHtmlRender().forEach((h) => {
                 removeHtmlRender(h.nodeId, h.renderId);
             })
@@ -1317,9 +1336,14 @@ export const useSocketSync = () => {
             }
         }
 
+        const allModal = modalManager.getOpenModals();
+
         // Delete nodes
         for(const nodeKey of nodeKeys) {
             sheet.nodeMap.delete(nodeKey);
+            allModal.filter((m) => m.nodeId === nodeKey).forEach((m) => {
+                modalManager.close(m.id);
+            });
         }
 
         // Redraw the graph if GPU motor is available

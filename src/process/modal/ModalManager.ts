@@ -3,6 +3,7 @@ import { HtmlRender } from "../html/HtmlRender";
 
 export interface ModalOptions {
     id?: string;
+    nodeId: string;
     title?: string;
     content: HtmlObject | HTMLElement | string;
     width?: string;
@@ -13,6 +14,7 @@ export interface ModalOptions {
 
 interface ModalInstance {
     id: string;
+    nodeId:string,
     element: HTMLElement;
     contentContainer: HTMLElement;
     htmlRender?: HtmlRender;
@@ -112,6 +114,7 @@ export class ModalManager {
 
         this.modals.set(id, {
             id,
+            nodeId: options.nodeId,
             element: modalElement,
             contentContainer,
             htmlRender,
@@ -353,8 +356,8 @@ export class ModalManager {
         return this.modals.has(id);
     }
 
-    getOpenModals(): string[] {
-        return Array.from(this.modals.keys());
+    getOpenModals(): ModalInstance[] {
+        return Array.from(this.modals.values());
     }
 
     destroy() {
