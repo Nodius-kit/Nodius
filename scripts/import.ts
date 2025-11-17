@@ -3,12 +3,13 @@
 import { Database } from 'arangojs';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import type { CollectionType } from 'arangojs/collection';
+import {CollectionType} from "arangojs/collections";
 
 /**
  * ArangoDB Import Script
  *
  * Imports data from a JSON file to ArangoDB:
+ * - Creates database if it doesn't exist
  * - Creates collections if they don't exist (with correct type: document or edge)
  * - Replaces existing documents (based on _key)
  * - Inserts new documents that don't exist
@@ -107,17 +108,41 @@ async function importDatabase() {
         process.exit(1);
     }
 
-    // Connect to ArangoDB
-    const db = new Database({
+    // Connect to ArangoDB (first connect to _system database to check/create target database)
+    const systemDb = new Database({
         url: config.url,
-        databaseName: config.database,
+        databaseName: '_system',
         auth: { username: config.user, password: config.password }
     });
 
+    let db: Database;
+
     try {
-        // Test connection
+        // Test connection to _system database
+        await systemDb.get();
+        console.log('✅ Connected to ArangoDB');
+
+        // Check if target database exists, create if not
+        const databases = await systemDb.listDatabases();
+
+        if (!databases.includes(config.database)) {
+            console.log(`📝 Database "${config.database}" does not exist, creating...`);
+            await systemDb.createDatabase(config.database);
+            console.log(`✅ Database "${config.database}" created successfully`);
+        } else {
+            console.log(`✅ Database "${config.database}" exists`);
+        }
+
+        // Now connect to the target database
+        db = new Database({
+            url: config.url,
+            databaseName: config.database,
+            auth: { username: config.user, password: config.password }
+        });
+
+        // Verify connection to target database
         await db.get();
-        console.log('✅ Connected to ArangoDB\n');
+        console.log('');
 
         let totalReplaced = 0;
         let totalInserted = 0;

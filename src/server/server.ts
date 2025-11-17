@@ -57,13 +57,44 @@ writeFileSync(envPath, envContent, 'utf-8');
 console.log(`✅ Generated .env file with API URL: ${apiUrl}`);
 
 
+// Database configuration
+const dbUrl = args.get("arangodb", "http://127.0.0.1:8529");
+const dbUser = args.get("arangodb_user", "root");
+const dbPass = args.get("arangodb_pass", "azerty");
+const dbName = args.get("arangodb_name", "nodius");
+
+// Initialize database (create if doesn't exist)
+async function initializeDatabase() {
+    // First connect to _system database to check/create target database
+    const systemDb = new Database({
+        url: dbUrl,
+        auth: { username: dbUser, password: dbPass },
+        databaseName: '_system'
+    });
+
+    try {
+        const databases = await systemDb.listDatabases();
+
+        if (!databases.includes(dbName)) {
+            console.log(`📝 Database "${dbName}" does not exist, creating...`);
+            await systemDb.createDatabase(dbName);
+            console.log(`✅ Database "${dbName}" created successfully`);
+        } else {
+            console.log(`✅ Database "${dbName}" exists`);
+        }
+    } catch (error) {
+        console.error(`❌ Failed to initialize database: ${error}`);
+        throw error;
+    }
+}
+
+// Initialize database before creating connection
+await initializeDatabase();
+
 export const db = new Database({
-    url:  args.get("arangodb", "http://127.0.0.1:8529"),
-    auth: {
-        username: args.get("arangodb_user", "root"),
-        password: args.get("arangodb_pass", "azerty"),
-    },
-    databaseName: args.get("arangodb_name", "nodius")
+    url: dbUrl,
+    auth: { username: dbUser, password: dbPass },
+    databaseName: dbName
 });
 
 const app = new HttpServer();

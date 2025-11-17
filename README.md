@@ -18,7 +18,7 @@ Nodius uses ArangoDB as its database. Follow these steps to set up the database:
 cd arrango
 
 # Start ArangoDB container
-docker-compose up -d
+docker compose up --build -d
 
 # Check if the container is running
 docker ps
@@ -30,28 +30,13 @@ The ArangoDB server will be available at `http://localhost:8529`.
 - Username: `root`
 - Password: `azerty`
 
-#### Access ArangoDB Web Panel
+#### Access ArangoDB Web Panel (Optional)
 
 1. Open your browser and navigate to `http://localhost:8529`
 2. Log in with the default credentials (root/azerty)
 3. You'll see the ArangoDB web interface
 
-#### Create the Nodius Database
-
-1. In the ArangoDB web panel, click on "DATABASES" in the left sidebar
-2. Click on the "+ Add database" button
-3. Enter database name: `nodius`
-4. Click "Create"
-
-Alternatively, you can create the database using the ArangoDB shell:
-
-```bash
-docker exec -it arangodb arangosh --server.password azerty
-
-# In the arangosh shell:
-db._createDatabase("nodius");
-exit
-```
+**Note:** The database "nodius" will be created automatically when you run the import script or start the application, so you don't need to create it manually.
 
 ### 2. Import Initial Data (Optional)
 
@@ -66,6 +51,7 @@ npm run db:import -- input=./backup/your-backup.json
 ```
 
 The import script will automatically:
+- Create the database if it doesn't exist
 - Create collections if they don't exist
 - Insert new documents
 - Update existing documents

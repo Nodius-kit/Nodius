@@ -77,6 +77,7 @@ tsx scripts/export.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
 ### Import dans la base de données
 
 Importe les données depuis un fichier JSON dans ArangoDB :
+- **Crée** la base de données si elle n'existe pas
 - **Crée** les collections si elles n'existent pas (avec le bon type : document ou edge)
 - **Remplace** les documents existants (basé sur `_key`)
 - **Insère** les nouveaux documents qui n'existent pas
@@ -116,6 +117,8 @@ tsx scripts/import.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
    Collections: 8
 
 ✅ Connected to ArangoDB
+📝 Database "nodius" does not exist, creating...
+✅ Database "nodius" created successfully
 
 📂 Processing collection: workflows
    Documents to process: 15
@@ -142,6 +145,7 @@ tsx scripts/import.ts arangodb=http://localhost:8529 arangodb_user=root arangodb
 
 Le script d'import a un comportement spécifique :
 
+- 🗄️ **Crée** la base de données si elle n'existe pas
 - 📝 **Crée** les collections si elles n'existent pas (avec le bon type)
 - ✅ **Remplace** les documents existants (basé sur `_key`)
 - ➕ **Insère** les nouveaux documents du fichier qui n'existent pas dans la base
