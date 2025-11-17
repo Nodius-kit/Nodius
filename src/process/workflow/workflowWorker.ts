@@ -301,13 +301,16 @@ export const parseString = async (content:string,  node:Node<any>, incoming?: in
 
 
     const callFunction = async (code: string, env: Record<string, any>) => {
+        console.log("call", code, env);
         const fct = new AsyncFunction(...[...Object.keys(env), code]);
+        console.log(fct);
         let output:any = undefined;
         try {
             output = await fct(...[...Object.values(env)]);
         } catch(e) {
             console.error('Error:', e, "in function:", code, "with arg", env);
         }
+        console.log(output);
         return output;
     }
 

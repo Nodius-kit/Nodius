@@ -1190,6 +1190,23 @@ export const useSocketSync = () => {
                     executing: false
                 }
             })
+            Project.dispatch({
+                field: "editedNodeConfig",
+                value: undefined
+            });
+            Project.dispatch({
+                field: "editedNodeHandle",
+                value: undefined
+            });
+            Project.dispatch({
+                field: "selectedEdge",
+                value: []
+            });
+            Project.dispatch({
+                field: "selectedNode",
+                value: []
+            });
+
             modalManager.closeAll();
             getAllHtmlRender().forEach((h) => {
                 removeHtmlRender(h.nodeId, h.renderId);

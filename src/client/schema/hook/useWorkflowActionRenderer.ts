@@ -162,7 +162,6 @@ export const useWorkflowActionRenderer = ({
             }
 
             if (display.domEventSwitch) {
-                console.log(getMainRenderOfNode(display.nodeId)?.htmlRender.isWorkflowMode());
                 if(getMainRenderOfNode(display.nodeId)?.htmlRender.isWorkflowMode()) {
                     for(const element of display.domEventSwitch.applyClass) {
                         if(!element.classList.contains("checked")) {

@@ -4,7 +4,9 @@
   "description": "",
   "scripts": {
     "dev": "tsx ./src/server/server.ts mode=development port=8426 host=192.168.1.72",
-    "dev2": "tsx ./src/server/server.ts mode=development port=8426 host=192.168.1.48"
+    "dev2": "tsx ./src/server/server.ts mode=development port=8426 host=192.168.1.48",
+    "db:export": "tsx ./scripts/export.ts",
+    "db:import": "tsx ./scripts/import.ts"
   },
   "repository": {
     "type": "git",
