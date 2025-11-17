@@ -139,7 +139,3 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 .cursor
-
-# ArangoDB backup files
-backup/
-*.backup.json
