@@ -243,9 +243,39 @@ export class WebSocketManager {
         if (!graph) {
             throw new Error(`Graph with key ${graphKey} not found`);
         }
+
+        let hasInvalidEdges = false;
+
         Object.keys(graph._sheets).forEach((sheetId) => {
             const nodeMap = nodeArrayToMap(graph._sheets[sheetId].nodes);
             const edgeMap = edgeArrayToMap(graph._sheets[sheetId].edges);
+
+            // Validate edges and remove those with invalid node connections
+            const invalidEdgeKeys: string[] = [];
+            for (const [key, edgeList] of edgeMap.entries()) {
+                const validEdges = edgeList.filter((edge) => {
+                    const sourceExists = nodeMap.has(edge.source);
+                    const targetExists = nodeMap.has(edge.target);
+
+                    if (!sourceExists || !targetExists) {
+                        console.warn(`[WebSocketManager] Removing invalid edge ${edge._key} in graph ${graphKey}, sheet ${sheetId}: source=${edge.source} (exists: ${sourceExists}), target=${edge.target} (exists: ${targetExists})`);
+                        invalidEdgeKeys.push(edge._key);
+                        hasInvalidEdges = true;
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (validEdges.length === 0) {
+                    edgeMap.delete(key);
+                } else if (validEdges.length !== edgeList.length) {
+                    edgeMap.set(key, validEdges);
+                }
+            }
+
+            if (invalidEdgeKeys.length > 0) {
+                console.log(`[WebSocketManager] Removed ${invalidEdgeKeys.length} invalid edges from graph ${graphKey}, sheet ${sheetId}: ${invalidEdgeKeys.join(', ')}`);
+            }
 
             this.managedGraph[graphKey][sheetId] = {
                 instructionHistory: [],
@@ -255,7 +285,7 @@ export class WebSocketManager {
                 // Deep copy for original state
                 originalNodeMap: new Map(nodeMap),
                 originalEdgeMap: new Map(edgeMap),
-                hasUnsavedChanges: false
+                hasUnsavedChanges: hasInvalidEdges
             }
         })
 
@@ -294,6 +324,12 @@ export class WebSocketManager {
         });
         this.uniqueIdGenerator[graphKey] += 1;  // Start from max + 1
         console.log(`[WebSocketManager] Initialized uniqueIdGenerator for graph ${graphKey} starting at ${this.uniqueIdGenerator[graphKey]}`);
+
+        // If invalid edges were found and removed, save the graph immediately
+        if (hasInvalidEdges) {
+            console.log(`[WebSocketManager] Triggering immediate save for graph ${graphKey} due to invalid edges removal`);
+            await this.saveGraphChanges(graphKey);
+        }
     }
 
     private initNodeConfig = async (nodeConfigKey:string) => {
