@@ -33,8 +33,23 @@ export const useEdgeHandler = () => {
         projectRef.current = Project;
     }, [Project]);
 
-    const isValidConnection = (sourceNode:Node<any>, sourceHandle:HandleInfo, targetNode:Node<any>, targetHandle:HandleInfo) => {
+    const isValidConnection = (sourceNode:Node<any>, sourceHandle:HandleInfo, targetNode:Node<any>, targetHandle:HandleInfo) :boolean => {
+
         if(sourceNode._key === targetNode._key) return false; // obviously ...
+
+
+        //check if connection already exist
+        const edgeMap = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId??""]?.edgeMap;
+        if(!edgeMap) return false;
+
+        const sameSource = edgeMap.get("source-"+sourceNode._key);
+        if(sameSource){
+            for(const source of sameSource) {
+                if(source.sourceHandle === sourceHandle.point.id && source.target === targetNode._key && source.targetHandle === targetHandle.point.id) {
+                    return false;
+                }
+            }
+        }
 
         if((sourceHandle.point.accept != "any" && targetHandle.point.accept != "any") && (sourceHandle.point.accept !== targetHandle.point.accept)) return false; // must accept the same type
 
