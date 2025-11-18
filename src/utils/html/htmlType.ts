@@ -51,7 +51,13 @@ export interface HtmlInner extends HtmlBase {
     content: string,
 }
 
-export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray;
+export interface HtmlIcon extends HtmlBase {
+    type: "icon",
+    content: string,
+}
+
+
+export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray | HtmlIcon;
 export interface HtmlClass {
     htmlNodeKey: string;
     object:HtmlObject,

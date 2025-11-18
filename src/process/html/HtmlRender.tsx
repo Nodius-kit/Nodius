@@ -26,6 +26,10 @@ import "./HtmlRenderUtility";
 import {applyCSSBlocks, removeCSSBlocks} from "../../utils/html/htmlCss";
 import {modalManager} from "../modal/ModalManager";
 import {utilsFunctionList} from "../workflow/utilsFunction";
+import * as Icons from "lucide-react";
+import {renderToStaticMarkup} from "react-dom/server";
+
+const IconDict = Object.fromEntries(Object.entries(Icons));
 
 export interface ObjectStorage {
     element: HTMLElement,
@@ -324,6 +328,14 @@ export class HtmlRender {
             element.innerHTML = await this.parseContent(object.content[this.language], storage);
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
+        } else if (object.type === "icon") {
+            let Icon = Icons[object.content as keyof typeof Icons] as any;
+            if(Icon) {
+                element.innerHTML = renderToStaticMarkup(<Icon />);
+            } else {
+                Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+                element.innerHTML = renderToStaticMarkup(<Icon />);
+            }
         } else {
             const childrenInfo = await this.getChildrenInfo(object, storage);
             for (const childInfo of childrenInfo) {

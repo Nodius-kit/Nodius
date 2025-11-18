@@ -184,6 +184,33 @@ export class RequestBuilder {
                 }
             });
 
+            components.push({
+                _keys: "0",
+                category: "Most Used Components",
+                workspace: "root",
+                icon: "Settings",
+                htmlKeyLinked: "0",
+                object: {
+                    type: "icon",
+                    identifier: "0",
+                    tag: "span",
+                    domEvents: [],
+                    name:"Icon",
+                    css: [
+                        {
+                            selector: "&",
+                            rules: [
+                                ["width", "40px"],
+                                ["height", "40px"],
+                                ["stroke-width", "1.5px"],
+                                ["color", "var(--nodius-primary-main)"]
+                            ]
+                        }
+                    ],
+                    content: "Settings",
+                }
+            });
+
             res.status(200).json(components);
         });
     }
