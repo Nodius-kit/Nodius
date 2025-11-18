@@ -153,10 +153,13 @@ export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => 
 
 
         const newInstruction = new InstructionBuilder(object.instruction);
+
+        const title = "Html content";
+
         newInstruction.key("content");
         Project.dispatch({
             field: "editedCode",
-            value: [...Project.state.editedCode, {
+            value: [...Project.state.editedCode.filter((e) => e.nodeId !== nodeId && e.title !== title), {
                 nodeId: nodeId,
                 type: "HTML",
                 title: "Html content",

@@ -238,7 +238,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
         newInstruction.key("domEvents").index(index).key("call");
         Project.dispatch({
             field: "editedCode",
-            value: [...Project.state.editedCode, {
+            value: [...Project.state.editedCode.filter((e) => e.nodeId !== nodeId && e.title !== event.name), {
                 nodeId: nodeId,
                 title: event.name,
                 onChange: async (instructions) => {

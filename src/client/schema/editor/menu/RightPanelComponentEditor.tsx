@@ -30,6 +30,7 @@ import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {Paintbrush, Info, Code, MousePointer, Type} from "lucide-react";
 import { TagEditor } from "./RightPanelComponentEditor/TagEditor";
+import { IconEditor } from "./RightPanelComponentEditor/IconEditor";
 import {CssEditor} from "./RightPanelComponentEditor/CssEditor";
 import {EventsEditor} from "./RightPanelComponentEditor/EventsEditor";
 import {ContentEditor} from "./RightPanelComponentEditor/ContentEditor";
@@ -246,10 +247,16 @@ export const RightPanelComponentEditor = memo(({
             <div style={{flex: 1, overflowY: "auto", overflowX: "hidden"}}>
                 {(currentEditable) ? (
                     <div style={{width: "100%", height: "100%", display: "flex", flexDirection: "column"}}>
-                        {/* Tag Editor - Always visible at top */}
+                        {/* Tag Editor - Visible for non-icon types */}
                         <Collapse in={currentEditable.object.type !== "icon"}>
                             <div style={{marginBottom: "16px"}}>
                                 <TagEditor object={currentEditable} onUpdate={updateObject} />
+                            </div>
+                        </Collapse>
+                        {/* Icon Editor - Visible only for icon type */}
+                        <Collapse in={currentEditable.object.type === "icon"}>
+                            <div style={{marginBottom: "16px"}}>
+                                <IconEditor object={currentEditable} onUpdate={updateObject} />
                             </div>
                         </Collapse>
                         {/* Tabs */}
