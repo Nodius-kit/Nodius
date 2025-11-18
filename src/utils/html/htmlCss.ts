@@ -48,7 +48,11 @@ function rulesToString(rules: string[][]): string {
 
 function parseSelector(selector: string, className: string): string {
     // Handle HTML entity decoding if necessary
-    const decodedSelector = selector.replace(/&amp;/g, '&');
+    let decodedSelector = selector.replace(/&lt;/g, '<')
+                                  .replace(/&gt;/g, '>')
+                                  .replace(/&amp;/g, '&')
+                                  .replace(/&quot;/g, '"')
+                                  .replace(/&#39;/g, "'");
 
     // Replace & with the actual class name
     // This handles &, &:hover, &.other-class, & > child, etc.
