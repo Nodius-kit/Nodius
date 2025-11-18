@@ -258,7 +258,26 @@ export class HtmlRender {
     }
 
     private async renderCreate(object: HtmlObject, parent: HTMLElement,  insertBefore: Node | null = null) {
-        const element = document.createElement(object.tag);
+        let element: HTMLElement;
+
+        // Create element based on type
+        if (object.type === "icon") {
+            // For icon type, create SVG element directly from markup
+            let Icon = Icons[object.content as keyof typeof Icons] as any;
+            if (!Icon) {
+                Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+            }
+            const iconMarkup = renderToStaticMarkup(<Icon />);
+
+            // Parse markup to get SVG element
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = iconMarkup;
+            element = tempDiv.firstElementChild as HTMLElement;
+        } else {
+            // Normal element creation
+            element = document.createElement(object.tag);
+        }
+
         element.dataset.identifier = object.identifier;
 
         const storage: ObjectStorage = {
@@ -328,13 +347,7 @@ export class HtmlRender {
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
         } else if (object.type === "icon") {
-            let Icon = Icons[object.content as keyof typeof Icons] as any;
-            if(Icon) {
-                element.innerHTML = renderToStaticMarkup(<Icon />);
-            } else {
-                Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
-                element.innerHTML = renderToStaticMarkup(<Icon />);
-            }
+            // Icon already created as SVG element, nothing more to do
         } else {
             const childrenInfo = await this.getChildrenInfo(object, storage);
             for (const childInfo of childrenInfo) {
@@ -349,17 +362,42 @@ export class HtmlRender {
     private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage) {
         const oldObject = storage.object;
 
+        const typeChanged = newObject.type !== oldObject.type;
         const tagChanged = newObject.tag !== oldObject.tag;
-        if (tagChanged) {
-            const newElement = document.createElement(newObject.tag);
-            while (element.firstChild) {
-                newElement.appendChild(element.firstChild);
+        const iconContentChanged = newObject.type === "icon" && oldObject.type === "icon" && newObject.content !== oldObject.content;
+
+        if (tagChanged || typeChanged || iconContentChanged) {
+            let newElement: HTMLElement;
+
+            if (newObject.type === "icon") {
+                // Create SVG element directly from markup
+                let Icon = Icons[newObject.content as keyof typeof Icons] as any;
+                if (!Icon) {
+                    Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+                }
+                const iconMarkup = renderToStaticMarkup(<Icon />);
+
+                // Parse markup to get SVG element
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = iconMarkup;
+                newElement = tempDiv.firstElementChild as HTMLElement;
+            } else {
+                // Create normal element
+                newElement = document.createElement(newObject.tag);
+
+                // Move children only if not text/html type (they use innerHTML)
+                if (newObject.type !== "text" && newObject.type !== "html") {
+                    while (element.firstChild) {
+                        newElement.appendChild(element.firstChild);
+                    }
+                }
             }
+
             element.parentNode!.replaceChild(newElement, element);
             storage.element = newElement;
             element = newElement;
 
-            // Tag changed - new element created, need to reset external change tracking
+            // Tag/type changed - new element created, need to reset external change tracking
             storage.externalChanges = {
                 attributes: new Set<string>(),
                 textContent: false,
@@ -421,9 +459,9 @@ export class HtmlRender {
             });
         }
 
-        // Three-way merge for CSS blocks (skip merge if tag changed - new element needs fresh CSS)
-        if (tagChanged) {
-            // Tag changed - new element created, apply CSS fresh
+        // Three-way merge for CSS blocks (skip merge if tag/type changed - new element needs fresh CSS)
+        if (tagChanged || typeChanged) {
+            // Tag/type changed - new element created, apply CSS fresh
             if (newObject.css) {
                 applyCSSBlocks(element, newObject.css);
             }
@@ -549,8 +587,8 @@ export class HtmlRender {
 
             this.addDebugListeners(storage);
 
-            // Re-setup mutation observer if tag changed (new element was created)
-            if (tagChanged) {
+            // Re-setup mutation observer if tag/type changed (new element was created)
+            if (tagChanged || typeChanged) {
                 this.setupExternalChangeTracking(storage);
             }
             return;
@@ -574,31 +612,20 @@ export class HtmlRender {
 
             this.addDebugListeners(storage);
 
-            // Re-setup mutation observer if tag changed (new element was created)
-            if (tagChanged) {
+            // Re-setup mutation observer if tag/type changed (new element was created)
+            if (tagChanged || typeChanged) {
                 this.setupExternalChangeTracking(storage);
             }
             return;
         } else if (newObject.type === "icon") {
-            const newIconName = newObject.content;
-            const oldIconName = oldObject.content;
-
-            // Update icon if content changed
-            if (oldIconName !== newIconName) {
-                let Icon = Icons[newIconName as keyof typeof Icons] as any;
-                if(Icon) {
-                    this.setInnerHTMLInternal(element, renderToStaticMarkup(<Icon />));
-                } else {
-                    Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
-                    this.setInnerHTMLInternal(element, renderToStaticMarkup(<Icon />));
-                }
-                storage.externalChanges.innerHTML = false; // Reset tracking
-            }
+            // Icon element is the SVG itself
+            // If icon content changed, element was already replaced above
+            // Nothing more to do here
 
             this.addDebugListeners(storage);
 
-            // Re-setup mutation observer if tag changed (new element was created)
-            if (tagChanged) {
+            // Re-setup mutation observer if tag/type/icon changed (new element was created)
+            if (tagChanged || typeChanged || iconContentChanged) {
                 this.setupExternalChangeTracking(storage);
             }
             return;
@@ -647,8 +674,8 @@ export class HtmlRender {
         }
         this.addDebugListeners(storage);
 
-        // Re-setup mutation observer if tag changed (new element was created)
-        if (tagChanged) {
+        // Re-setup mutation observer if tag/type/icon changed (new element was created)
+        if (tagChanged || typeChanged || iconContentChanged) {
             this.setupExternalChangeTracking(storage);
         }
     }
