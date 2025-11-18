@@ -1207,6 +1207,10 @@ export const useSocketSync = () => {
                 value: []
             });
 
+            if(Project.state.editedHtml) {
+                Project.state.closeHtmlEditor!();
+            }
+
             modalManager.closeAll();
             getAllHtmlRender().forEach((h) => {
                 removeHtmlRender(h.nodeId, h.renderId);

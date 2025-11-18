@@ -16,6 +16,7 @@ import {generateInstructionsToMatch, Instruction, InstructionBuilder} from "../.
 import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/WorkflowManager";
 import {HtmlObject} from "../../utils/html/htmlType";
 import {useWorkflowActionRenderer} from "./hook/useWorkflowActionRenderer";
+import {DataTypeClass, DataTypeConfig} from "../../utils/dataType/dataType";
 
 export interface SchemaNodeInfo {
     node: Node<any>;
@@ -39,6 +40,8 @@ export const SchemaDisplay = memo(() => {
     const visibleNodes = useRef<Set<Node<any>>>(new Set());
     const prevVisibleNodes = useRef<Set<Node<any>>>(new Set());
     const visibleEdges = useRef<Edge[]>([]);
+
+    const currentEntryDataTypeFixed = useRef<DataTypeClass|undefined>(undefined);
 
 
     const getWorkflowCallback = ():WorkflowCallbacks => ({
@@ -706,7 +709,7 @@ export const SchemaDisplay = memo(() => {
             getAllHtmlRender: projectRef.current.state.getAllHtmlRender,
             removeHtmlRender: projectRef.current.state.removeHtmlRender,
             openHtmlEditor: projectRef.current.state.openHtmlEditor,
-            currentEntryDataType: projectRef.current.state.currentEntryDataType,
+            currentEntryDataType: currentEntryDataTypeFixed.current,
             HtmlRender: HtmlRender,
             container: schema.element
         }
@@ -916,6 +919,9 @@ export const SchemaDisplay = memo(() => {
             const connectedNodeToEntry = findNodeConnected(Project.state.graph, nodeRoot, "in");
             nodeTypeEntry = connectedNodeToEntry.find((n) => n.type === "entryType") as Node<NodeTypeEntryType>;
         }
+
+        currentEntryDataTypeFixed.current = Project.state.currentEntryDataType;
+
         if(nodeTypeEntry) {
             internalNodeUpdate(nodeTypeEntry._key, {reRenderNodeConfig: true});
         }
