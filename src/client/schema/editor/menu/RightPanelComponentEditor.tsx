@@ -33,6 +33,7 @@ import { TagEditor } from "./RightPanelComponentEditor/TagEditor";
 import {CssEditor} from "./RightPanelComponentEditor/CssEditor";
 import {EventsEditor} from "./RightPanelComponentEditor/EventsEditor";
 import {ContentEditor} from "./RightPanelComponentEditor/ContentEditor";
+import {Collapse} from "../../../component/animate/Collapse";
 
 interface RightPanelComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
@@ -246,10 +247,11 @@ export const RightPanelComponentEditor = memo(({
                 {(currentEditable) ? (
                     <div style={{width: "100%", height: "100%", display: "flex", flexDirection: "column"}}>
                         {/* Tag Editor - Always visible at top */}
-                        <div style={{marginBottom: "16px"}}>
-                            <TagEditor object={currentEditable} onUpdate={updateObject} />
-                        </div>
-
+                        <Collapse in={currentEditable.object.type !== "icon"}>
+                            <div style={{marginBottom: "16px"}}>
+                                <TagEditor object={currentEditable} onUpdate={updateObject} />
+                            </div>
+                        </Collapse>
                         {/* Tabs */}
                         <div className={tabsContainerClass}>
                             <div
