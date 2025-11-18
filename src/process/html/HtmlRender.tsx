@@ -324,7 +324,6 @@ export class HtmlRender {
         this.addDebugListeners(storage);
 
         if (object.type === "text") {
-
             element.innerHTML = await this.parseContent(object.content[this.language], storage);
         } else if (object.type === "html") {
             element.innerHTML = await this.parseContent(object.content, storage);
@@ -545,6 +544,24 @@ export class HtmlRender {
                 }
             }
             // Else: content unchanged in object but externally modified -> preserve external value
+
+            this.addDebugListeners(storage);
+            return;
+        } else if (newObject.type === "icon") {
+            const newIconName = newObject.content;
+            const oldIconName = oldObject.content;
+
+            // Update icon if content changed
+            if (oldIconName !== newIconName) {
+                let Icon = Icons[newIconName as keyof typeof Icons] as any;
+                if(Icon) {
+                    this.setInnerHTMLInternal(element, renderToStaticMarkup(<Icon />));
+                } else {
+                    Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+                    this.setInnerHTMLInternal(element, renderToStaticMarkup(<Icon />));
+                }
+                storage.externalChanges.innerHTML = false; // Reset tracking
+            }
 
             this.addDebugListeners(storage);
             return;

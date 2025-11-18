@@ -198,7 +198,7 @@ export class RequestBuilder {
                     name:"Icon",
                     css: [
                         {
-                            selector: "&",
+                            selector: "& > svg",
                             rules: [
                                 ["width", "40px"],
                                 ["height", "40px"],
