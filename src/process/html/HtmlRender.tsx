@@ -349,7 +349,8 @@ export class HtmlRender {
     private async updateDOM(newObject: HtmlObject, element: HTMLElement, storage: ObjectStorage) {
         const oldObject = storage.object;
 
-        if (newObject.tag !== oldObject.tag) {
+        const tagChanged = newObject.tag !== oldObject.tag;
+        if (tagChanged) {
             const newElement = document.createElement(newObject.tag);
             while (element.firstChild) {
                 newElement.appendChild(element.firstChild);
@@ -357,6 +358,20 @@ export class HtmlRender {
             element.parentNode!.replaceChild(newElement, element);
             storage.element = newElement;
             element = newElement;
+
+            // Tag changed - new element created, need to reset external change tracking
+            storage.externalChanges = {
+                attributes: new Set<string>(),
+                textContent: false,
+                innerHTML: false,
+                classList: new Set<string>(),
+            };
+
+            // Disconnect old mutation observer and will setup new one at the end
+            if (storage.mutationObserver) {
+                storage.mutationObserver.disconnect();
+                storage.mutationObserver = undefined;
+            }
         }
         this.removeDebugListeners(storage);
 
@@ -406,41 +421,48 @@ export class HtmlRender {
             });
         }
 
-        // Three-way merge for CSS blocks
-        // Store current CSS classes from object definition before changes
-        const oldCssClassesFromObject = new Set<string>();
-        if (oldObject.css) {
-            Array.from(element.classList).forEach(cls => {
-                if (cls.startsWith('css-')) {
-                    oldCssClassesFromObject.add(cls);
-                }
-            });
-        }
-
-        // Check if CSS blocks changed
-        const cssChanged = JSON.stringify(oldObject.css) !== JSON.stringify(newObject.css);
-
-        if (cssChanged) {
-            // CSS definition changed -> remove old CSS classes and apply new ones
-            if (oldObject.css) {
-                removeCSSBlocks(element, oldObject.css);
-            }
+        // Three-way merge for CSS blocks (skip merge if tag changed - new element needs fresh CSS)
+        if (tagChanged) {
+            // Tag changed - new element created, apply CSS fresh
             if (newObject.css) {
                 applyCSSBlocks(element, newObject.css);
             }
-            // Clear external CSS tracking since we're applying fresh CSS
-            storage.externalChanges.classList.clear();
         } else {
-            // CSS definition unchanged -> preserve any external class modifications
-            // Re-apply CSS if needed to ensure consistency (in case classes were removed externally)
-            const currentCssClasses = Array.from(element.classList).filter(cls => cls.startsWith('css-'));
-            const hasAllOriginalCssClasses = Array.from(oldCssClassesFromObject).every(cls =>
-                element.classList.contains(cls)
-            );
+            // Store current CSS classes from object definition before changes
+            const oldCssClassesFromObject = new Set<string>();
+            if (oldObject.css) {
+                Array.from(element.classList).forEach(cls => {
+                    if (cls.startsWith('css-')) {
+                        oldCssClassesFromObject.add(cls);
+                    }
+                });
+            }
 
-            if (!hasAllOriginalCssClasses && newObject.css) {
-                // Some CSS classes from object definition are missing -> re-apply
-                applyCSSBlocks(element, newObject.css);
+            // Check if CSS blocks changed
+            const cssChanged = JSON.stringify(oldObject.css) !== JSON.stringify(newObject.css);
+
+            if (cssChanged) {
+                // CSS definition changed -> remove old CSS classes and apply new ones
+                if (oldObject.css) {
+                    removeCSSBlocks(element, oldObject.css);
+                }
+                if (newObject.css) {
+                    applyCSSBlocks(element, newObject.css);
+                }
+                // Clear external CSS tracking since we're applying fresh CSS
+                storage.externalChanges.classList.clear();
+            } else {
+                // CSS definition unchanged -> preserve any external class modifications
+                // Re-apply CSS if needed to ensure consistency (in case classes were removed externally)
+                const currentCssClasses = Array.from(element.classList).filter(cls => cls.startsWith('css-'));
+                const hasAllOriginalCssClasses = Array.from(oldCssClassesFromObject).every(cls =>
+                    element.classList.contains(cls)
+                );
+
+                if (!hasAllOriginalCssClasses && newObject.css) {
+                    // Some CSS classes from object definition are missing -> re-apply
+                    applyCSSBlocks(element, newObject.css);
+                }
             }
         }
 
@@ -526,6 +548,11 @@ export class HtmlRender {
             // Else: content unchanged in object but externally modified -> preserve external value
 
             this.addDebugListeners(storage);
+
+            // Re-setup mutation observer if tag changed (new element was created)
+            if (tagChanged) {
+                this.setupExternalChangeTracking(storage);
+            }
             return;
         } else if (newObject.type === "html") {
             const newHtml = await this.parseContent(newObject.content, storage);
@@ -546,6 +573,11 @@ export class HtmlRender {
             // Else: content unchanged in object but externally modified -> preserve external value
 
             this.addDebugListeners(storage);
+
+            // Re-setup mutation observer if tag changed (new element was created)
+            if (tagChanged) {
+                this.setupExternalChangeTracking(storage);
+            }
             return;
         } else if (newObject.type === "icon") {
             const newIconName = newObject.content;
@@ -564,6 +596,11 @@ export class HtmlRender {
             }
 
             this.addDebugListeners(storage);
+
+            // Re-setup mutation observer if tag changed (new element was created)
+            if (tagChanged) {
+                this.setupExternalChangeTracking(storage);
+            }
             return;
         }
 
@@ -609,6 +646,11 @@ export class HtmlRender {
             this.disposeElement(old.storage.object.identifier);
         }
         this.addDebugListeners(storage);
+
+        // Re-setup mutation observer if tag changed (new element was created)
+        if (tagChanged) {
+            this.setupExternalChangeTracking(storage);
+        }
     }
 
     /**
@@ -886,8 +928,8 @@ export class HtmlRender {
     private async callFunction(code: string, env: Record<string, any>): Promise<any> {
         const fct = new AsyncFunction(...[...Object.keys(env), code]);
         let output:any = undefined;
-       //try {
-            output = await fct(...[...Object.values(env)]);
+        //try {
+        output = await fct(...[...Object.values(env)]);
         /*} catch(e) {
             console.error('Error:', e, "in function:", code, "with arg", env);
         }*/
