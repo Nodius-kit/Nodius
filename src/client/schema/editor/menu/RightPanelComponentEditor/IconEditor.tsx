@@ -7,11 +7,27 @@ import {CurrentEditObject} from "../RightPanelComponentEditor";
 import {Instruction, InstructionBuilder} from "../../../../../utils/sync/InstructionBuilder";
 import {modalManager} from "../../../../../process/modal/ModalManager";
 import {ProjectContext} from "../../../../hooks/contexts/ProjectContext";
+import {renderToStaticMarkup} from "react-dom/server";
 
 export interface IconEditorProps {
     object: CurrentEditObject;
     onUpdate: (instr: Instruction | Instruction[]) => Promise<boolean>;
 }
+// Get all Lucide icons
+const IconDict = Object.fromEntries(Object.entries(Icons));
+const LucideIconCache: Record<string, string> = (() => {
+    const output: Record<string, string> = {};
+    const excluded = new Set(["Icon", "createLucideIcon", "icons"]);
+
+    for (const key in IconDict) {
+        if (!excluded.has(key)) {
+            const Icon = IconDict[key] as any;
+            output[key] = renderToStaticMarkup(<Icon />);
+        }
+    }
+
+    return output;
+})();
 
 export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
     const Theme = useContext(ThemeContext);
@@ -19,16 +35,6 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
 
 
 
-    // Get all Lucide icons
-    const IconDict = Object.fromEntries(Object.entries(Icons));
-    const iconNames = useMemo(() =>
-        Object.keys(IconDict).filter(name =>
-            // Filter out internal React components
-            name !== 'createLucideIcon' &&
-            name !== 'default' &&
-            typeof IconDict[name] === 'function'
-        ).sort()
-    , []);
 
     const iconEditorContainerClass = useDynamicClass(`
         & {
@@ -96,7 +102,7 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
         const modalId = "icon-picker-modal";
 
         const updateModalContent = () => {
-            const filteredIcons = iconNames.filter(name =>
+            const filteredIcons = Object.keys(LucideIconCache).filter(name =>
                 name.toLowerCase().includes(searchTerm.toLowerCase())
             );
 
@@ -143,6 +149,7 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
             `;
             searchInput.oninput = async () => {
                 searchTerm = searchInput.value;
+                console.log(searchTerm);
                 const newContent = updateModalContent();
                 await modalManager.updateContent(modalId, newContent);
                 // Re-focus the search input after update
@@ -168,7 +175,7 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
 
             if (filteredIcons.length > 0) {
                 filteredIcons.forEach((iconName) => {
-                    const Icon = IconDict[iconName] as any;
+                    const Icon = LucideIconCache[iconName] as any;
                     const isSelected = object.object.content === iconName;
 
                     const iconCard = document.createElement("div");
@@ -222,9 +229,7 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
                     `;
                     if (Icon) {
                         const tempDiv = document.createElement("div");
-                        const iconElement = document.createElement("svg");
-                        // Use the Icon component to render
-                        tempDiv.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-${iconName.toLowerCase()}">${Icon({size: 32}).props.children}</svg>`;
+                        tempDiv.innerHTML = Icon;
                         iconContainer.appendChild(tempDiv.firstChild as Node);
                     }
 

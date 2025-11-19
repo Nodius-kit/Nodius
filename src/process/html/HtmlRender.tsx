@@ -460,9 +460,9 @@ export class HtmlRender {
             });
         }
 
-        // Three-way merge for CSS blocks (skip merge if tag/type changed - new element needs fresh CSS)
-        if (tagChanged || typeChanged) {
-            // Tag/type changed - new element created, apply CSS fresh
+        // Three-way merge for CSS blocks (skip merge if tag/type/icon changed - new element needs fresh CSS)
+        if (tagChanged || typeChanged || iconContentChanged) {
+            // Tag/type/icon changed - new element created, apply CSS fresh
             if (newObject.css) {
                 applyCSSBlocks(element, newObject.css);
             }
