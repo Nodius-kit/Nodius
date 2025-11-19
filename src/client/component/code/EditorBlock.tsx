@@ -1,31 +1,27 @@
-import React, { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { memo, useContext, useEffect, useRef} from 'react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, crosshairCursor, drawSelection, highlightActiveLine,
     highlightActiveLineGutter, keymap, rectangularSelection } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import {html} from "@codemirror/lang-html"
-import { autocompletion,  completionKeymap, closeBrackets, closeBracketsKeymap, Completion, CompletionContext } from '@codemirror/autocomplete';
-import { Fade } from "../animate/Fade";
+import { autocompletion,  completionKeymap, closeBrackets, closeBracketsKeymap, CompletionContext } from '@codemirror/autocomplete';
 import {
     searchKeymap, highlightSelectionMatches
 } from "@codemirror/search"
 import {lintKeymap} from "@codemirror/lint"
 import { ProjectContext } from "../../hooks/contexts/ProjectContext";
-import { useDynamicClass } from "../../hooks/useDynamicClass";
 import {applyTextChanges, deepCopy, TextChangeInfo} from "../../../utils/objectUtils";
 import {Instruction, InstructionBuilder} from "../../../utils/sync/InstructionBuilder";
-import {GraphInstructions} from "../../../utils/sync/wsObject";
 import {
     dropCursor,
     highlightSpecialChars,
     lineNumbers,
-    oneDark,
     oneDarkHighlightStyle,
-    oneDarkTheme
 } from "@uiw/react-codemirror";
-import {bracketMatching, defaultHighlightStyle, foldGutter, indentOnInput, syntaxHighlighting, foldKeymap} from "@codemirror/language";
+import {bracketMatching, foldGutter, indentOnInput, syntaxHighlighting, foldKeymap} from "@codemirror/language";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
+import { allCustomCompletions } from "./editorCompletions";
 
 export interface EditorBlockProps {
     index:number,
@@ -37,7 +33,6 @@ export const EditorBlock = memo(({index}:EditorBlockProps) => {
 
     const editorRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
-    const customCompletions: Completion[] = []; // Add custom completions here based on context
 
     const cumulateChange = useRef<TextChangeInfo[]>([]);
 
@@ -112,7 +107,7 @@ export const EditorBlock = memo(({index}:EditorBlockProps) => {
         if (!word || (word.from === word.to && !ctx.explicit)) return null;
         return {
             from: word.from,
-            options: customCompletions,
+            options: allCustomCompletions,
         };
     };
 
