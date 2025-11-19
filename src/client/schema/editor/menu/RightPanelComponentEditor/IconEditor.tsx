@@ -17,6 +17,8 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
 
+
+
     // Get all Lucide icons
     const IconDict = Object.fromEntries(Object.entries(Icons));
     const iconNames = useMemo(() =>
@@ -279,6 +281,8 @@ export const IconEditor = memo(({ object, onUpdate }: IconEditorProps) => {
     };
 
     const CurrentIcon = IconDict[object.object.content as string] as any;
+
+    if(object.object.type !== "icon") return null;
 
     return (
         <div className={iconEditorContainerClass}>

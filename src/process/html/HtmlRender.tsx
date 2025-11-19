@@ -375,6 +375,7 @@ export class HtmlRender {
                 if (!Icon) {
                     Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
                 }
+                console.log(Icon);
                 const iconMarkup = renderToStaticMarkup(<Icon />);
 
                 // Parse markup to get SVG element
