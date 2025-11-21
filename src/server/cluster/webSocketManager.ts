@@ -1157,6 +1157,28 @@ export class WebSocketManager {
                     originalEdgeMap: new Map(),
                     hasUnsavedChanges: false
                 }
+
+                // Save to ArangoDB
+                try {
+                    const graph_collection = db.collection("nodius_graphs");
+                    const graphDoc = await graph_collection.document(graphKey);
+
+                    // Update sheetsList in the graph document
+                    if (!graphDoc.sheetsList) {
+                        graphDoc.sheetsList = {};
+                    }
+                    graphDoc.sheetsList[message.key] = message.name || `Sheet ${message.key}`;
+
+                    await graph_collection.update(graphKey, {
+                        sheetsList: graphDoc.sheetsList,
+                        lastUpdatedTime: Date.now()
+                    });
+
+                    console.log(`Created sheet ${message.key} in graph ${graphKey}`);
+                } catch (error) {
+                    console.error(`Error saving createSheet to database for graph ${graphKey}:`, error);
+                }
+
                 for(const graph of Object.values(this.managedGraph)) {
                     for(const sheet of Object.values(graph)) {
                         for(const user of sheet.user) {
@@ -1172,6 +1194,28 @@ export class WebSocketManager {
                     return;
                 }
                 const message:WSMessage<WSRenameSheet> = jsonData;
+
+                // Save to ArangoDB
+                try {
+                    const graph_collection = db.collection("nodius_graphs");
+                    const graphDoc = await graph_collection.document(graphKey);
+
+                    // Update sheet name in sheetsList
+                    if (graphDoc.sheetsList && graphDoc.sheetsList[message.key]) {
+                        graphDoc.sheetsList[message.key] = message.name;
+
+                        await graph_collection.update(graphKey, {
+                            sheetsList: graphDoc.sheetsList,
+                            lastUpdatedTime: Date.now()
+                        });
+
+                        console.log(`Renamed sheet ${message.key} to "${message.name}" in graph ${graphKey}`);
+                    } else {
+                        console.warn(`Sheet ${message.key} not found in graph ${graphKey} sheetsList`);
+                    }
+                } catch (error) {
+                    console.error(`Error saving renameSheet to database for graph ${graphKey}:`, error);
+                }
 
                 for(const graph of Object.values(this.managedGraph)) {
                     for(const sheet of Object.values(graph)) {
@@ -1190,7 +1234,60 @@ export class WebSocketManager {
                 const message:WSMessage<WSDeleteSheet> = jsonData;
 
                 const graph = this.managedGraph[graphKey];
+                const deletedSheet = graph[message.key];
                 delete graph[message.key];
+
+                // Save to ArangoDB
+                try {
+                    const graph_collection = db.collection("nodius_graphs");
+                    const node_collection = db.collection("nodius_nodes");
+                    const edge_collection = db.collection("nodius_edges");
+                    const graphDoc = await graph_collection.document(graphKey);
+
+                    // Remove sheet from sheetsList
+                    if (graphDoc.sheetsList && graphDoc.sheetsList[message.key]) {
+                        delete graphDoc.sheetsList[message.key];
+
+                        await graph_collection.update(graphKey, {
+                            sheetsList: graphDoc.sheetsList,
+                            lastUpdatedTime: Date.now()
+                        });
+
+                        console.log(`Deleted sheet ${message.key} from graph ${graphKey} sheetsList`);
+                    }
+
+                    // Delete all nodes and edges from this sheet
+                    if (deletedSheet) {
+                        // Delete all nodes from this sheet
+                        for (const nodeKey of deletedSheet.nodeMap.keys()) {
+                            try {
+                                await node_collection.remove(graphKey + "-" + nodeKey);
+                            } catch (error) {
+                                console.warn(`Failed to delete node ${nodeKey} from sheet ${message.key}:`, error);
+                            }
+                        }
+
+                        // Delete all edges from this sheet
+                        const allEdges = new Set<string>();
+                        for (const edgeList of deletedSheet.edgeMap.values()) {
+                            for (const edge of edgeList) {
+                                allEdges.add(edge._key);
+                            }
+                        }
+                        for (const edgeKey of allEdges) {
+                            try {
+                                await edge_collection.remove(graphKey + "-" + edgeKey);
+                            } catch (error) {
+                                console.warn(`Failed to delete edge ${edgeKey} from sheet ${message.key}:`, error);
+                            }
+                        }
+
+                        console.log(`Deleted ${deletedSheet.nodeMap.size} nodes and ${allEdges.size} edges from sheet ${message.key} in graph ${graphKey}`);
+                    }
+                } catch (error) {
+                    console.error(`Error saving deleteSheet to database for graph ${graphKey}:`, error);
+                }
+
                 for(const graph of Object.values(this.managedGraph)) {
                     for(const sheet of Object.values(graph)) {
                         for(const user of sheet.user) {
