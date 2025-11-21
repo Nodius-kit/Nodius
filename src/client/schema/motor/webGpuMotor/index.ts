@@ -720,4 +720,8 @@ export class WebGpuMotor implements GraphicalMotor {
         this.selectedEdges = new Set(edges);
         this.requestRedraw();
     }
+
+    public getCursorPosition() {
+        return this.edgeRenderer!.getCursorPosition();
+    }
 }

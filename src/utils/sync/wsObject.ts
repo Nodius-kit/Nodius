@@ -126,3 +126,19 @@ export interface WSBatchDeleteElements {
     nodeKeys: Array<string>,
     edgeKeys: Array<string>,
 }
+
+export interface WSCreateSheet {
+    type: "createSheet",
+    key?:string,
+    name:string,
+}
+
+export interface WSRenameSheet {
+    type: "renameSheet",
+    key:string,
+    name:string,
+}
+export interface WSDeleteSheet {
+    type: "deleteSheet",
+    key:string,
+}

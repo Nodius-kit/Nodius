@@ -152,6 +152,18 @@ export interface ProjectContextType {
     fetchMissingNodeConfig?: (nodeType: string, workspace: string) => Promise<NodeTypeConfig | undefined>,
 
     workFlowState: WorkFlowState,
+
+
+    addCancellableAction: (ahead:(() => Promise<boolean>), back:(() => Promise<boolean>)) => void,
+    backAction: () => void;
+    aheadAction: () => void;
+    indexAction: number,
+
+    createSheet?: (sheetName:string) => Promise<void>;
+    renameSheet?: (sheetKey:string, newName:string) => Promise<void>;
+    removeSheet?: (sheetKey:string) => Promise<void>;
+    changeSheet?: (sheetKey:string) => Promise<void>;
+
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],
@@ -163,6 +175,11 @@ export const ProjectContextDefaultValue: ProjectContextType = {
         "html": NodeTypeHtmlConfig,
         "entryType": NodeTypeEntryTypeConfig
     },
+
+    indexAction: 0,
+    aheadAction: undefined!,
+    backAction: undefined!,
+    addCancellableAction: undefined!,
 
     initiateNewHtmlRender: (context:htmlRenderContext) => undefined!,
     getHtmlRenderWithId: (nodeId:string, renderId:string) => undefined!,

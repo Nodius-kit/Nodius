@@ -77,6 +77,7 @@ export interface GraphicalMotor {
     resetViewport(): void;
     setSelectedEdges(edges:string[]): void;
     isPointNearEdge(point: Point, edge: Edge): boolean;
+    getCursorPosition(): Point,
     smoothTransitionTo(options: {
         x: number;
         y: number;

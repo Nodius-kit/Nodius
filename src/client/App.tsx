@@ -9,17 +9,20 @@ import {useSocketSync} from "./hooks/useSocketSync";
 import {HomeWorkflow} from "./menu/homeWorkflow/HomeWorkflow";
 import {SchemaDisplay} from "./schema/SchemaDisplay";
 import {SchemaEditor} from "./schema/editor/SchemaEditor";
-import {documentHaveActiveElement} from "../utils/objectUtils";
+import {documentHaveActiveElement, Point} from "../utils/objectUtils";
 import {getInverseInstruction, Instruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 import {GraphInstructions} from "../utils/sync/wsObject";
 import {getHandleInfo} from "../utils/graph/handleUtils";
+import {Edge, Node} from "../utils/graph/graphType";
+import {useStableProjectRef} from "./hooks/useStableProjectRef";
 
 
 export const App = () => {
 
     const Theme = useContext(ThemeContext);
     const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -92,6 +95,14 @@ export const App = () => {
                     if(copiedObject) {
                         sessionStorage.setItem("copiedHtmlObject", JSON.stringify(copiedObject));
                     }
+                } else if(Project.state.selectedNode.length > 0 && !Project.state.editedNodeConfig) {
+                    const sheets = Project.state.graph.sheets[Project.state.selectedSheetId];
+                    if(!sheets) return;
+                    const edges = Array.from(sheets.edgeMap.values()).flat();
+                    sessionStorage.setItem("copiedEdgeNode", JSON.stringify({
+                        node: Project.state.selectedNode.map((n) => sheets.nodeMap.get(n)),
+                        edge: Project.state.selectedEdge.map((e) => edges.find((edge) => edge._key === e)),
+                    }));
                 }
             }else if (event.ctrlKey && key === "v") {
                 if(Project.state.editedHtml != undefined ) {
@@ -133,6 +144,81 @@ export const App = () => {
                                 }
                             }
                         }
+                    }
+                } else if(Project.state.selectedNode.length > 0 && !Project.state.editedNodeConfig) {
+                    const copiedObject = sessionStorage.getItem("copiedEdgeNode")
+                        ? JSON.parse(sessionStorage.getItem("copiedEdgeNode")!) as {node:Node<any>[], edge:Edge[]}
+                        : undefined;
+
+                    if (copiedObject?.node.length) {
+                        // Optionnel : on supprime la sélection uniquement si on colle quelque chose
+                        // (et on évite le bug de precedence de ton if actuel)
+                        /*const hasSelection =
+                            Project.state.selectedNode.length > 0 ||
+                            Project.state.selectedEdge.length > 0;
+
+                        if (hasSelection) {
+                            await Project.state.batchDeleteElements!(
+                                Project.state.selectedNode.filter((n) => n !== "root"),
+                                Project.state.selectedEdge
+                            );
+                        }*/
+
+                        // On ne garde que les edges dont source ET target sont bien dans les nodes copiés
+                        copiedObject.edge = copiedObject.edge.filter((e) =>
+                            copiedObject.node.some((n) => n._key === e.source) &&
+                            copiedObject.node.some((n) => n._key === e.target)
+                        );
+
+                        const totalElements = copiedObject.node.length + copiedObject.edge.length;
+                        const ids = await Project.state.generateUniqueId!(totalElements);
+                        if (!ids) return;
+
+                        const motor = Project.state.getMotor();
+                        const userCursor = motor.getCursorPosition();
+                        const worldCursor = motor.screenToWorld(userCursor);
+
+                        // Calcul de la bounding box
+                        let minX = Infinity, minY = Infinity;
+                        let maxX = -Infinity, maxY = -Infinity;
+
+                        // Map old → new node id
+                        const nodeIdMap = new Map<string, string>();
+
+                        let idIndex = 0;
+
+                        // On traite d'abord les nodes : nouveau _key + bbox + map
+                        for (const node of copiedObject.node) {
+                            nodeIdMap.set(node._key, ids[idIndex]); // on garde l’ancien avant de l’écraser
+                            node._key = ids[idIndex];
+                            idIndex++;
+
+                            minX = Math.min(minX, node.posX);
+                            minY = Math.min(minY, node.posY);
+                            maxX = Math.max(maxX, node.posX + node.size.width);
+                            maxY = Math.max(maxY, node.posY + node.size.height);
+                        }
+
+                        const width = maxX - minX;
+                        const height = maxY - minY;
+
+                        // Translation pour centrer autour du curseur
+                        for (const node of copiedObject.node) {
+                            node.posX = node.posX - minX + worldCursor.x - width / 2;
+                            node.posY = node.posY - minY + worldCursor.y - height / 2;
+                        }
+
+                        // On traite les edges : nouveau _key + mise à jour source/target
+                        for (const edge of copiedObject.edge) {
+                            edge._key = ids[idIndex];
+                            idIndex++;
+
+                            // Ici la correction critique
+                            edge.source = nodeIdMap.get(edge.source)!; // le ! est safe car on a filtré avant
+                            edge.target = nodeIdMap.get(edge.target)!;
+                        }
+
+                        await Project.state.batchCreateElements!(copiedObject.node, copiedObject.edge);
                     }
                 }
             } else if (key === "delete") {

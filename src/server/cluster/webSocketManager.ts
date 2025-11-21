@@ -33,7 +33,7 @@ import {
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
-    WSResponseMessage, GraphInstructions
+    WSResponseMessage, GraphInstructions, WSCreateSheet, WSRenameSheet, WSDeleteSheet
 } from "../../utils/sync/wsObject";
 import {clusterManager, db} from "../server";
 import {Edge, Node, NodeTypeConfig} from "../../utils/graph/graphType";
@@ -1131,6 +1131,73 @@ export class WebSocketManager {
                             edgeKeys: finalEdgeKeys, // Send back the actually deleted edges
                             _id: undefined
                         } as WSMessage<WSBatchDeleteElements>);
+                    }
+                }
+            } else if(jsonData.type === "createSheet") {
+                if(!graphUser || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSCreateSheet> = jsonData;
+
+                const graph = this.managedGraph[graphKey];
+
+                let id = 1;
+                while(graph[id]) {
+                    id++;
+                }
+                message.key = id+"";
+                graph[id] = {
+                    instructionHistory: [],
+                    user: [],
+                    nodeMap: new Map(),
+                    edgeMap: new Map(),
+                    // Deep copy for original state
+                    originalNodeMap: new Map(),
+                    originalEdgeMap: new Map(),
+                    hasUnsavedChanges: false
+                }
+                for(const graph of Object.values(this.managedGraph)) {
+                    for(const sheet of Object.values(graph)) {
+                        for(const user of sheet.user) {
+                            this.sendMessage(user.ws, {
+                                ...message,
+                            } as WSMessage<WSCreateSheet>);
+                        }
+                    }
+                }
+            } else if(jsonData.type === "renameSheet") {
+                if(!graphUser || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSRenameSheet> = jsonData;
+
+                for(const graph of Object.values(this.managedGraph)) {
+                    for(const sheet of Object.values(graph)) {
+                        for(const user of sheet.user) {
+                            this.sendMessage(user.ws, {
+                                ...message,
+                            } as WSMessage<WSRenameSheet>);
+                        }
+                    }
+                }
+            } else if(jsonData.type === "deleteSheet") {
+                if(!graphUser || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSDeleteSheet> = jsonData;
+
+                const graph = this.managedGraph[graphKey];
+                delete graph[message.key];
+                for(const graph of Object.values(this.managedGraph)) {
+                    for(const sheet of Object.values(graph)) {
+                        for(const user of sheet.user) {
+                            this.sendMessage(user.ws, {
+                                ...message,
+                            } as WSMessage<WSDeleteSheet>);
+                        }
                     }
                 }
             }

@@ -24,11 +24,11 @@ import {
     WSApplyInstructionToGraph,
     WSApplyInstructionToNodeConfig,
     WSBatchCreateElements,
-    WSBatchDeleteElements,
+    WSBatchDeleteElements, WSCreateSheet, WSDeleteSheet,
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUserOnGraph,
-    WSRegisterUserOnNodeConfig,
+    WSRegisterUserOnNodeConfig, WSRenameSheet,
     WSResponseMessage
 } from "../../utils/sync/wsObject";
 import {useStableProjectRef} from "./useStableProjectRef";
@@ -1503,6 +1503,29 @@ export const useSocketSync = () => {
         } else if(packet.type === "applyInstructionToNodeConfig") {
             const message = packet as WSMessage<WSApplyInstructionToNodeConfig>;
             await applyNodeConfigInstructions(message.instructions, true);
+        } else if(packet.type === "createSheet" && projectRef.current.state.graph && packet.key && !projectRef.current.state.graph.sheetsList[packet.key]) {
+            projectRef.current.state.graph.sheetsList[packet.key] = packet.name;
+            projectRef.current.dispatch({
+                field: "graph",
+                value: {...projectRef.current.state.graph}
+            });
+        } else if(packet.type === "renameSheet" && projectRef.current.state.graph && projectRef.current.state.graph.sheetsList[packet.key]) {
+            projectRef.current.state.graph.sheetsList[packet.key] = packet.name;
+            projectRef.current.dispatch({
+                field: "graph",
+                value: {...projectRef.current.state.graph}
+            });
+        } else if(packet.type === "deleteSheet" && projectRef.current.state.graph && projectRef.current.state.graph.sheetsList[packet.key]) {
+            const moveSheet = projectRef.current.state.selectedSheetId === packet.key;
+
+            delete projectRef.current.state.graph.sheetsList[packet.key];
+            if(moveSheet) {
+                await projectRef.current.state.changeSheet!(Object.keys(projectRef.current.state.graph.sheetsList)[0]);
+            }
+            projectRef.current.dispatch({
+                field: "graph",
+                value: {...projectRef.current.state.graph}
+            });
         }
     }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions]);
 
@@ -1602,4 +1625,85 @@ export const useSocketSync = () => {
             value: refreshCurrentEntryDataType,
         });
     }, [Project.state.graph]);
+
+    /*
+    export interface WSCreateSheet {
+    key?:string,
+    name:string,
+}
+
+export interface WSRenameSheet {
+    key:string,
+    name:string,
+}
+export interface WSDeleteSheet {
+    key:string,
+}
+
+     */
+
+    const createSheet = async (name:string) => {
+        const createSheetMessage:WSMessage<WSCreateSheet> = {
+            type:"createSheet",
+            name: name,
+        }
+        await sendMessage(createSheetMessage);
+    }
+
+    const renameSheet = async (key:string, newName: string) => {
+        const renameSheetMessage:WSMessage<WSRenameSheet> = {
+            type: "renameSheet",
+            key: key,
+            name: newName
+        };
+        await sendMessage(renameSheetMessage);
+    }
+
+    const removeSheet = async (key:string) => {
+        const deleteSheetMessage:WSMessage<WSDeleteSheet> = {
+            type: "deleteSheet",
+            key: key
+        }
+        await sendMessage(deleteSheetMessage);
+    }
+
+    const changeSheet = async (key:string) => {
+        projectRef.current.dispatch({
+            field: "selectedNode",
+            value: []
+        });
+        projectRef.current.dispatch({
+            field: "selectedEdge",
+            value: []
+        });
+
+        if(projectRef.current.state.editedHtml) {
+            await projectRef.current.state.closeHtmlEditor!();
+        }
+
+        projectRef.current.dispatch({
+            field: "selectedSheetId",
+            value: key
+        });
+
+    }
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "createSheet",
+            value: createSheet
+        });
+        Project.dispatch({
+            field: "renameSheet",
+            value: renameSheet
+        });
+        Project.dispatch({
+            field: "removeSheet",
+            value: removeSheet
+        });
+        Project.dispatch({
+            field: "changeSheet",
+            value: changeSheet
+        })
+    }, []);
 }

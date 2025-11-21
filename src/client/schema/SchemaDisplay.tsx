@@ -17,6 +17,8 @@ import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/Workflo
 import {HtmlObject} from "../../utils/html/htmlType";
 import {useWorkflowActionRenderer} from "./hook/useWorkflowActionRenderer";
 import {DataTypeClass, DataTypeConfig} from "../../utils/dataType/dataType";
+import {Plus} from "lucide-react";
+import toast from "react-hot-toast";
 
 export interface SchemaNodeInfo {
     node: Node<any>;
@@ -928,6 +930,41 @@ export const SchemaDisplay = memo(() => {
     }, [Project.state.currentEntryDataType]);
 
 
+    const sheetListClass = useDynamicClass(`
+        & {
+            position:absolute; 
+            width:100%; 
+            display:flex;
+            flex-direction:row; 
+            justify-content:center; 
+            bottom:0;
+            overflow:hidden;
+            pointer-events: all;
+            z-index: 1;
+            gap: 10px;
+        }
+        
+        & > div {
+            background-color: var(--nodius-background-paper);
+            box-shadow: var(--nodius-shadow-2);
+            padding: 8px 16px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 8px 8px 0px 0px;
+            transform: translateY(30px);
+            cursor:pointer;
+            transition: var(--nodius-transition-default);
+        }
+        
+        & > div.selected {
+            border: 1px solid var(--nodius-primary-main)
+        }
+        
+        &:hover > div {
+            transform: translateY(2px);
+        }
+        
+    `);
 
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', position:"absolute", inset:"0", pointerEvents:"none"}} >
@@ -942,6 +979,27 @@ export const SchemaDisplay = memo(() => {
                     overflow:"hidden"
                 }}
             />
+            <div className={sheetListClass}>
+                {
+                    Object.keys(Project.state.graph?.sheetsList ?? {}).map((sheetKey, i) => (
+                        <div key={i} className={sheetKey === Project.state.selectedSheetId ? "selected" : ""}>
+                            {Project.state.graph!.sheetsList[sheetKey]}
+                        </div>
+                    ))
+                }
+                <div className={"selected"} style={{color: "var(--nodius-primary-main)"}} onClick={async () => {
+                    const sheetName = prompt("Sheet name");
+                    if(sheetName) {
+                        if(Object.values(Project.state.graph!.sheetsList).includes(sheetName)) {
+                            toast.error("Sheet name already used");
+                        } else {
+                            await Project.state.createSheet!(sheetName);
+                        }
+                    }
+                }}>
+                    <Plus />
+                </div>
+            </div>
         </div>
     )
 })

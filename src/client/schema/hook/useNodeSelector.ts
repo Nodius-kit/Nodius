@@ -208,12 +208,12 @@ export const useNodeSelector = () => {
                 }
             }
             if(selectorContainer.current) {
-                selectorContainer.current.eventContainer.removeEventListener("mousemove", mouseMove);
-                selectorContainer.current.eventContainer.removeEventListener("mouseup", mouseUp);
+                window.removeEventListener("mousemove", mouseMove);
+                window.removeEventListener("mouseup", mouseUp);
             }
         }
-        selectorContainer.current!.eventContainer.addEventListener("mousemove", mouseMove);
-        selectorContainer.current!.eventContainer.addEventListener("mouseup", mouseUp);
+        window.addEventListener("mousemove", mouseMove);
+        window.addEventListener("mouseup", mouseUp);
     }
 
 

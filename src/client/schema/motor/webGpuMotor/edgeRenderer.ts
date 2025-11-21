@@ -61,6 +61,7 @@ export class EdgeRenderer {
 
     public getHoverEdge = () => this.hoveredEdge;
     public getSelectedEdges = () => this.selectedEdges;
+    public getCursorPosition = () => this.cursorPosition;
 
     public init(bindGroupLayout: GPUBindGroupLayout): void {
         const edgeShaderCode = /* wgsl */ `
