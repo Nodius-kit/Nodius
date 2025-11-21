@@ -126,10 +126,7 @@ export const App = () => {
                                     triggerHtmlRender: true,
                                     applyUniqIdentifier: "identifier",
                                 }]);
-                                if(output.status) {
-                                    const reverseInstruction = getInverseInstruction(Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction.instruction);
-                                    // used later for CTRL + Z / CTRL + Y
-                                }
+
                             } else if(selectedObject.type === "list"){
                                 instruction.key("content").arrayAdd(copiedObject);
 
@@ -138,10 +135,7 @@ export const App = () => {
                                     triggerHtmlRender: true,
                                     applyUniqIdentifier: "identifier",
                                 }]);
-                                if(output.status) {
-                                    const reverseInstruction = getInverseInstruction(Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction.instruction);
-                                    // used later for CTRL + Z / CTRL + Y
-                                }
+
                             }
                         }
                     }
@@ -226,8 +220,6 @@ export const App = () => {
                         let pathToSelected = searchElementWithIdentifier(selectedObject.identifier, Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction);
                         if (pathToSelected) {
                             instruction.remove();
-                            const reverseInstruction = getInverseInstruction(Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction.instruction);
-                            // used later for CTRL + Z / CTRL + Y
 
                             intructionsHtml.push(instruction.instruction);
 
@@ -286,59 +278,42 @@ export const App = () => {
 
                     await Project.state.batchDeleteElements!(nodeId,edgeId);
 
-                    projectRef.current.state.addCancellableAction!(async () => {
-                        //ahead
-                        if(projectRef.current.state.selectedSheetId === baseSheetId) {
-                            await Project.state.batchDeleteElements!(nodeId,edgeId);
-                            return true;
-                        }
-                        return false;
-                    }, async () => {
-                        //back
-                        if(projectRef.current.state.selectedSheetId === baseSheetId) {
-                            const ids = await projectRef.current.state.generateUniqueId!(saved_node.length + saved_edge.length);
-                            if(!ids) return false;
-                            saved_node = saved_node.map((sn) => deepCopy(sn));
-                            saved_edge = saved_edge.map((sn) => deepCopy(sn));
-                            nodeId = saved_node.map((n) => n._key);
-                            edgeId = saved_edge.map((e) => e._key);
-                            await Project.state.batchCreateElements!(saved_node,saved_edge);
-                            return true;
-                        }
-                        return false;
-                    })
-
                 } else if(Project.state.editedNodeHandle) {
-                    const node = Project.state.graph?.sheets[Project.state.selectedSheetId ?? ""].nodeMap.get(Project.state.editedNodeHandle.nodeId);
-                    if(!node) return;
-                    const handleInfo = getHandleInfo(node, Project.state.editedNodeHandle.pointId);
-                    if(!handleInfo) return;
+                    const nodeId = Project.state.editedNodeHandle.nodeId;
+                    const pointId = Project.state.editedNodeHandle.pointId;
+                    const side = Project.state.editedNodeHandle.side;
 
-                    const instruction = new InstructionBuilder();
-                    instruction.key("handles")
-                        .key(Project.state.editedNodeHandle.side)
+                    const sheet = Project.state.graph?.sheets[Project.state.selectedSheetId ?? ""];
+                    if (!sheet) return;
+
+                    const node = sheet.nodeMap.get(nodeId);
+                    if (!node) return;
+
+                    const handleInfo = getHandleInfo(node, pointId);
+                    if (!handleInfo) return;
+
+                    const index = handleInfo.index;
+                    const removedPoint = deepCopy(handleInfo.point); // on sauvegarde le point supprimé pour l’undo
+
+                    // Instruction de suppression
+                    const deleteInstruction = new InstructionBuilder()
+                        .key("handles")
+                        .key(side)
                         .key("point")
-                        .index(handleInfo.index).remove();
+                        .arrayRemoveIndex(index)
 
+                    // On exécute la suppression immédiatement
                     await Project.state.updateGraph!([{
-                        nodeId: Project.state.editedNodeHandle.nodeId,
-                        i: instruction.instruction,
-                        targetedIdentifier: handleInfo.point.id
+                        nodeId,
+                        i: deleteInstruction,
+                        targetedIdentifier: pointId
                     }]);
+
+                    // On sort du mode édition du handle
                     Project.dispatch({
                         field: "editedNodeHandle",
                         value: undefined
                     });
-
-                    projectRef.current.state.addCancellableAction!(async () => {
-                        //ahead
-
-                        return false;
-                    }, async () => {
-                        //back
-
-                        return false;
-                    })
                 }
             }
         }
