@@ -85,6 +85,7 @@ export class WebSocketManager {
     private clients: Set<WebSocket> = new Set(); // Set to store connected clients
 
     private uniqueIdGenerator:Record<string, number> = {};
+    private usedIds:Record<string, Set<string>> = {}; // Track all IDs that have ever been used
     private managedGraph:Record<string, Record<string, ManagedSheet>> = {}
     private managedNodeConfig:Record<string, ManagedNodeConfig> = {}
 
@@ -289,11 +290,16 @@ export class WebSocketManager {
             }
         })
 
-        // Initialize ID generator by scanning all existing IDs
+        // Initialize ID generator and used IDs set by scanning all existing IDs
         this.uniqueIdGenerator[graphKey] = 0;
+        this.usedIds[graphKey] = new Set<string>();
+
         Object.values(this.managedGraph[graphKey]).forEach((sheet: ManagedSheet) => {
             // Check node._key values
             sheet.nodeMap.forEach((node) => {
+                // Add to used IDs set
+                this.usedIds[graphKey].add(node._key);
+
                 // Parse node._key as base-36 and update max
                 try {
                     const num = parseInt(node._key, 36);
@@ -309,6 +315,9 @@ export class WebSocketManager {
             // Check edge._key values
             for (const edgeList of sheet.edgeMap.values()) {
                 edgeList.forEach((edge) => {
+                    // Add to used IDs set
+                    this.usedIds[graphKey].add(edge._key);
+
                     // Parse edge._key as base-36 and update max
                     try {
                         const num = parseInt(edge._key, 36);
@@ -323,7 +332,7 @@ export class WebSocketManager {
             }
         });
         this.uniqueIdGenerator[graphKey] += 1;  // Start from max + 1
-        console.log(`[WebSocketManager] Initialized uniqueIdGenerator for graph ${graphKey} starting at ${this.uniqueIdGenerator[graphKey]}`);
+        console.log(`[WebSocketManager] Initialized uniqueIdGenerator for graph ${graphKey} starting at ${this.uniqueIdGenerator[graphKey]} with ${this.usedIds[graphKey].size} used IDs tracked`);
 
         // If invalid edges were found and removed, save the graph immediately
         if (hasInvalidEdges) {
@@ -976,13 +985,23 @@ export class WebSocketManager {
                 // Mark sheet as having unsaved changes
                 targetSheet.hasUnsavedChanges = true;
 
+                // Initialize usedIds set if it doesn't exist
+                if (!this.usedIds[graphKey]) {
+                    this.usedIds[graphKey] = new Set<string>();
+                }
+
                 // Add nodes
                 for(const node of message.nodes) {
                     targetSheet.nodeMap.set(node._key, node);
+                    // Track this ID as used
+                    this.usedIds[graphKey].add(node._key);
                 }
 
                 // Add edges to the edgeMap
                 for(const edge of edgesToAdd) {
+                    // Track this ID as used
+                    this.usedIds[graphKey].add(edge._key);
+
                     // Add to target map
                     const targetKey = `target-${edge.target}`;
                     let targetEdges = targetSheet.edgeMap.get(targetKey) || [];
@@ -1650,14 +1669,14 @@ export class WebSocketManager {
 
     /**
      * Get a unique identifier for nodes or edges in a specific graph.
-     * This method guarantees that the returned ID will never be reused within the same graph.
+     * This method guarantees that the returned ID will never be reused within the same graph,
+     * even if an ID has been deleted. All generated IDs are tracked in the usedIds set.
      * IDs are generated in base-36 format and are tracked per graph.
-     * The method validates that the generated ID doesn't collide with existing node or edge keys.
      *
      * @param graphKey - The graph key to generate a unique ID for
      * @returns A unique identifier string that has never been used in this graph
      * @throws Error if the graph is not managed by this WebSocketManager
-     * @throws Error if unable to generate a unique ID after 1000 attempts (should never happen)
+     * @throws Error if unable to generate a unique ID after 10000 attempts (should never happen)
      */
     public getUniqueId(graphKey: string): string {
         // Check if the graph is managed
@@ -1665,13 +1684,16 @@ export class WebSocketManager {
             throw new Error(`Graph with key "${graphKey}" is not managed by this WebSocketManager. Please ensure the graph is initialized first.`);
         }
 
-        // Initialize the counter if it doesn't exist (defensive programming)
+        // Initialize the counter and usedIds set if they don't exist (defensive programming)
         if (this.uniqueIdGenerator[graphKey] === undefined) {
             this.uniqueIdGenerator[graphKey] = 0;
         }
+        if (this.usedIds[graphKey] === undefined) {
+            this.usedIds[graphKey] = new Set<string>();
+        }
 
         let attempts = 0;
-        const maxAttempts = 1000;
+        const maxAttempts = 10000;
 
         while (attempts < maxAttempts) {
             // Generate the unique ID and increment the counter
@@ -1683,19 +1705,30 @@ export class WebSocketManager {
                 continue;
             }
 
-            // Validate that the ID doesn't already exist in the graph
-            if (this.idExistsInGraph(graphKey, uniqueId)) {
-                console.warn(`[WebSocketManager] Generated ID "${uniqueId}" already exists in graph ${graphKey}, regenerating...`);
+            // Check if this ID has ever been used (including deleted IDs)
+            if (this.usedIds[graphKey].has(uniqueId)) {
                 attempts++;
                 continue;
             }
+
+            // Double-check that the ID doesn't currently exist in the graph
+            // This is a safety check in case the usedIds set gets out of sync
+            if (this.idExistsInGraph(graphKey, uniqueId)) {
+                console.warn(`[WebSocketManager] Generated ID "${uniqueId}" exists in graph ${graphKey} but not in usedIds set, adding to set...`);
+                this.usedIds[graphKey].add(uniqueId);
+                attempts++;
+                continue;
+            }
+
+            // Mark this ID as used
+            this.usedIds[graphKey].add(uniqueId);
 
             // ID is unique and valid
             return uniqueId;
         }
 
         // This should never happen, but handle it gracefully
-        throw new Error(`[WebSocketManager] Failed to generate a unique ID for graph ${graphKey} after ${maxAttempts} attempts. This indicates a serious problem with ID generation.`);
+        throw new Error(`[WebSocketManager] Failed to generate a unique ID for graph ${graphKey} after ${maxAttempts} attempts. This indicates a serious problem with ID generation. UsedIds count: ${this.usedIds[graphKey].size}`);
     }
 }
 

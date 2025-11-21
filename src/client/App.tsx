@@ -298,7 +298,6 @@ export const App = () => {
                         if(projectRef.current.state.selectedSheetId === baseSheetId) {
                             const ids = await projectRef.current.state.generateUniqueId!(saved_node.length + saved_edge.length);
                             if(!ids) return false;
-                            let ids_index = 0;
                             saved_node = saved_node.map((sn) => deepCopy(sn));
                             saved_edge = saved_edge.map((sn) => deepCopy(sn));
                             nodeId = saved_node.map((n) => n._key);
@@ -330,6 +329,16 @@ export const App = () => {
                         field: "editedNodeHandle",
                         value: undefined
                     });
+
+                    projectRef.current.state.addCancellableAction!(async () => {
+                        //ahead
+
+                        return false;
+                    }, async () => {
+                        //back
+
+                        return false;
+                    })
                 }
             }
         }
