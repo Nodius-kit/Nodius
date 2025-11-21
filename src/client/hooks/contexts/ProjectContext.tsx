@@ -164,6 +164,15 @@ export interface ProjectContextType {
     removeSheet?: (sheetKey:string) => Promise<void>;
     changeSheet?: (sheetKey:string) => Promise<void>;
 
+    // Save status
+    saveStatus?: {
+        lastSaveTime: number;
+        hasUnsavedChanges: boolean;
+        autoSaveEnabled: boolean;
+    };
+    forceSave?: () => Promise<void>;
+    toggleAutoSave?: (enabled: boolean) => Promise<void>;
+
 }
 export const ProjectContextDefaultValue: ProjectContextType = {
     selectedNode: [],

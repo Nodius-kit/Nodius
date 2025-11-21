@@ -29,7 +29,10 @@ import {
     WSMessage,
     WSRegisterUserOnGraph,
     WSRegisterUserOnNodeConfig, WSRenameSheet,
-    WSResponseMessage
+    WSResponseMessage,
+    WSSaveStatus,
+    WSForceSave,
+    WSToggleAutoSave
 } from "../../utils/sync/wsObject";
 import {useStableProjectRef} from "./useStableProjectRef";
 import {applyInstruction, BeforeApplyInstructionWithContext} from "../../utils/sync/InstructionBuilder";
@@ -1530,6 +1533,17 @@ export const useSocketSync = () => {
                 field: "graph",
                 value: {...projectRef.current.state.graph}
             });
+        } else if(packet.type === "saveStatus") {
+            const message = packet as WSMessage<WSSaveStatus>;
+            // Update save status in project context
+            projectRef.current.dispatch({
+                field: "saveStatus",
+                value: {
+                    lastSaveTime: message.lastSaveTime,
+                    hasUnsavedChanges: message.hasUnsavedChanges,
+                    autoSaveEnabled: message.autoSaveEnabled
+                }
+            });
         }
     }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions]);
 
@@ -1677,6 +1691,29 @@ export const useSocketSync = () => {
 
     }
 
+    const forceSave = async () => {
+        if (!projectRef.current.state.graph) return;
+
+        const message: WSMessage<WSForceSave> = {
+            type: "forceSave",
+            graphKey: projectRef.current.state.graph._key
+        };
+
+        await sendMessage(message);
+    };
+
+    const toggleAutoSave = async (enabled: boolean) => {
+        if (!projectRef.current.state.graph) return;
+
+        const message: WSMessage<WSToggleAutoSave> = {
+            type: "toggleAutoSave",
+            graphKey: projectRef.current.state.graph._key,
+            enabled
+        };
+
+        await sendMessage(message);
+    };
+
     useEffect(() => {
         Project.dispatch({
             field: "createSheet",
@@ -1693,6 +1730,14 @@ export const useSocketSync = () => {
         Project.dispatch({
             field: "changeSheet",
             value: changeSheet
-        })
+        });
+        Project.dispatch({
+            field: "forceSave",
+            value: forceSave
+        });
+        Project.dispatch({
+            field: "toggleAutoSave",
+            value: toggleAutoSave
+        });
     }, [sendMessage]);
 }

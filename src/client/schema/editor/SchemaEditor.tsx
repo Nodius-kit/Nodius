@@ -39,6 +39,7 @@ import {RightPanelComponentEditor} from "./menu/RightPanelComponentEditor";
 import {RightPanelHandleConfig} from "./menu/RightPanelHandleConfig";
 import {LeftPanelEntryTypeSelect} from "./menu/LeftPanelEntryTypeSelect";
 import {LeftPanelNodeLibrary} from "./menu/LeftPanelNodeLibrary";
+import {SaveStatusOverlay} from "./SaveStatusOverlay";
 
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
@@ -261,6 +262,7 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
             </div>
 
             {/* Right panel for handle configuration */}
+
             <div style={{
                 position:"absolute",
                 top:"0",
@@ -290,8 +292,7 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                     </div>
                 </Fade>
             </div>
-
-
+            <SaveStatusOverlay right={(Project.state.editedNodeHandle || Project.state.editedHtml ? rightPanelWidth : 0)} />
 
         </div>
     )

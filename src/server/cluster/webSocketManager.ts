@@ -33,7 +33,8 @@ import {
     WSGenerateUniqueId,
     WSMessage,
     WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
-    WSResponseMessage, GraphInstructions, WSCreateSheet, WSRenameSheet, WSDeleteSheet
+    WSResponseMessage, GraphInstructions, WSCreateSheet, WSRenameSheet, WSDeleteSheet,
+    WSSaveStatus, WSForceSave, WSToggleAutoSave
 } from "../../utils/sync/wsObject";
 import {clusterManager, db} from "../server";
 import {Edge, Node, NodeTypeConfig} from "../../utils/graph/graphType";
@@ -91,6 +92,12 @@ export class WebSocketManager {
 
     private intervalCleaning:NodeJS.Timeout|undefined;
     private intervalSaving:NodeJS.Timeout|undefined;
+
+    // Track save status per graph
+    private graphSaveStatus:Record<string, {
+        lastSaveTime: number,
+        autoSaveEnabled: boolean
+    }> = {};
 
     /**
      * Constructor to initialize the WebSocket server.
@@ -753,6 +760,9 @@ export class WebSocketManager {
                 // Mark sheet as having unsaved changes
                 sheet.hasUnsavedChanges = true;
 
+                // Broadcast save status to all users
+                this.broadcastSaveStatus(graphKey);
+
                 // Update all modified nodes in the sheet
                 for(const [nodeId, node] of modifiedNodes) {
                     sheet.nodeMap.set(nodeId, node);
@@ -985,6 +995,9 @@ export class WebSocketManager {
                 // Mark sheet as having unsaved changes
                 targetSheet.hasUnsavedChanges = true;
 
+                // Broadcast save status to all users
+                this.broadcastSaveStatus(graphKey);
+
                 // Initialize usedIds set if it doesn't exist
                 if (!this.usedIds[graphKey]) {
                     this.usedIds[graphKey] = new Set<string>();
@@ -1091,6 +1104,9 @@ export class WebSocketManager {
 
                 // All validations passed, mark as having unsaved changes
                 targetSheet.hasUnsavedChanges = true;
+
+                // Broadcast save status to all users
+                this.broadcastSaveStatus(graphKey);
 
                 // Delete edges first (to avoid orphaned edges)
                 for(const edgeKey of finalEdgeKeys) {
@@ -1319,6 +1335,64 @@ export class WebSocketManager {
                         }
                     }
                 }
+            } else if(jsonData.type === "forceSave") {
+                if(!graphUser || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSForceSave> = jsonData;
+
+                // Force save immediately
+                await this.saveGraphChanges(graphKey);
+
+                // Update last save time
+                if (!this.graphSaveStatus[graphKey]) {
+                    this.graphSaveStatus[graphKey] = {
+                        lastSaveTime: Date.now(),
+                        autoSaveEnabled: true
+                    };
+                } else {
+                    this.graphSaveStatus[graphKey].lastSaveTime = Date.now();
+                }
+
+                // Broadcast save status to all users
+                this.broadcastSaveStatus(graphKey);
+
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: { status: true }
+                    } as WSMessage<WSResponseMessage<WSForceSave>>);
+                }
+            } else if(jsonData.type === "toggleAutoSave") {
+                if(!graphUser || !sheet || !graphKey) {
+                    ws.close();
+                    return;
+                }
+                const message:WSMessage<WSToggleAutoSave> = jsonData;
+
+                // Initialize save status if it doesn't exist
+                if (!this.graphSaveStatus[graphKey]) {
+                    this.graphSaveStatus[graphKey] = {
+                        lastSaveTime: Date.now(),
+                        autoSaveEnabled: true
+                    };
+                }
+
+                // Toggle auto-save
+                this.graphSaveStatus[graphKey].autoSaveEnabled = message.enabled;
+
+                // Broadcast updated status to all users
+                this.broadcastSaveStatus(graphKey);
+
+                if (messageId) {
+                    this.sendMessage(ws, {
+                        ...message,
+                        _id: messageId,
+                        _response: { status: true }
+                    } as WSMessage<WSResponseMessage<WSToggleAutoSave>>);
+                }
             }
 
         } catch (error) {
@@ -1360,11 +1434,69 @@ export class WebSocketManager {
     }
 
     /**
+     * Broadcast save status to all users on a graph
+     * @param graphKey - The graph key to broadcast status for
+     */
+    private broadcastSaveStatus = (graphKey: string) => {
+        // Initialize save status if it doesn't exist
+        if (!this.graphSaveStatus[graphKey]) {
+            this.graphSaveStatus[graphKey] = {
+                lastSaveTime: Date.now(),
+                autoSaveEnabled: true
+            };
+        }
+
+        // Check if any sheet has unsaved changes
+        const graph = this.managedGraph[graphKey];
+        let hasUnsavedChanges = false;
+        if (graph) {
+            for (const sheetId in graph) {
+                if (graph[sheetId].hasUnsavedChanges) {
+                    hasUnsavedChanges = true;
+                    break;
+                }
+            }
+        }
+
+        // Broadcast to all users on this graph
+        if (graph) {
+            for (const sheetId in graph) {
+                const sheet = graph[sheetId];
+                for (const user of sheet.user) {
+                    this.sendMessage(user.ws, {
+                        type: "saveStatus",
+                        graphKey: graphKey,
+                        lastSaveTime: this.graphSaveStatus[graphKey].lastSaveTime,
+                        hasUnsavedChanges: hasUnsavedChanges,
+                        autoSaveEnabled: this.graphSaveStatus[graphKey].autoSaveEnabled
+                    } as WSMessage<WSSaveStatus>);
+                }
+            }
+        }
+    };
+
+    /**
      * Save all pending changes for all managed graphs and node configs
      */
     private savePendingChanges = async () => {
         for (const graphKey in this.managedGraph) {
-            await this.saveGraphChanges(graphKey);
+            // Only auto-save if auto-save is enabled for this graph
+            if (!this.graphSaveStatus[graphKey] || this.graphSaveStatus[graphKey].autoSaveEnabled) {
+                await this.saveGraphChanges(graphKey);
+
+                // Update last save time
+                if (!this.graphSaveStatus[graphKey]) {
+                    this.graphSaveStatus[graphKey] = {
+                        lastSaveTime: Date.now(),
+                        autoSaveEnabled: true
+                    };
+                } else {
+                    this.graphSaveStatus[graphKey].lastSaveTime = Date.now();
+                }
+
+                // Broadcast save status to all users
+                this.broadcastSaveStatus(graphKey);
+            }
         }
         for (const nodeConfigKey in this.managedNodeConfig) {
             await this.saveNodeConfigChanges(nodeConfigKey);

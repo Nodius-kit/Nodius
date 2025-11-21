@@ -142,3 +142,22 @@ export interface WSDeleteSheet {
     type: "deleteSheet",
     key:string,
 }
+
+export interface WSSaveStatus {
+    type: "saveStatus",
+    graphKey: string,
+    lastSaveTime: number,
+    hasUnsavedChanges: boolean,
+    autoSaveEnabled: boolean,
+}
+
+export interface WSForceSave {
+    type: "forceSave",
+    graphKey: string,
+}
+
+export interface WSToggleAutoSave {
+    type: "toggleAutoSave",
+    graphKey: string,
+    enabled: boolean,
+}
