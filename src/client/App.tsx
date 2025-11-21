@@ -9,7 +9,7 @@ import {useSocketSync} from "./hooks/useSocketSync";
 import {HomeWorkflow} from "./menu/homeWorkflow/HomeWorkflow";
 import {SchemaDisplay} from "./schema/SchemaDisplay";
 import {SchemaEditor} from "./schema/editor/SchemaEditor";
-import {documentHaveActiveElement, Point} from "../utils/objectUtils";
+import {deepCopy, documentHaveActiveElement, Point} from "../utils/objectUtils";
 import {getInverseInstruction, Instruction, InstructionBuilder} from "../utils/sync/InstructionBuilder";
 import {searchElementWithIdentifier} from "../utils/html/htmlUtils";
 import {GraphInstructions} from "../utils/sync/wsObject";
@@ -151,18 +151,6 @@ export const App = () => {
                         : undefined;
 
                     if (copiedObject?.node.length) {
-                        // Optionnel : on supprime la sélection uniquement si on colle quelque chose
-                        // (et on évite le bug de precedence de ton if actuel)
-                        /*const hasSelection =
-                            Project.state.selectedNode.length > 0 ||
-                            Project.state.selectedEdge.length > 0;
-
-                        if (hasSelection) {
-                            await Project.state.batchDeleteElements!(
-                                Project.state.selectedNode.filter((n) => n !== "root"),
-                                Project.state.selectedEdge
-                            );
-                        }*/
 
                         // On ne garde que les edges dont source ET target sont bien dans les nodes copiés
                         copiedObject.edge = copiedObject.edge.filter((e) =>
@@ -283,7 +271,44 @@ export const App = () => {
                     }
                 } else if(Project.state.selectedEdge.length > 0 || Project.state.selectedNode.length > 0 && Project.state.batchDeleteElements) {
 
-                    await Project.state.batchDeleteElements!(Project.state.selectedNode.filter((n) => n !== "root"),Project.state.selectedEdge );
+                    // save original sheet id
+                    const baseSheetId = projectRef.current.state.selectedSheetId!;
+
+                    // original node and edge
+                    let saved_node:Node<any>[] = Project.state.selectedNode.filter((n) => n !== "root").map((sn) => projectRef.current.state.graph!.sheets[baseSheetId].nodeMap.get(sn)!);
+
+                    const edges = Array.from(projectRef.current.state.graph!.sheets[baseSheetId].edgeMap.values()).flat();
+                    let saved_edge:Edge[] = Project.state.selectedEdge.map((se) => edges.find((e) => e._key === se)!);
+
+                    // original nodeId list and edgeId list
+                    let nodeId: string[] = saved_node.map((n) => n._key);
+                    let edgeId: string[] = saved_edge.map((e) => e._key);
+
+                    await Project.state.batchDeleteElements!(nodeId,edgeId);
+
+                    projectRef.current.state.addCancellableAction!(async () => {
+                        //ahead
+                        if(projectRef.current.state.selectedSheetId === baseSheetId) {
+                            await Project.state.batchDeleteElements!(nodeId,edgeId);
+                            return true;
+                        }
+                        return false;
+                    }, async () => {
+                        //back
+                        if(projectRef.current.state.selectedSheetId === baseSheetId) {
+                            const ids = await projectRef.current.state.generateUniqueId!(saved_node.length + saved_edge.length);
+                            if(!ids) return false;
+                            let ids_index = 0;
+                            saved_node = saved_node.map((sn) => deepCopy(sn));
+                            saved_edge = saved_edge.map((sn) => deepCopy(sn));
+                            nodeId = saved_node.map((n) => n._key);
+                            edgeId = saved_edge.map((e) => e._key);
+                            await Project.state.batchCreateElements!(saved_node,saved_edge);
+                            return true;
+                        }
+                        return false;
+                    })
+
                 } else if(Project.state.editedNodeHandle) {
                     const node = Project.state.graph?.sheets[Project.state.selectedSheetId ?? ""].nodeMap.get(Project.state.editedNodeHandle.nodeId);
                     if(!node) return;

@@ -1184,6 +1184,7 @@ export class WebSocketManager {
                         for(const user of sheet.user) {
                             this.sendMessage(user.ws, {
                                 ...message,
+                                _id: undefined
                             } as WSMessage<WSCreateSheet>);
                         }
                     }
@@ -1222,6 +1223,7 @@ export class WebSocketManager {
                         for(const user of sheet.user) {
                             this.sendMessage(user.ws, {
                                 ...message,
+                                _id: undefined
                             } as WSMessage<WSRenameSheet>);
                         }
                     }
@@ -1293,6 +1295,7 @@ export class WebSocketManager {
                         for(const user of sheet.user) {
                             this.sendMessage(user.ws, {
                                 ...message,
+                                _id: undefined
                             } as WSMessage<WSDeleteSheet>);
                         }
                     }

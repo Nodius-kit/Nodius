@@ -17,7 +17,7 @@ import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/Workflo
 import {HtmlObject} from "../../utils/html/htmlType";
 import {useWorkflowActionRenderer} from "./hook/useWorkflowActionRenderer";
 import {DataTypeClass, DataTypeConfig} from "../../utils/dataType/dataType";
-import {Plus} from "lucide-react";
+import {Plus, X, Edit2} from "lucide-react";
 import toast from "react-hot-toast";
 
 export interface SchemaNodeInfo {
@@ -932,19 +932,19 @@ export const SchemaDisplay = memo(() => {
 
     const sheetListClass = useDynamicClass(`
         & {
-            position:absolute; 
-            width:100%; 
+            position:absolute;
+            width:100%;
             display:flex;
-            flex-direction:row; 
-            justify-content:center; 
+            flex-direction:row;
+            justify-content:center;
             bottom:0;
             overflow:hidden;
             pointer-events: all;
             z-index: 1;
             gap: 10px;
         }
-        
-        & > div {
+
+        & > div.sheet-tab {
             background-color: var(--nodius-background-paper);
             box-shadow: var(--nodius-shadow-2);
             padding: 8px 16px;
@@ -954,16 +954,55 @@ export const SchemaDisplay = memo(() => {
             transform: translateY(30px);
             cursor:pointer;
             transition: var(--nodius-transition-default);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
         }
-        
-        & > div.selected {
+
+        & > div.sheet-tab.selected {
             border: 1px solid var(--nodius-primary-main)
         }
-        
-        &:hover > div {
+
+        &:hover > div.sheet-tab {
             transform: translateY(2px);
         }
-        
+
+        & .sheet-actions {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            margin-left: 4px;
+        }
+
+        & .sheet-tab:hover .sheet-actions {
+            display: flex;
+        }
+
+        & .sheet-action-btn {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            padding: 2px;
+        }
+
+        & .sheet-action-btn:hover {
+            background-color: var(--nodius-background-hover, rgba(0, 0, 0, 0.1));
+        }
+
+        & .sheet-action-btn.delete:hover {
+            background-color: var(--nodius-error-light, rgba(244, 67, 54, 0.1));
+            color: var(--nodius-error-main, #f44336);
+        }
+
+        & .sheet-name {
+            user-select: none;
+        }
+
     `);
 
     return (
@@ -979,27 +1018,82 @@ export const SchemaDisplay = memo(() => {
                     overflow:"hidden"
                 }}
             />
-            <div className={sheetListClass}>
-                {
-                    Object.keys(Project.state.graph?.sheetsList ?? {}).map((sheetKey, i) => (
-                        <div key={i} className={sheetKey === Project.state.selectedSheetId ? "selected" : ""}>
-                            {Project.state.graph!.sheetsList[sheetKey]}
-                        </div>
-                    ))
-                }
-                <div className={"selected"} style={{color: "var(--nodius-primary-main)"}} onClick={async () => {
-                    const sheetName = prompt("Sheet name");
-                    if(sheetName) {
-                        if(Object.values(Project.state.graph!.sheetsList).includes(sheetName)) {
-                            toast.error("Sheet name already used");
-                        } else {
-                            await Project.state.createSheet!(sheetName);
-                        }
+            {!Project.state.editedNodeConfig ? (
+                <div className={sheetListClass}>
+                    {
+                        Object.keys(Project.state.graph?.sheetsList ?? {}).map((sheetKey, i) => (
+                            <div
+                                key={i}
+                                className={`sheet-tab ${sheetKey === Project.state.selectedSheetId ? "selected" : ""}`}
+                                onClick={(e) => {
+                                    // Only change sheet if not clicking on action buttons
+                                    if (!(e.target as HTMLElement).closest('.sheet-actions')) {
+                                        Project.dispatch({
+                                            field: "selectedSheetId",
+                                            value: sheetKey
+                                        });
+                                    }
+                                }}
+                            >
+                                <span className="sheet-name">{Project.state.graph!.sheetsList[sheetKey]}</span>
+                                <div className="sheet-actions">
+                                    <div
+                                        className="sheet-action-btn rename"
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            const currentName = Project.state.graph!.sheetsList[sheetKey];
+                                            const newName = prompt("Rename sheet", currentName);
+                                            if (newName && newName !== currentName) {
+                                                if (Object.values(Project.state.graph!.sheetsList).includes(newName)) {
+                                                    toast.error("Sheet name already used");
+                                                } else {
+                                                    await Project.state.renameSheet!(sheetKey, newName);
+                                                }
+                                            }
+                                        }}
+                                        title="Rename sheet"
+                                    >
+                                        <Edit2 size={14} />
+                                    </div>
+                                    {sheetKey !== "0" && (
+                                        <div
+                                            className="sheet-action-btn delete"
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (confirm(`Are you sure you want to delete sheet "${Project.state.graph!.sheetsList[sheetKey]}"? This will delete all nodes and edges in this sheet.`)) {
+                                                    // If deleting current sheet, switch to sheet "0" first
+                                                    if (sheetKey === Project.state.selectedSheetId) {
+                                                        Project.dispatch({
+                                                            field: "selectedSheetId",
+                                                            value: "0"
+                                                        });
+                                                    }
+                                                    await Project.state.removeSheet!(sheetKey);
+                                                }
+                                            }}
+                                            title="Delete sheet"
+                                        >
+                                            <X size={14} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))
                     }
-                }}>
-                    <Plus />
+                    <div className="sheet-tab selected" style={{color: "var(--nodius-primary-main)"}} onClick={async () => {
+                        const sheetName = prompt("Sheet name");
+                        if(sheetName) {
+                            if(Object.values(Project.state.graph!.sheetsList).includes(sheetName)) {
+                                toast.error("Sheet name already used");
+                            } else {
+                                await Project.state.createSheet!(sheetName);
+                            }
+                        }
+                    }}>
+                        <Plus />
+                    </div>
                 </div>
-            </div>
+            ) : null}
         </div>
     )
 })

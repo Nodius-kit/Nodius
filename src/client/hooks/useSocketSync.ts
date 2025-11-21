@@ -1505,6 +1505,10 @@ export const useSocketSync = () => {
             await applyNodeConfigInstructions(message.instructions, true);
         } else if(packet.type === "createSheet" && projectRef.current.state.graph && packet.key && !projectRef.current.state.graph.sheetsList[packet.key]) {
             projectRef.current.state.graph.sheetsList[packet.key] = packet.name;
+            projectRef.current.state.graph.sheets[packet.key] = {
+                nodeMap: new Map(),
+                edgeMap: new Map(),
+            }
             projectRef.current.dispatch({
                 field: "graph",
                 value: {...projectRef.current.state.graph}
@@ -1626,21 +1630,6 @@ export const useSocketSync = () => {
         });
     }, [Project.state.graph]);
 
-    /*
-    export interface WSCreateSheet {
-    key?:string,
-    name:string,
-}
-
-export interface WSRenameSheet {
-    key:string,
-    name:string,
-}
-export interface WSDeleteSheet {
-    key:string,
-}
-
-     */
 
     const createSheet = async (name:string) => {
         const createSheetMessage:WSMessage<WSCreateSheet> = {
@@ -1705,5 +1694,5 @@ export interface WSDeleteSheet {
             field: "changeSheet",
             value: changeSheet
         })
-    }, []);
+    }, [sendMessage]);
 }
