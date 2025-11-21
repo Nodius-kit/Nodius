@@ -1,6 +1,6 @@
 import {useCallback, useContext, useEffect, useRef, useState} from "react";
 import {
-    ActionContext,
+    ActionContext, ActionStorage,
     DisabledNodeInteractionType,
     EditedHtmlType,
     htmlRenderContext,
@@ -1740,4 +1740,49 @@ export const useSocketSync = () => {
             value: toggleAutoSave
         });
     }, [sendMessage]);
+
+
+    const actionIndex = useRef<number>(-1);
+
+    const actionsStorage = useRef<ActionStorage[]>([]);
+
+    const addCancellableAction = (actions:ActionStorage) => {
+        if(actionIndex.current < actionsStorage.current.length - 1) {
+            actionsStorage.current.splice(actionIndex.current + 1);
+        }
+        actionIndex.current++;
+        actionsStorage.current.push(actions);
+    }
+
+    const backAction = async () => {
+        if(actionIndex.current > -1) {
+            await actionsStorage.current[actionIndex.current].back();
+            actionIndex.current--;
+        }
+    }
+
+    const aheadAction = async () => {
+        if(actionIndex.current < actionsStorage.current.length-1) {
+            await actionsStorage.current[actionIndex.current].ahead();
+            actionIndex.current++;
+        }
+    }
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "addCancellableAction",
+            value: addCancellableAction
+        });
+        Project.dispatch({
+            field: "backAction",
+            value: backAction
+        });
+        Project.dispatch({
+            field: "aheadAction",
+            value: aheadAction
+        });
+    }, []);
+
 }
+
+

@@ -97,6 +97,11 @@ export interface WorkFlowState {
     global?:Record<string, any>
 }
 
+export interface ActionStorage {
+    ahead:(() => Promise<boolean>),
+    back:(() => Promise<boolean>)
+}
+
 export const ProjectContext = createContext<ProjectContextProps>(undefined!);
 
 export interface ProjectContextType {
@@ -154,10 +159,9 @@ export interface ProjectContextType {
     workFlowState: WorkFlowState,
 
 
-    addCancellableAction: (ahead:(() => Promise<boolean>), back:(() => Promise<boolean>)) => void,
-    backAction: () => void;
-    aheadAction: () => void;
-    indexAction: number,
+    addCancellableAction: (actions:ActionStorage) => void,
+    backAction: () => Promise<void>;
+    aheadAction: () => Promise<void>;
 
     createSheet?: (sheetName:string) => Promise<void>;
     renameSheet?: (sheetKey:string, newName:string) => Promise<void>;
@@ -185,7 +189,6 @@ export const ProjectContextDefaultValue: ProjectContextType = {
         "entryType": NodeTypeEntryTypeConfig
     },
 
-    indexAction: 0,
     aheadAction: undefined!,
     backAction: undefined!,
     addCancellableAction: undefined!,
