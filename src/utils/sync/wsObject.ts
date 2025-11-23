@@ -52,6 +52,8 @@ export interface GraphInstructions {
     nodeId?: string,
     edgeId?: string,
 
+    dontPutBackAction?: boolean,
+
     applyUniqIdentifier?:string, // key to apply unique identifier
     targetedIdentifier?:string, // security check
 

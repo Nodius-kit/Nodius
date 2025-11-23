@@ -35,7 +35,11 @@ import {
     WSToggleAutoSave
 } from "../../utils/sync/wsObject";
 import {useStableProjectRef} from "./useStableProjectRef";
-import {applyInstruction, BeforeApplyInstructionWithContext} from "../../utils/sync/InstructionBuilder";
+import {
+    applyInstruction,
+    BeforeApplyInstructionWithContext,
+    generateInstructionsToMatch, getInverseInstruction
+} from "../../utils/sync/InstructionBuilder";
 import {DataTypeClass, EnumClass} from "../../utils/dataType/dataType";
 import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type";
 import {deepCopy} from "../../utils/objectUtils";
@@ -733,6 +737,8 @@ export const useSocketSync = () => {
                 // same for width and height with animateSize flag
                 // temporary value set to animate transition
 
+                console.log(instruction);
+
                 if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posX") {
                     instruction.i.p[0] = "toPosX";
                 } else if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posY") {
@@ -845,6 +851,29 @@ export const useSocketSync = () => {
 
     const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>, fromOutside:boolean = false):Promise<string|undefined> => { // if return undefined -> it's good
 
+        console.log(instructions);
+        const copiedInstructions = deepCopy(instructions).map((i) => {
+            i.dontApplyToMySelf = false;
+            return i;
+        });
+
+        const savedObject: (Node<any> | Edge)[] = [];
+        for(const instruction of instructions) {
+            if(instruction.nodeId) {
+                savedObject.push(projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!);
+            } else if(instruction.edgeId) {
+                savedObject.push(findEdgeByKey(projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].edgeMap, instruction.edgeId) as Edge);
+            }
+        }
+        const actions:ActionStorage = {
+            ahead: async () => {
+                return await applyGraphInstructions(copiedInstructions, fromOutside) == undefined;
+            },
+            back: async () => {
+                return true;
+            }
+        };
+
         const instructionOutput = await handleIntructionToGraph(fromOutside ? instructions : instructions.filter((i) => !i.dontApplyToMySelf),(currentGraphInstrution, objectBeingApplied) => {
             if(currentGraphInstrution.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && ("identifier" in objectBeingApplied || "id" in objectBeingApplied)) {
                 const object:HtmlObject = objectBeingApplied;
@@ -859,9 +888,25 @@ export const useSocketSync = () => {
         if(instructionOutput.status) {
             const nodeAlreadyCheck:string[] = [];
             const edgeAlreadyCheck:string[] = [];
-            for(const instruction of instructions) {
 
+            const backInstructions:GraphInstructions[] = [];
+
+            for(let i = 0; i < instructions.length; i++) {
+                const instruction = instructions[i];
                 if(instruction.edgeId) {
+
+
+                    if(!instruction.dontPutBackAction) {
+                        const edgeDiff = getInverseInstruction(savedObject[i], instruction.i);
+                        if (edgeDiff.success) {
+                            backInstructions.push({
+                                ...instruction,
+                                i: edgeDiff.value
+                            })
+                        } else {
+                            console.error(edgeDiff);
+                        }
+                    }
 
                     if(edgeAlreadyCheck.includes(instruction.edgeId)) {
                         continue;
@@ -870,6 +915,19 @@ export const useSocketSync = () => {
 
                     // futur work
                 } else if(instruction.nodeId) {
+
+                    if(!instruction.dontPutBackAction) {
+                        const nodeDiff = getInverseInstruction(savedObject[i], instruction.i);
+                        if (nodeDiff.success) {
+                            backInstructions.push({
+                                ...instruction,
+                                i: nodeDiff.value
+                            })
+                        } else {
+                            console.error(nodeDiff);
+                        }
+                    }
+
 
                     // avoid triggering multiple event for one nodeid, triggering useless re-render
                     if(nodeAlreadyCheck.includes(instruction.nodeId)) {
@@ -882,19 +940,28 @@ export const useSocketSync = () => {
                         edited.forEach((e) => e.onOutsideChange?.());
                     }
 
-                    // Trigger node update
-                    const options:triggerNodeUpdateOption = {
-                        reRenderNodeConfig: instructions.some((i) => i.triggerHtmlRender)
-                    };
-                    await (window as any).triggerNodeUpdate?.(instruction.nodeId, options);
-                    if(options.reRenderNodeConfig && projectRef.current.state.editedHtml) {
-                        projectRef.current.dispatch({
-                            field: "editedHtml",
-                            value: {...projectRef.current.state.editedHtml},
-                        })
+                    if(!instruction.dontTriggerUpdateNode) {
+                        // Trigger node update
+                        const options: triggerNodeUpdateOption = {
+                            reRenderNodeConfig: instructions.some((i) => i.triggerHtmlRender)
+                        };
+                        await (window as any).triggerNodeUpdate?.(instruction.nodeId, options);
+                        if (options.reRenderNodeConfig && projectRef.current.state.editedHtml) {
+                            projectRef.current.dispatch({
+                                field: "editedHtml",
+                                value: {...projectRef.current.state.editedHtml},
+                            });
+                        }
                     }
-
                 }
+            }
+
+            if(backInstructions.length > 0) {
+                actions.back = async () => {
+                    return await applyGraphInstructions(backInstructions.reverse(), fromOutside) == undefined;
+                }
+                console.log(instructions, backInstructions);
+                projectRef.current.state.addCancellableAction(actions);
             }
 
             projectRef.current.state.getMotor().requestRedraw();
@@ -977,7 +1044,6 @@ export const useSocketSync = () => {
                     value: {...projectRef.current.state.editedHtml},
                 })
             }
-
 
             projectRef.current.state.getMotor().requestRedraw();
 
@@ -1251,11 +1317,87 @@ export const useSocketSync = () => {
             sheet.edgeMap.set(sourceKey, sourceEdges);
         }
 
+
         // Redraw the graph if GPU motor is available
         projectRef.current.state.getMotor()?.requestRedraw();
 
         refreshCurrentEntryDataType();
         projectRef.current.state.computeVisibility?.();
+
+
+        const actions:ActionStorage = {
+            ahead: async () => {
+                for(const node of nodes) {
+                    sheet.nodeMap.set(node._key, node);
+                }
+
+                // Add edges to the graph
+                for(const edge of edges) {
+                    // Add to target map
+                    const targetKey = `target-${edge.target}`;
+                    let targetEdges = sheet.edgeMap.get(targetKey) || [];
+                    targetEdges.push(edge);
+                    sheet.edgeMap.set(targetKey, targetEdges);
+
+                    // Add to source map
+                    const sourceKey = `source-${edge.source}`;
+                    let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+                    sourceEdges.push(edge);
+                    sheet.edgeMap.set(sourceKey, sourceEdges);
+                }
+
+                // Redraw the graph if GPU motor is available
+                projectRef.current.state.getMotor()?.requestRedraw();
+
+                refreshCurrentEntryDataType();
+                projectRef.current.state.computeVisibility?.();
+                return true;
+            },
+            back: async () => {
+                for(const node of nodes) {
+                    sheet.nodeMap.delete(node._key);
+                }
+
+                // Delete edges first (to avoid orphaned edges)
+                for(const edge of edges) {
+                    if(edge) {
+
+                        // Remove from target map
+                        if(edge.target) {
+                            const targetKey = `target-${edge.target}`;
+                            let targetEdges = sheet.edgeMap.get(targetKey) || [];
+                            targetEdges = targetEdges.filter(e => e._key !== edge._key);
+                            if(targetEdges.length > 0) {
+                                sheet.edgeMap.set(targetKey, targetEdges);
+                            } else {
+                                sheet.edgeMap.delete(targetKey);
+                            }
+                        }
+
+                        // Remove from source map
+                        if(edge.source) {
+                            const sourceKey = `source-${edge.source}`;
+                            let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+                            sourceEdges = sourceEdges.filter(e => e._key !== edge._key);
+                            if(sourceEdges.length > 0) {
+                                sheet.edgeMap.set(sourceKey, sourceEdges);
+                            } else {
+                                sheet.edgeMap.delete(sourceKey);
+                            }
+                        }
+                    }
+                }
+
+                // Redraw the graph if GPU motor is available
+                projectRef.current.state.getMotor()?.requestRedraw();
+
+                refreshCurrentEntryDataType();
+                projectRef.current.state.computeVisibility?.();
+
+                return true;
+            }
+        };
+        projectRef.current.state.addCancellableAction(actions);
 
         return {
             status: true,
@@ -1330,10 +1472,16 @@ export const useSocketSync = () => {
 
         const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
 
+        const deletedNode:Node<any>[] = [];
+        const deletedEdges:Edge[] = [];
+
         // Delete edges first (to avoid orphaned edges)
         for(const edgeKey of edgeKeys) {
             const edge = findEdgeByKey(sheet.edgeMap, edgeKey);
             if(edge) {
+
+                deletedEdges.push(edge);
+
                 // Remove from target map
                 if(edge.target) {
                     const targetKey = `target-${edge.target}`;
@@ -1364,6 +1512,7 @@ export const useSocketSync = () => {
 
         // Delete nodes
         for(const nodeKey of nodeKeys) {
+            deletedNode.push(sheet.nodeMap.get(nodeKey)!);
             sheet.nodeMap.delete(nodeKey);
             allModal.filter((m) => m.nodeId === nodeKey).forEach((m) => {
                 modalManager.close(m.id);
@@ -1375,6 +1524,87 @@ export const useSocketSync = () => {
 
         refreshCurrentEntryDataType();
         projectRef.current.state.computeVisibility?.();
+
+
+        const actions:ActionStorage = {
+            ahead: async () => {
+                for(const edgeKey of edgeKeys) {
+                    const edge = findEdgeByKey(sheet.edgeMap, edgeKey);
+                    if(edge) {
+
+                        deletedEdges.push(edge);
+
+                        // Remove from target map
+                        if(edge.target) {
+                            const targetKey = `target-${edge.target}`;
+                            let targetEdges = sheet.edgeMap.get(targetKey) || [];
+                            targetEdges = targetEdges.filter(e => e._key !== edgeKey);
+                            if(targetEdges.length > 0) {
+                                sheet.edgeMap.set(targetKey, targetEdges);
+                            } else {
+                                sheet.edgeMap.delete(targetKey);
+                            }
+                        }
+
+                        // Remove from source map
+                        if(edge.source) {
+                            const sourceKey = `source-${edge.source}`;
+                            let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+                            sourceEdges = sourceEdges.filter(e => e._key !== edgeKey);
+                            if(sourceEdges.length > 0) {
+                                sheet.edgeMap.set(sourceKey, sourceEdges);
+                            } else {
+                                sheet.edgeMap.delete(sourceKey);
+                            }
+                        }
+                    }
+                }
+                for(const nodeKey of nodeKeys) {
+                    deletedNode.push(sheet.nodeMap.get(nodeKey)!);
+                    sheet.nodeMap.delete(nodeKey);
+                    allModal.filter((m) => m.nodeId === nodeKey).forEach((m) => {
+                        modalManager.close(m.id);
+                    });
+                }
+
+                // Redraw the graph if GPU motor is available
+                projectRef.current.state.getMotor()?.requestRedraw();
+
+                refreshCurrentEntryDataType();
+                projectRef.current.state.computeVisibility?.();
+
+                return true;
+            },
+            back: async () => {
+                for(const node of deletedNode) {
+                    sheet.nodeMap.set(node._key, node);
+                }
+
+                // Add edges to the graph
+                for(const edge of deletedEdges) {
+                    // Add to target map
+                    const targetKey = `target-${edge.target}`;
+                    let targetEdges = sheet.edgeMap.get(targetKey) || [];
+                    targetEdges.push(edge);
+                    sheet.edgeMap.set(targetKey, targetEdges);
+
+                    // Add to source map
+                    const sourceKey = `source-${edge.source}`;
+                    let sourceEdges = sheet.edgeMap.get(sourceKey) || [];
+                    sourceEdges.push(edge);
+                    sheet.edgeMap.set(sourceKey, sourceEdges);
+                }
+
+                // Redraw the graph if GPU motor is available
+                projectRef.current.state.getMotor()?.requestRedraw();
+
+                refreshCurrentEntryDataType();
+                projectRef.current.state.computeVisibility?.();
+
+                return true;
+            }
+        };
+        projectRef.current.state.addCancellableAction(actions);
 
         return {
             status: true,
@@ -1496,7 +1726,13 @@ export const useSocketSync = () => {
     const handleIncomingMessage = useCallback(async (packet:WSMessage<any>) => {
         if(packet.type === "applyInstructionToGraph") {
             const message = packet as WSMessage<WSApplyInstructionToGraph>;
-            await applyGraphInstructions(message.instructions, true);
+            await applyGraphInstructions(message.instructions.map((inst) => (
+                {
+                    ...inst,
+                    dontTriggerUpdateNode: false,
+                    dontApplyToMySelf: false,
+                }
+            )), true);
         } else if(packet.type === "batchCreateElements") {
             const message = packet as WSMessage<WSBatchCreateElements>;
             await applyBatchCreate(message.nodes, message.edges);
@@ -1505,7 +1741,13 @@ export const useSocketSync = () => {
             await applyBatchDelete(message.nodeKeys, message.edgeKeys);
         } else if(packet.type === "applyInstructionToNodeConfig") {
             const message = packet as WSMessage<WSApplyInstructionToNodeConfig>;
-            await applyNodeConfigInstructions(message.instructions, true);
+            await applyNodeConfigInstructions(message.instructions.map((inst) => (
+                {
+                    ...inst,
+                    dontTriggerUpdateNode: false,
+                    dontApplyToMySelf: false,
+                }
+            )), true);
         } else if(packet.type === "createSheet" && projectRef.current.state.graph && packet.key && !projectRef.current.state.graph.sheetsList[packet.key]) {
             projectRef.current.state.graph.sheetsList[packet.key] = packet.name;
             projectRef.current.state.graph.sheets[packet.key] = {
@@ -1763,8 +2005,8 @@ export const useSocketSync = () => {
 
     const aheadAction = async () => {
         if(actionIndex.current < actionsStorage.current.length-1) {
-            await actionsStorage.current[actionIndex.current].ahead();
             actionIndex.current++;
+            await actionsStorage.current[actionIndex.current].ahead();
         }
     }
 

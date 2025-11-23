@@ -46,7 +46,7 @@ import { EdgeRenderer } from "./edgeRenderer";
 import { BackgroundRenderer } from "./backgroundRenderer";
 import { InputHandler } from "./inputHandler";
 import { CameraAnimator } from "./cameraAnimator";
-import {Point} from "../../../../utils/objectUtils";
+import {deepCopy, Point} from "../../../../utils/objectUtils";
 
 /**
  * WebGPU-based graph rendering motor with modular architecture

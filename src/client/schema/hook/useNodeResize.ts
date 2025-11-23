@@ -10,6 +10,7 @@ import { disableTextSelection, enableTextSelection } from "../../../utils/object
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import { GraphInstructions } from "../../../utils/sync/wsObject";
 import { useStableProjectRef } from "../../hooks/useStableProjectRef";
+import {ActionStorage} from "../../hooks/contexts/ProjectContext";
 
 export interface NodeResizeConfig {
     sizeAnimationDelay?: number;
@@ -92,6 +93,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
             projectRef.current.state.getMotor().enableInteractive(false);
             disableTextSelection();
 
+
             const saveNodeSize = async (node: Node<any>) => {
                 const oldWidth = node.size.width;
                 const oldHeight = node.size.height;
@@ -120,12 +122,14 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         nodeId: node._key,
                         animateSize: true,
                         dontApplyToMySelf: true,
+                        dontPutBackAction: true,
                     },
                     {
                         i: instructionsHeight.instruction,
                         nodeId: node._key,
                         animateSize: true,
                         dontApplyToMySelf: true,
+                        dontPutBackAction: true,
                     }
                 );
 
@@ -147,6 +151,39 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                     saveNodeSize(pendingNode);
                 }
             };
+
+            const baseWidth = currentNode.size.width;
+            const baseHeight = currentNode.size.height;
+            const actions:ActionStorage = {
+                ahead: async () => {
+                    return false;
+                },
+                back: async () => {
+                    const insts: GraphInstructions[] = [];
+
+                    const instructionsWidth = new InstructionBuilder();
+                    const instructionsHeight = new InstructionBuilder();
+                    instructionsWidth.key("size").key("width").set(baseWidth);
+                    instructionsHeight.key("size").key("height").set(baseHeight);
+
+                    insts.push(
+                        {
+                            i: instructionsWidth.instruction,
+                            nodeId: currentNode._key,
+                            animateSize: true,
+                            dontPutBackAction: true,
+                        },
+                        {
+                            i: instructionsHeight.instruction,
+                            nodeId: currentNode._key,
+                            animateSize: true,
+                            dontPutBackAction: true,
+                        }
+                    );
+                    const output = await projectRef.current.state.updateGraph!(insts);
+                    return output.status;
+                }
+            }
 
             const mouseMove = (evt: MouseEvent) => {
                 if (animationFrame) cancelAnimationFrame(animationFrame);
@@ -199,7 +236,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                 });
             };
 
-            const mouseUp = (evt: MouseEvent) => {
+            const mouseUp = async (evt: MouseEvent) => {
                 if (animationFrame) cancelAnimationFrame(animationFrame);
                 if (timeoutSave) clearTimeout(timeoutSave);
                 window.removeEventListener("mousemove", mouseMove);
@@ -219,6 +256,33 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         saveNodeSize(currentNode);
                     }
                 }
+
+                actions.ahead = async () => {
+                    const insts: GraphInstructions[] = [];
+
+                    const instructionsWidth = new InstructionBuilder();
+                    const instructionsHeight = new InstructionBuilder();
+                    instructionsWidth.key("size").key("width").set(lastSavedWidth);
+                    instructionsHeight.key("size").key("height").set(lastSavedHeight);
+
+                    insts.push(
+                        {
+                            i: instructionsWidth.instruction,
+                            nodeId: currentNode._key,
+                            animateSize: true,
+                            dontPutBackAction: true,
+                        },
+                        {
+                            i: instructionsHeight.instruction,
+                            nodeId: currentNode._key,
+                            animateSize: true,
+                            dontPutBackAction: true,
+                        }
+                    );
+                    const output = await projectRef.current.state.updateGraph!(insts);
+                    return output.status;
+                }
+                projectRef.current.state.addCancellableAction(actions);
 
                 if(projectRef.current.state.editedNodeConfig && currentNode._key === "0") {
                     const padding = 500;

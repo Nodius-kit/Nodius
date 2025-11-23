@@ -793,6 +793,7 @@ export const SchemaDisplay = memo(() => {
         const schema = inSchemaNode.current.get(nodeId);
         if(!schema) return;
 
+
         const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
         if(!nodeConfig) return;
 
@@ -812,10 +813,12 @@ export const SchemaDisplay = memo(() => {
             (node.size.toWidth !== undefined && node.size.width !== node.size.toWidth) ||
             (node.size.toHeight !== undefined && node.size.height !== node.size.toHeight)
         ) {
+            console.log("update");
             animationManager.current?.startAnimation(
                 nodeId,
                 () => getNode(nodeId) as any,
                 () => {
+                    projectRef.current.state.getMotor().getScene()!.nodes.set(nodeId, getNode(nodeId)!);
                     projectRef.current.state.getMotor().requestRedraw();
                     updateNodePosition(nodeId);
                     updateHandleOverlay(node, schema.element, handleSelectedPointId);

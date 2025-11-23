@@ -88,7 +88,11 @@ export const App = () => {
 
             if(documentHaveActiveElement()) return;
 
-            if (event.ctrlKey && key === "c") {
+            if (event.ctrlKey && key === "y") {
+                await projectRef.current.state.aheadAction();
+            } else if (event.ctrlKey && key === "z") {
+                await projectRef.current.state.backAction();
+            } else if (event.ctrlKey && key === "c") {
                 if(Project.state.editedHtml != undefined) {
                     // in html
                     const copiedObject = Project.state.editedHtml.htmlRenderContext.htmlRender.getSelectedObject();

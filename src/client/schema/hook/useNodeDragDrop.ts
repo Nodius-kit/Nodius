@@ -5,11 +5,12 @@
  */
 
 import { useRef, useCallback } from "react";
-import { disableTextSelection, enableTextSelection } from "../../../utils/objectUtils";
+import { disableTextSelection, enableTextSelection, Point } from "../../../utils/objectUtils";
 import { InstructionBuilder } from "../../../utils/sync/InstructionBuilder";
 import { GraphInstructions } from "../../../utils/sync/wsObject";
 import { Node } from "../../../utils/graph/graphType";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
+import {ActionStorage} from "../../hooks/contexts/ProjectContext";
 
 export interface NodeDragDropConfig {
     posAnimationDelay?: number;
@@ -141,6 +142,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             nodeId: node._key,
                             animatePos: true,
                             dontApplyToMySelf: true,
+                            dontPutBackAction: true,
                             dontTriggerUpdateNode: true,
                         },
                         {
@@ -148,6 +150,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             nodeId: node._key,
                             animatePos: true,
                             dontApplyToMySelf: true,
+                            dontPutBackAction: true,
                             dontTriggerUpdateNode: true,
                         }
                     );
@@ -177,6 +180,50 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                 }
             };
             let renderStyle = false;
+
+
+            const baseNodePos:Record<string, Point> = {};
+            for (const id of selectedNodeIds) {
+                const node = getNode(id);
+                if(!node) continue;
+                baseNodePos[id] = {
+                    x: node.posX,
+                    y: node.posY,
+                }
+            }
+            const actions:ActionStorage = {
+                ahead: async () => {
+                    return false;
+                },
+                back: async () => {
+                    const insts: GraphInstructions[] = [];
+                    for (const id of selectedNodeIds) {
+
+                        const instructionsX = new InstructionBuilder();
+                        const instructionsY = new InstructionBuilder();
+                        instructionsX.key("posX").set(baseNodePos[id].x);
+                        instructionsY.key("posY").set(baseNodePos[id].y);
+
+                        insts.push(
+                            {
+                                i: instructionsX.instruction,
+                                nodeId: id,
+                                animatePos: true,
+                                dontPutBackAction: true,
+                            },
+                            {
+                                i: instructionsY.instruction,
+                                nodeId: id,
+                                animatePos: true,
+                                dontPutBackAction: true,
+                            }
+                        );
+                    }
+                    const output = await projectRef.current.state.updateGraph!(insts);
+                    return output.status;
+                }
+            }
+
             const mouseMove = (evt: MouseEvent) => {
 
                 if (animationFrame) cancelAnimationFrame(animationFrame);
@@ -276,6 +323,36 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             nodeElement.style.boxShadow = "none";
                         }
                     });
+
+                    actions.ahead = async () => {
+                        const insts: GraphInstructions[] = [];
+                        for (const id of selectedNodeIds) {
+
+                            const instructionsX = new InstructionBuilder();
+                            const instructionsY = new InstructionBuilder();
+                            instructionsX.key("posX").set(lastSavedPositions.get(id)!.x);
+                            instructionsY.key("posY").set(lastSavedPositions.get(id)!.y);
+
+                            insts.push(
+                                {
+                                    i: instructionsX.instruction,
+                                    nodeId: id,
+                                    animatePos: true,
+                                    dontPutBackAction: true,
+                                },
+                                {
+                                    i: instructionsY.instruction,
+                                    nodeId: id,
+                                    animatePos: true,
+                                    dontPutBackAction: true,
+                                }
+                            );
+                        }
+                        const output = await projectRef.current.state.updateGraph!(insts);
+                        return output.status;
+
+                    }
+                    projectRef.current.state.addCancellableAction(actions);
                 }
 
                 // Check if any selected node has unsaved changes
