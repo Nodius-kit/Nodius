@@ -114,6 +114,14 @@ export class HttpServer {
     constructor() {}
 
     /**
+     * Get the underlying HTTP/HTTPS server instance
+     * Useful for attaching WebSocket servers
+     */
+    getServer(): http.Server | https.Server | null {
+        return this.server;
+    }
+
+    /**
      * Add global middleware
      */
     use(middleware: Middleware | ErrorHandler): void {

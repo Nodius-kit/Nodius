@@ -18,4 +18,8 @@ export interface api_sync {
 export interface api_sync_info {
     host:string,
     port:number,
+    /** Whether to use secure WebSocket (wss://) */
+    secure?: boolean,
+    /** WebSocket path (e.g., '/ws' when attached to HTTPS server) */
+    path?: string,
 }

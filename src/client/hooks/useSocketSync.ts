@@ -398,7 +398,12 @@ export const useSocketSync = () => {
             setServerInfo(serverInfo);
         }
 
-        const connected = await connect(`ws://${serverInfo.host}:${serverInfo.port}`);
+        // Build WebSocket URL based on server info
+        const wsProtocol = serverInfo.secure ? 'wss' : 'ws';
+        const wsPath = serverInfo.path || '';
+        const wsUrl = `${wsProtocol}://${serverInfo.host}:${serverInfo.port}${wsPath}`;
+
+        const connected = await connect(wsUrl);
         if(!connected) {
             return {
                 timeTaken: Date.now() - start,
@@ -595,7 +600,12 @@ export const useSocketSync = () => {
         const baseNode:Node<any> = createNodeFromConfig(nodeConfig, "0", "0", "main");
         graph.sheets["main"].nodeMap.set("0", baseNode);
 
-        const connected = await connect(`ws://${serverInfo.host}:${serverInfo.port}`);
+        // Build WebSocket URL based on server info
+        const wsProtocol = serverInfo.secure ? 'wss' : 'ws';
+        const wsPath = serverInfo.path || '';
+        const wsUrl = `${wsProtocol}://${serverInfo.host}:${serverInfo.port}${wsPath}`;
+
+        const connected = await connect(wsUrl);
         if(!connected) {
             return {
                 timeTaken: Date.now() - start,

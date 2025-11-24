@@ -26,6 +26,8 @@
  */
 
 import WebSocket, { WebSocketServer } from 'ws';
+import * as http from 'http';
+import * as https from 'https';
 import {
     WSApplyInstructionToGraph, WSApplyInstructionToNodeConfig,
     WSBatchCreateElements,
@@ -81,6 +83,17 @@ interface ManagedNodeConfig { // management of editing/creating node config
     hasUnsavedChanges: boolean
 }
 
+export interface WebSocketManagerOptions {
+    /** Port number for standalone WebSocket server (when not using HTTPS server) */
+    port?: number;
+    /** Host for standalone WebSocket server */
+    host?: string;
+    /** Existing HTTP/HTTPS server to attach WebSocket to (for WSS support) */
+    server?: http.Server | https.Server;
+    /** Path for WebSocket connections when attached to server */
+    path?: string;
+}
+
 export class WebSocketManager {
     private wss: WebSocketServer;
     private clients: Set<WebSocket> = new Set(); // Set to store connected clients
@@ -101,11 +114,35 @@ export class WebSocketManager {
 
     /**
      * Constructor to initialize the WebSocket server.
-     * @param port - The port number on which to start the WebSocket server.
-     * @param host
+     * @param portOrOptions - Either a port number for standalone mode, or options object
+     * @param host - Host for standalone mode (ignored if options object is used)
      */
-    constructor(port: number, host: string = "localhost") {
-        this.wss = new WebSocketServer({ port:port, host: host });
+    constructor(portOrOptions: number | WebSocketManagerOptions, host: string = "localhost") {
+        if (typeof portOrOptions === 'number') {
+            // Legacy mode: standalone WebSocket server on specified port
+            this.wss = new WebSocketServer({ port: portOrOptions, host: host });
+            console.log(`WebSocket server starting on port ${portOrOptions} (standalone mode)`);
+        } else {
+            // Options mode: either attach to existing server or create standalone
+            const options = portOrOptions;
+            if (options.server) {
+                // Attach to existing HTTP/HTTPS server for WSS support
+                this.wss = new WebSocketServer({
+                    server: options.server,
+                    path: options.path || '/ws'
+                });
+                console.log(`WebSocket server attached to existing server (path: ${options.path || '/ws'})`);
+            } else if (options.port) {
+                // Standalone mode with options
+                this.wss = new WebSocketServer({
+                    port: options.port,
+                    host: options.host || 'localhost'
+                });
+                console.log(`WebSocket server starting on port ${options.port} (standalone mode)`);
+            } else {
+                throw new Error('WebSocketManager requires either a port number or a server instance');
+            }
+        }
 
         // Set up connection event listener
         this.wss.on('connection', (ws: WebSocket) => {
@@ -124,9 +161,12 @@ export class WebSocketManager {
             });
         });
 
-        // Log when the server is listening
+        // Log when the server is listening (only for standalone mode)
         this.wss.on('listening', () => {
-            console.log(`WebSocket server is listening on port ${port}`);
+            const address = this.wss.address();
+            if (address && typeof address === 'object') {
+                console.log(`WebSocket server is listening on port ${address.port}`);
+            }
         });
 
         this.intervalCleaning = setInterval(this.clearUnhabitedInstances, 10000);

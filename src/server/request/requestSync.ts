@@ -36,7 +36,7 @@
 
 import {HttpServer, Request, Response} from "../http/HttpServer";
 import {api_sync, api_sync_info} from "../../utils/requests/type/api_sync.type";
-import {clusterManager, peerHost, peerPort} from "../server";
+import {clusterManager, peerHost, peerPort, useHttps} from "../server";
 import {ClusterNode} from "../cluster/clusterManager";
 
 export class RequestSync {
@@ -52,9 +52,13 @@ export class RequestSync {
             let peerId = clusterManager.getInstancehPeerId(body.instanceId);
             let peer: ClusterNode | undefined;
             if (!peerId || peerId === "self" || (peer = clusterManager.getPeer(peerId)) == undefined) {
+                // When HTTPS is enabled, WebSocket runs on same port with /ws path
+                // When HTTP, WebSocket runs on separate port (base + 2000)
                 const output: api_sync_info = {
                     host: peerHost,
-                    port: peerPort + 2000
+                    port: useHttps ? peerPort : peerPort + 2000,
+                    secure: useHttps,
+                    path: useHttps ? '/ws' : undefined
                 }
                 if (peerId !== "self") {
                     await clusterManager.defineInstancePeer(body.instanceId);
