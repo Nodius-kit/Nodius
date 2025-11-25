@@ -91,7 +91,7 @@ export const useNodeSelector = () => {
                             }
                         }
                         for (const edgeSource of edgesSource) {
-                            if (newSelectedNode.some((n) => n === edgeSource.source) && !newSelectedEdge.includes(edgeSource._key)) {
+                            if (newSelectedNode.some((n) => n === edgeSource.target) && !newSelectedEdge.includes(edgeSource._key)) {
                                 newSelectedEdge.push(edgeSource._key);
                             }
                         }
