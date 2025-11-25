@@ -15,6 +15,7 @@
  */
 
 import { Node } from "../../../../utils/graph/graphType";
+import {ViewTransform} from "../graphicalMotor";
 
 export class NodeRenderer {
     private device: GPUDevice;
@@ -24,11 +25,13 @@ export class NodeRenderer {
     private instanceBuffer: GPUBuffer | null = null;
     private nodePipeline: GPURenderPipeline | null = null;
     public nodeIndices: Map<string, number> = new Map();
+    private transform: ViewTransform;
 
-    constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number) {
+    constructor(device: GPUDevice, format: GPUTextureFormat, sampleCount: number, transform: ViewTransform) {
         this.device = device;
         this.format = format;
         this.sampleCount = sampleCount;
+        this.transform = transform;
     }
 
     public init(bindGroupLayout: GPUBindGroupLayout): void {
@@ -107,11 +110,14 @@ export class NodeRenderer {
         const instanceData = new Float32Array(scene.size * 4);
         let i = 0;
         this.nodeIndices.clear();
+        console.log(this.transform);
+        const scale = 1;
+        console.log(this.transform.dpr / this.transform.scale);
         for (const node of scene.values()) {
-            instanceData[i * 4] = node.posX;
-            instanceData[i * 4 + 1] = node.posY;
-            instanceData[i * 4 + 2] = (node.size as { width: number; height: number }).width;
-            instanceData[i * 4 + 3] = (node.size as { width: number; height: number }).height;
+            instanceData[i * 4] = node.posX * scale;
+            instanceData[i * 4 + 1] = node.posY * scale;
+            instanceData[i * 4 + 2] = (node.size as { width: number; height: number }).width * scale;
+            instanceData[i * 4 + 3] = (node.size as { width: number; height: number }).height * scale;
             this.nodeIndices.set(node._key, i);
             i++;
         }

@@ -68,13 +68,20 @@ export type EditedNodeHandle = {
     pointId: string;
 };
 
+export interface VariableDefinition {
+    name: string;
+    type: string;
+    description?: string;
+    defaultValue?: any;
+}
 export interface EditedCodeContext {
     title: string;
     nodeId: string,
     onChange: (instruction:Instruction|Instruction[]) => Promise<boolean>;
     retrieveText: (node:Node<any>) => string;
     onOutsideChange?: () => void;
-    type?: "JS" | "HTML"
+    type?: "JS" | "HTML",
+    variableDefinitions?: VariableDefinition[];
 }
 
 export interface htmlRenderContext {

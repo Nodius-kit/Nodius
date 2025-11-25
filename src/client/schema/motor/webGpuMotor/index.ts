@@ -58,13 +58,12 @@ export class WebGpuMotor implements GraphicalMotor {
     private canvas: HTMLCanvasElement | null = null;
     private format: GPUTextureFormat | null = null;
     private scene: MotorScene | undefined = undefined;
-    private transform: ViewTransform = { scale: 1, translateX: 0, translateY: 0 };
+    private transform: ViewTransform = { scale: 1, translateX: 0, translateY: 0, dpr: 1 };
     private eventListeners: { [K in keyof MotorEventMap]?: Array<MotorEventMap[K]> } = {};
     private dirty: boolean = false;
     private uniformBuffer: GPUBuffer | null = null;
     private bindGroup: GPUBindGroup | null = null;
     private resizeObserver: ResizeObserver | null = null;
-    private dpr: number = 1;
     private sampleCount: number = 4;
     private interactiveEnabled: boolean = true;
     private hoveredEdge: Edge | null = null;
@@ -114,7 +113,6 @@ export class WebGpuMotor implements GraphicalMotor {
         this.minZoom = options?.minZoom ?? 0.2;
         this.maxZoom = options?.maxZoom ?? 3;
 
-        this.dpr = options?.devicePixelRatio ?? window.devicePixelRatio ?? 1;
         const backgroundType = options?.backgroundType ?? "dotted";
         this.updateCanvasSize(container);
 
@@ -153,7 +151,7 @@ export class WebGpuMotor implements GraphicalMotor {
         });
 
         // Initialize renderers
-        this.nodeRenderer = new NodeRenderer(this.device, this.format, this.sampleCount);
+        this.nodeRenderer = new NodeRenderer(this.device, this.format, this.sampleCount, this.transform);
         this.nodeRenderer.init(bindGroupLayout);
 
         this.edgeRenderer = new EdgeRenderer(this.device, this.format, this.sampleCount, this.canvas, this.screenToWorld.bind(this));
@@ -203,9 +201,20 @@ export class WebGpuMotor implements GraphicalMotor {
     }
 
     private updateCanvasSize(container: HTMLElement): void {
+
+        // Mettre à jour la transformation pour que les autres composants aient l'info si besoin
+        this.transform.dpr = window.devicePixelRatio || 1;
+
         if (this.canvas) {
-            this.canvas.width = container.clientWidth * this.dpr;
-            this.canvas.height = container.clientHeight * this.dpr;
+            // 2. Calculer la taille physique
+            const physicalWidth = Math.round(container.clientWidth * this.transform.dpr);
+            const physicalHeight = Math.round(container.clientHeight * this.transform.dpr);
+
+            // 3. Vérifier si un redimensionnement est vraiment nécessaire (optimisation)
+            if (this.canvas.width !== physicalWidth || this.canvas.height !== physicalHeight) {
+                this.canvas.width = physicalWidth;
+                this.canvas.height = physicalHeight;
+            }
         }
     }
 
@@ -384,10 +393,10 @@ export class WebGpuMotor implements GraphicalMotor {
 
         // Update uniforms
         const uniformData = new Float32Array([
-            this.transform.scale,
+            this.transform.scale * this.transform.dpr,
             0,
-            this.transform.translateX,
-            this.transform.translateY,
+            this.transform.translateX * this.transform.dpr,
+            this.transform.translateY * this.transform.dpr,
             this.canvas!.width,
             this.canvas!.height,
         ]);

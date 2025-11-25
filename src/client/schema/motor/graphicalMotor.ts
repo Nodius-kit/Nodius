@@ -42,6 +42,7 @@ export interface ViewTransform {
     scale: number;
     translateX: number;
     translateY: number;
+    dpr:number;
 }
 
 export type MotorEventMap = {
