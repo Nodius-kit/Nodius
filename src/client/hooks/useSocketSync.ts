@@ -1282,6 +1282,10 @@ export const useSocketSync = () => {
                 value: []
             });
 
+            actionIndex.current = -1;
+            actionsStorage.current = [];
+
+
             if(Project.state.editedHtml) {
                 Project.state.closeHtmlEditor!();
             }
