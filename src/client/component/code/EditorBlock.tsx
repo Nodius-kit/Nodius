@@ -285,7 +285,9 @@ export const EditorBlock = memo(({index}:EditorBlockProps) => {
     }, [Project.state.editedCode, index]);
 
     const editorStyle = {
-        height:"100%"
+        height:"100%",
+        overflowX: 'auto' as const,
+        overflowY: 'auto' as const
     };
 
     return (
