@@ -27,6 +27,7 @@ import {generateUniqueHandlePointId} from "../../../hook/useHandleRenderer";
 import {getHandlePosition} from "../../../../../utils/graph/handleUtils";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {Collapse} from "../../../../component/animate/Collapse";
+import {domEventEditorDefinitions} from "../../codeEditorVariableDefinitions";
 
 
 // Common DOM event types
@@ -260,7 +261,8 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
                         object = object[path];
                     }
                     return object;
-                }
+                },
+                variableDefinitions: domEventEditorDefinitions
             }]
         });
     }

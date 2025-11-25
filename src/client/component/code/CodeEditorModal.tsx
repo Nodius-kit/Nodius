@@ -51,16 +51,16 @@ const CodeEditorModal = memo(() => {
     const classContextPanel = useDynamicClass(`
     & {
         position: absolute;
-        left: 100%; /* Colle le panneau à droite du modal principal */
+        left: 100%; 
         top: 0;
-        bottom: 0; /* Prend toute la hauteur */
-        width: 280px; /* Largeur fixe pour les types */
-        margin-left: 12px; /* Espace entre les deux */
+        bottom: 0;
+        width: 280px; 
+        margin-left: 12px; 
         
-        background: rgba(15, 23, 42, 0.85); /* Un peu plus sombre pour le contraste */
+        background: var(--nodius-background-default); 
         backdrop-filter: blur(10px);
         border-radius: 12px;
-        border: 1px solid rgba(66, 165, 245, 0.15);
+        border: 1px solid var(--nodius-grey-300);
         box-shadow: var(--nodius-shadow-4);
         
         display: flex;
@@ -97,9 +97,10 @@ const CodeEditorModal = memo(() => {
 
     & .var-item {
         padding: 10px;
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--nodius-background-paper); 
         border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--nodius-grey-300);
+        box-shadow: var(--nodius-shadow-1);
         transition: all 0.2s ease;
     }
     & .var-item:hover {

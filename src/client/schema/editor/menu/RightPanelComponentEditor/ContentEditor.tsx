@@ -19,6 +19,7 @@ import {Instruction, InstructionBuilder} from "../../../../../utils/sync/Instruc
 import {deepCopy} from "../../../../../utils/objectUtils";
 import {ProjectContext} from "../../../../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../../../../hooks/useStableProjectRef";
+import {htmlContentEditorDefinitions} from "../../codeEditorVariableDefinitions";
 
 
 // ============================================================================
@@ -182,7 +183,8 @@ export const ContentEditor = memo(({ object, onUpdate }: ContentEditorProps) => 
                         object = object[path];
                     }
                     return object;
-                }
+                },
+                variableDefinitions: htmlContentEditorDefinitions
             }]
         });
     }

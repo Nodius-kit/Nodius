@@ -26,6 +26,7 @@ import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {EditedCodeContext, ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
 import {GraphInstructions} from "../../../../utils/sync/wsObject";
+import {workflowNodeEditorDefinitions} from "../codeEditorVariableDefinitions";
 
 interface LeftPaneMenuProps {
     setEditingPanel: (value:editingPanel) => void,
@@ -139,7 +140,8 @@ export const LeftPanelMenu = memo((
                                                 return output.status;
                                             }
                                         },
-                                        retrieveText: (node) => node.process
+                                        retrieveText: (node) => node.process,
+                                        variableDefinitions: workflowNodeEditorDefinitions
                                     } as EditedCodeContext
                                 ]
                             });
