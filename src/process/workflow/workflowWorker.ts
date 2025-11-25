@@ -268,7 +268,8 @@ const executeTask = async (task: Task): Promise<any> => {
             });
 
             await continuePromise;
-        }
+        },
+        ...utilsFunctionList
     };
 
     const fct = new AsyncFunction(...Object.keys(env), config.node.process);

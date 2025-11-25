@@ -956,11 +956,11 @@ export class HtmlRender {
     private async callFunction(code: string, env: Record<string, any>): Promise<any> {
         const fct = new AsyncFunction(...[...Object.keys(env), code]);
         let output:any = undefined;
-        //try {
+        try {
         output = await fct(...[...Object.values(env)]);
-        /*} catch(e) {
+        } catch(e) {
             console.error('Error:', e, "in function:", code, "with arg", env);
-        }*/
+        }
         return output;
     }
 

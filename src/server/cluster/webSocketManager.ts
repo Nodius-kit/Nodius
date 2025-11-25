@@ -111,6 +111,11 @@ export class WebSocketManager {
         lastSaveTime: number,
         autoSaveEnabled: boolean
     }> = {};
+    // Track save status per nodeConfig
+    private nodeConfigSaveStatus:Record<string, {
+        lastSaveTime: number,
+        autoSaveEnabled: boolean
+    }> = {};
 
     /**
      * Constructor to initialize the WebSocket server.
@@ -654,6 +659,9 @@ export class WebSocketManager {
                     message: message,
                     time: Date.now()
                 });
+
+                // Broadcast save status
+                this.broadcastNodeConfigSaveStatus(nodeConfigKey);
 
                 // Send success response to sender
                 if (messageId) {
@@ -1376,62 +1384,77 @@ export class WebSocketManager {
                     }
                 }
             } else if(jsonData.type === "forceSave") {
-                if(!graphUser || !sheet || !graphKey) {
+                // CAS 1: Graph User
+                if(graphUser && sheet && graphKey) {
+                    const message:WSMessage<WSForceSave> = jsonData;
+                    await this.saveGraphChanges(graphKey);
+
+                    if (!this.graphSaveStatus[graphKey]) {
+                        this.graphSaveStatus[graphKey] = { lastSaveTime: Date.now(), autoSaveEnabled: true };
+                    } else {
+                        this.graphSaveStatus[graphKey].lastSaveTime = Date.now();
+                    }
+                    this.broadcastSaveStatus(graphKey);
+
+                    if (messageId) this.sendMessage(ws, { ...message, _id: messageId, _response: { status: true } } as WSMessage<WSResponseMessage<WSForceSave>>);
+                }
+                // CAS 2: NodeConfig User
+                else if (nodeConfigUser && nodeConfig) {
+                    const message:WSMessage<WSForceSave> = jsonData;
+
+                    // Retrouver la clé
+                    const nodeConfigKey = Object.keys(this.managedNodeConfig).find(key => this.managedNodeConfig[key] === nodeConfig);
+
+                    if (nodeConfigKey) {
+                        await this.saveNodeConfigChanges(nodeConfigKey);
+
+                        if (!this.nodeConfigSaveStatus[nodeConfigKey]) {
+                            this.nodeConfigSaveStatus[nodeConfigKey] = { lastSaveTime: Date.now(), autoSaveEnabled: true };
+                        } else {
+                            this.nodeConfigSaveStatus[nodeConfigKey].lastSaveTime = Date.now();
+                        }
+
+                        this.broadcastNodeConfigSaveStatus(nodeConfigKey);
+
+                        if (messageId) this.sendMessage(ws, { ...message, _id: messageId, _response: { status: true } } as WSMessage<WSResponseMessage<WSForceSave>>);
+                    }
+                }
+                else {
                     ws.close();
                     return;
-                }
-                const message:WSMessage<WSForceSave> = jsonData;
-
-                // Force save immediately
-                await this.saveGraphChanges(graphKey);
-
-                // Update last save time
-                if (!this.graphSaveStatus[graphKey]) {
-                    this.graphSaveStatus[graphKey] = {
-                        lastSaveTime: Date.now(),
-                        autoSaveEnabled: true
-                    };
-                } else {
-                    this.graphSaveStatus[graphKey].lastSaveTime = Date.now();
-                }
-
-                // Broadcast save status to all users
-                this.broadcastSaveStatus(graphKey);
-
-                if (messageId) {
-                    this.sendMessage(ws, {
-                        ...message,
-                        _id: messageId,
-                        _response: { status: true }
-                    } as WSMessage<WSResponseMessage<WSForceSave>>);
                 }
             } else if(jsonData.type === "toggleAutoSave") {
-                if(!graphUser || !sheet || !graphKey) {
+                // CAS 1: Graph User
+                if(graphUser && sheet && graphKey) {
+                    const message:WSMessage<WSToggleAutoSave> = jsonData;
+                    if (!this.graphSaveStatus[graphKey]) {
+                        this.graphSaveStatus[graphKey] = { lastSaveTime: Date.now(), autoSaveEnabled: true };
+                    }
+                    this.graphSaveStatus[graphKey].autoSaveEnabled = message.enabled;
+                    this.broadcastSaveStatus(graphKey);
+
+                    if (messageId) this.sendMessage(ws, { ...message, _id: messageId, _response: { status: true } } as WSMessage<WSResponseMessage<WSToggleAutoSave>>);
+                }
+                // CAS 2: NodeConfig User
+                else if (nodeConfigUser && nodeConfig) {
+                    const message:WSMessage<WSToggleAutoSave> = jsonData;
+
+                    const nodeConfigKey = Object.keys(this.managedNodeConfig).find(key => this.managedNodeConfig[key] === nodeConfig);
+
+                    if (nodeConfigKey) {
+                        if (!this.nodeConfigSaveStatus[nodeConfigKey]) {
+                            this.nodeConfigSaveStatus[nodeConfigKey] = { lastSaveTime: Date.now(), autoSaveEnabled: true };
+                        }
+
+                        this.nodeConfigSaveStatus[nodeConfigKey].autoSaveEnabled = message.enabled;
+                        this.broadcastNodeConfigSaveStatus(nodeConfigKey);
+
+                        if (messageId) this.sendMessage(ws, { ...message, _id: messageId, _response: { status: true } } as WSMessage<WSResponseMessage<WSToggleAutoSave>>);
+                    }
+                }
+                else {
                     ws.close();
                     return;
-                }
-                const message:WSMessage<WSToggleAutoSave> = jsonData;
-
-                // Initialize save status if it doesn't exist
-                if (!this.graphSaveStatus[graphKey]) {
-                    this.graphSaveStatus[graphKey] = {
-                        lastSaveTime: Date.now(),
-                        autoSaveEnabled: true
-                    };
-                }
-
-                // Toggle auto-save
-                this.graphSaveStatus[graphKey].autoSaveEnabled = message.enabled;
-
-                // Broadcast updated status to all users
-                this.broadcastSaveStatus(graphKey);
-
-                if (messageId) {
-                    this.sendMessage(ws, {
-                        ...message,
-                        _id: messageId,
-                        _response: { status: true }
-                    } as WSMessage<WSResponseMessage<WSToggleAutoSave>>);
                 }
             }
 
@@ -1516,6 +1539,36 @@ export class WebSocketManager {
     };
 
     /**
+     * Broadcast save status to all users on a nodeConfig
+     * @param nodeConfigKey - The nodeConfig key to broadcast status for
+     */
+    private broadcastNodeConfigSaveStatus = (nodeConfigKey: string) => {
+        // Initialize save status if it doesn't exist
+        if (!this.nodeConfigSaveStatus[nodeConfigKey]) {
+            this.nodeConfigSaveStatus[nodeConfigKey] = {
+                lastSaveTime: Date.now(),
+                autoSaveEnabled: true
+            };
+        }
+
+        const config = this.managedNodeConfig[nodeConfigKey];
+        const hasUnsavedChanges = config ? config.hasUnsavedChanges : false;
+
+        // Broadcast to all users on this nodeConfig
+        if (config) {
+            for (const user of config.user) {
+                this.sendMessage(user.ws, {
+                    type: "saveStatus",
+                    nodeConfigKey: nodeConfigKey, // Spécifique pour le front-end
+                    lastSaveTime: this.nodeConfigSaveStatus[nodeConfigKey].lastSaveTime,
+                    hasUnsavedChanges: hasUnsavedChanges,
+                    autoSaveEnabled: this.nodeConfigSaveStatus[nodeConfigKey].autoSaveEnabled
+                } as WSMessage<any>); // Utilisation de any ou d'un type étendu WSSaveStatusNodeConfig
+            }
+        }
+    };
+
+    /**
      * Save all pending changes for all managed graphs and node configs
      */
     private savePendingChanges = async () => {
@@ -1539,7 +1592,28 @@ export class WebSocketManager {
             }
         }
         for (const nodeConfigKey in this.managedNodeConfig) {
-            await this.saveNodeConfigChanges(nodeConfigKey);
+            // Only auto-save if auto-save is enabled for this nodeConfig
+            if (!this.nodeConfigSaveStatus[nodeConfigKey] || this.nodeConfigSaveStatus[nodeConfigKey].autoSaveEnabled) {
+
+                // On check d'abord si on doit sauvegarder pour savoir si on met à jour le timer
+                const hadChanges = this.managedNodeConfig[nodeConfigKey].hasUnsavedChanges;
+
+                await this.saveNodeConfigChanges(nodeConfigKey);
+
+                // Update last save time only if we attempt to save or check
+                if (!this.nodeConfigSaveStatus[nodeConfigKey]) {
+                    this.nodeConfigSaveStatus[nodeConfigKey] = {
+                        lastSaveTime: Date.now(),
+                        autoSaveEnabled: true
+                    };
+                }
+
+                // Si des changements ont été sauvegardés, on met à jour le temps et on notifie
+                if (hadChanges) {
+                    this.nodeConfigSaveStatus[nodeConfigKey].lastSaveTime = Date.now();
+                    this.broadcastNodeConfigSaveStatus(nodeConfigKey);
+                }
+            }
         }
     }
 

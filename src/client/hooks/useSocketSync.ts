@@ -1948,7 +1948,6 @@ export const useSocketSync = () => {
 
         const message: WSMessage<WSForceSave> = {
             type: "forceSave",
-            graphKey: projectRef.current.state.graph._key
         };
 
         await sendMessage(message);
@@ -1959,7 +1958,6 @@ export const useSocketSync = () => {
 
         const message: WSMessage<WSToggleAutoSave> = {
             type: "toggleAutoSave",
-            graphKey: projectRef.current.state.graph._key,
             enabled
         };
 
