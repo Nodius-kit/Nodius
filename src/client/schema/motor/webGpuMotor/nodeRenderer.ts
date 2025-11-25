@@ -110,9 +110,7 @@ export class NodeRenderer {
         const instanceData = new Float32Array(scene.size * 4);
         let i = 0;
         this.nodeIndices.clear();
-        console.log(this.transform);
         const scale = 1;
-        console.log(this.transform.dpr / this.transform.scale);
         for (const node of scene.values()) {
             instanceData[i * 4] = node.posX * scale;
             instanceData[i * 4 + 1] = node.posY * scale;

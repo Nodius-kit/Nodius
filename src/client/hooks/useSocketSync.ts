@@ -747,8 +747,6 @@ export const useSocketSync = () => {
                 // same for width and height with animateSize flag
                 // temporary value set to animate transition
 
-                console.log(instruction);
-
                 if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posX") {
                     instruction.i.p[0] = "toPosX";
                 } else if(instruction.animatePos && instruction.i.p && instruction.i.p.length == 1 && instruction.i.p[0] == "posY") {
@@ -861,7 +859,6 @@ export const useSocketSync = () => {
 
     const applyGraphInstructions = useCallback(async (instructions:Array<GraphInstructions>, fromOutside:boolean = false):Promise<string|undefined> => { // if return undefined -> it's good
 
-        console.log(instructions);
         const copiedInstructions = deepCopy(instructions).map((i) => {
             i.dontApplyToMySelf = false;
             return i;
@@ -970,7 +967,6 @@ export const useSocketSync = () => {
                 actions.back = async () => {
                     return await applyGraphInstructions(backInstructions.reverse(), fromOutside) == undefined;
                 }
-                console.log(instructions, backInstructions);
                 projectRef.current.state.addCancellableAction(actions);
             }
 

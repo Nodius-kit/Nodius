@@ -990,7 +990,6 @@ export class HtmlRender {
     public getAsyncFunctionContext(storage: ObjectStorage): Record<string, any> | undefined {
 
         return {
-            currentElement: storage.element,
             htmlObject: storage.object,
             globalStorage: this.globalStorage,
             deepCopy: deepCopy,
