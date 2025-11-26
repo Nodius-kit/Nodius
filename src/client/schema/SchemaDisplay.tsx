@@ -573,7 +573,7 @@ export const SchemaDisplay = memo(() => {
                     value: [node._key]
                 });
             }
-            internalNodeUpdate(node._key);
+            //internalNodeUpdate(node._key);
         });
 
         if(projectRef.current.state.selectedNode.includes(node._key)) {

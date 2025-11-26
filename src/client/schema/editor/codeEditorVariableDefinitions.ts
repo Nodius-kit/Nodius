@@ -19,17 +19,17 @@ import { VariableDefinition } from "../../hooks/contexts/ProjectContext";
 // ============================================================================
 
 export const mathFunctionDefinitions: VariableDefinition[] = [
-    { name: "ABS", type: "(value: number) => number", description: "Returns absolute value (see utilsFunction.ts)" },
-    { name: "EXP", type: "(exponent: number) => number", description: "Returns e^exponent (see utilsFunction.ts)" },
-    { name: "CEILING", type: "(value: number) => number", description: "Rounds up to nearest integer (see utilsFunction.ts)" },
-    { name: "FLOOR", type: "(value: number) => number", description: "Rounds down to nearest integer (see utilsFunction.ts)" },
-    { name: "LN", type: "(value: number) => number", description: "Natural logarithm (see utilsFunction.ts)" },
-    { name: "LOG", type: "(value: number) => number", description: "Base-10 logarithm (see utilsFunction.ts)" },
-    { name: "POWER", type: "(base: number, exponent: number) => number", description: "Power function (see utilsFunction.ts)" },
-    { name: "ROUND", type: "(value: number, precision: number) => number", description: "Rounds to decimal places (see utilsFunction.ts)" },
-    { name: "SIGN", type: "(value: number) => number", description: "Returns sign of number (see utilsFunction.ts)" },
-    { name: "SQUARE", type: "(value: number) => number", description: "Returns square of number (see utilsFunction.ts)" },
-    { name: "SQRT", type: "(value: number) => number", description: "Returns square root (see utilsFunction.ts)" },
+    { name: "ABS", type: "(value: number) => number", description: "Returns the absolute value of a number (always positive)" },
+    { name: "EXP", type: "(exponent: number) => number", description: "Returns e (Euler's number ≈2.718) raised to the power of the given exponent" },
+    { name: "CEILING", type: "(value: number) => number", description: "Rounds up to the smallest integer greater than or equal to the value" },
+    { name: "FLOOR", type: "(value: number) => number", description: "Rounds down to the largest integer less than or equal to the value" },
+    { name: "LN", type: "(value: number) => number", description: "Returns the natural logarithm (base e) of a number" },
+    { name: "LOG", type: "(value: number) => number", description: "Returns the base-10 logarithm of a number" },
+    { name: "POWER", type: "(base: number, exponent: number) => number", description: "Returns base raised to the power of exponent (base^exponent)" },
+    { name: "ROUND", type: "(value: number, precision: number) => number", description: "Rounds a number to the specified number of decimal places" },
+    { name: "SIGN", type: "(value: number) => number", description: "Returns 1 if positive, -1 if negative, 0 if zero" },
+    { name: "SQUARE", type: "(value: number) => number", description: "Returns the square of a number (value^2)" },
+    { name: "SQRT", type: "(value: number) => number", description: "Returns the square root of a number" },
 ];
 
 // ============================================================================
@@ -37,21 +37,21 @@ export const mathFunctionDefinitions: VariableDefinition[] = [
 // ============================================================================
 
 export const stringFunctionDefinitions: VariableDefinition[] = [
-    { name: "CODEPOINT", type: "(str: string) => number", description: "Unicode code point of first char (see utilsFunction.ts)" },
-    { name: "FINDSTRING", type: "(haystack: string, needle: string, startIndex?: number) => number", description: "Find substring position (see utilsFunction.ts)" },
-    { name: "HEX", type: "(value: number) => string", description: "Convert to hexadecimal (see utilsFunction.ts)" },
-    { name: "LEN", type: "(str: string) => number", description: "String length (see utilsFunction.ts)" },
-    { name: "LEFT", type: "(str: string, length: number) => string", description: "First N characters (see utilsFunction.ts)" },
-    { name: "LOWER", type: "(str: string) => string", description: "Convert to lowercase (see utilsFunction.ts)" },
-    { name: "LTRIM", type: "(str: string) => string", description: "Trim left whitespace (see utilsFunction.ts)" },
-    { name: "REPLACE", type: "(str: string, search: string, replacement: string) => string", description: "Replace substring (see utilsFunction.ts)" },
-    { name: "REPLACEALL", type: "(str: string, search: string, replacement: string) => string", description: "Replace all occurrences (see utilsFunction.ts)" },
-    { name: "REVERSE", type: "(str: string) => string", description: "Reverse string (see utilsFunction.ts)" },
-    { name: "RIGHT", type: "(str: string, length: number) => string", description: "Last N characters (see utilsFunction.ts)" },
-    { name: "RTRIM", type: "(str: string) => string", description: "Trim right whitespace (see utilsFunction.ts)" },
-    { name: "SUBSTRING", type: "(str: string, start: number, length: number) => string", description: "Extract substring (see utilsFunction.ts)" },
-    { name: "TRIM", type: "(str: string) => string", description: "Trim whitespace (see utilsFunction.ts)" },
-    { name: "UPPER", type: "(str: string) => string", description: "Convert to uppercase (see utilsFunction.ts)" },
+    { name: "CODEPOINT", type: "(str: string) => number", description: "Returns the Unicode code point of the first character in a string, or -1 if empty" },
+    { name: "FINDSTRING", type: "(haystack: string, needle: string, startIndex?: number) => number", description: "Finds the position of a substring within a string, returns index or -1 if not found" },
+    { name: "HEX", type: "(value: number) => string", description: "Converts a number to its hexadecimal (base-16) string representation in uppercase" },
+    { name: "LEN", type: "(str: string) => number", description: "Returns the length (number of characters) of a string" },
+    { name: "LEFT", type: "(str: string, length: number) => string", description: "Returns the first N characters from the beginning of a string" },
+    { name: "LOWER", type: "(str: string) => string", description: "Converts all characters in a string to lowercase" },
+    { name: "LTRIM", type: "(str: string) => string", description: "Removes whitespace from the beginning (left side) of a string" },
+    { name: "REPLACE", type: "(str: string, search: string, replacement: string) => string", description: "Replaces all occurrences of a substring with a replacement string using regex" },
+    { name: "REPLACEALL", type: "(str: string, search: string, replacement: string) => string", description: "Replaces all occurrences of a substring with a replacement string using split/join" },
+    { name: "REVERSE", type: "(str: string) => string", description: "Reverses the order of characters in a string" },
+    { name: "RIGHT", type: "(str: string, length: number) => string", description: "Returns the last N characters from the end of a string" },
+    { name: "RTRIM", type: "(str: string) => string", description: "Removes whitespace from the end (right side) of a string" },
+    { name: "SUBSTRING", type: "(str: string, start: number, length: number) => string", description: "Extracts a substring starting at the specified index for the given length" },
+    { name: "TRIM", type: "(str: string) => string", description: "Removes whitespace from both the beginning and end of a string" },
+    { name: "UPPER", type: "(str: string) => string", description: "Converts all characters in a string to uppercase" },
 ];
 
 // ============================================================================
@@ -59,16 +59,16 @@ export const stringFunctionDefinitions: VariableDefinition[] = [
 // ============================================================================
 
 export const dateFunctionDefinitions: VariableDefinition[] = [
-    { name: "DATEADD", type: "(date: Date, interval: string, amount: number) => Date", description: "Add interval to date (see utilsFunction.ts)" },
-    { name: "DATEDIFF", type: "(date1: Date, date2: Date, interval: string) => number", description: "Difference between dates (see utilsFunction.ts)" },
-    { name: "DATEPART", type: "(date: Date, part: string) => number", description: "Extract date part (see utilsFunction.ts)" },
-    { name: "DAY", type: "(date: Date) => number", description: "Get day of month (see utilsFunction.ts)" },
-    { name: "GETDATE", type: "() => Date", description: "Current date and time (see utilsFunction.ts)" },
-    { name: "GETUTCDATE", type: "() => Date", description: "Current UTC date and time (see utilsFunction.ts)" },
-    { name: "MONTH", type: "(date: Date) => number", description: "Get month (1-12) (see utilsFunction.ts)" },
-    { name: "YEAR", type: "(date: Date) => number", description: "Get year (see utilsFunction.ts)" },
-    { name: "MINUTE", type: "(date: Date) => number", description: "Get minutes (see utilsFunction.ts)" },
-    { name: "SECONDE", type: "(date: Date) => number", description: "Get seconds (see utilsFunction.ts)" },
+    { name: "DATEADD", type: "(date: Date, interval: string, amount: number) => Date", description: "Adds a time interval to a date. Interval types: 'year', 'month', 'day', 'hour', 'minute', 'second'" },
+    { name: "DATEDIFF", type: "(date1: Date, date2: Date, interval: string) => number", description: "Calculates the difference between two dates in the specified interval unit (year/month/day/hour/minute/second)" },
+    { name: "DATEPART", type: "(date: Date, part: string) => number", description: "Extracts a specific part from a date. Parts: 'year', 'month' (1-12), 'day', 'hour', 'minute', 'second'" },
+    { name: "DAY", type: "(date: Date) => number", description: "Returns the day of the month (1-31) from a date" },
+    { name: "GETDATE", type: "() => Date", description: "Returns the current date and time in local timezone" },
+    { name: "GETUTCDATE", type: "() => Date", description: "Returns the current date and time in UTC timezone" },
+    { name: "MONTH", type: "(date: Date) => number", description: "Returns the month (1-12) from a date" },
+    { name: "YEAR", type: "(date: Date) => number", description: "Returns the year from a date" },
+    { name: "MINUTE", type: "(date: Date) => number", description: "Returns the minutes (0-59) from a date" },
+    { name: "SECONDE", type: "(date: Date) => number", description: "Returns the seconds (0-59) from a date" },
 ];
 
 // ============================================================================
@@ -76,9 +76,9 @@ export const dateFunctionDefinitions: VariableDefinition[] = [
 // ============================================================================
 
 export const utilityFunctionDefinitions: VariableDefinition[] = [
-    { name: "ISNULL", type: "(value: any) => boolean", description: "Check if value is null/undefined (see utilsFunction.ts)" },
-    { name: "MONTHIDTONAME", type: "(month: string, upper?: boolean) => string", description: "Convert month number to name (see utilsFunction.ts)" },
-    { name: "FORMATNUMBER", type: "(value: number, decimal?: number, sign?: boolean, color?: boolean) => string", description: "Format number with suffixes (see utilsFunction.ts)" },
+    { name: "ISNULL", type: "(value: any) => boolean", description: "Checks if a value is null or undefined, returns true if either" },
+    { name: "MONTHIDTONAME", type: "(month: string, upper?: boolean) => string", description: "Converts month number (1-12) to localized month name. Supports 'en' and 'fr' languages. Optional upper parameter capitalizes first letter" },
+    { name: "FORMATNUMBER", type: "(value: number, decimal?: number, sign?: boolean, color?: boolean) => string", description: "Formats numbers with K/M/B suffixes (e.g., 1500 → '1.5K'). Options: decimal places, +/- sign prefix, color-coded HTML (blue positive, red negative)" },
 ];
 
 // ============================================================================
@@ -105,16 +105,16 @@ export const standardFunctionDefinitions: VariableDefinition[] = [
  * Used in EventsEditor and ContentEditor
  */
 export const htmlRenderContextDefinitions: VariableDefinition[] = [
-    { name: "htmlObject", type: "HtmlObject", description: "The HTML object definition (see src/utils/html/htmlType.ts)" },
-    { name: "globalStorage", type: "Record<string, any>", description: "Global storage accessible across all elements (see HtmlRender.tsx)" },
-    { name: "element", type: "HTMLElement", description: "The current HTML element" },
-    { name: "modalManager", type: "object", description: "Modal manager for creating popups" },
-    { name: "entryData", type: "any", description: "Entry data from workflow execution" },
-    { name: "deepCopy", type: "<T>(obj: T) => T", description: "Deep copy utility function (see src/utils/objectUtils.ts)" },
-    { name: "deepEqual", type: "(a: any, b: any) => boolean", description: "Deep equality comparison function (see src/utils/objectUtils.ts)" },
-    { name: "renderElementWithId", type: "(id: string) => void", description: "Re-render element by HTML id (see HtmlRender.tsx)" },
-    { name: "renderElementWithIdentifier", type: "(identifier: string) => void", description: "Re-render element by identifier (see HtmlRender.tsx)" },
-    { name: "renderElement", type: "() => void", description: "Re-render the current element (see HtmlRender.tsx)" },
+    { name: "htmlObject", type: "HtmlObject", description: "HTML object definition - union type (HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray | HtmlIcon) with properties: identifier, id?, tag, css, domEvents, name, attribute" },
+    { name: "globalStorage", type: "Record<string, any>", description: "Global storage object shared across all HTML elements in the render context, persists between re-renders" },
+    { name: "element", type: "HTMLElement", description: "The current DOM HTMLElement being rendered or interacted with" },
+    { name: "modalManager", type: "object", description: "Manager for creating and controlling modal popups/dialogs" },
+    { name: "entryData", type: "any", description: "Initial data passed to the workflow when execution started" },
+    { name: "deepCopy", type: "<T>(obj: T) => T", description: "Creates a deep clone of an object, recursively copying all nested properties and arrays" },
+    { name: "deepEqual", type: "(a: any, b: any) => boolean", description: "Performs deep equality comparison between two objects, recursively comparing all nested properties" },
+    { name: "renderElementWithId", type: "(id: string) => void", description: "Triggers re-render of an element by its HTML id attribute" },
+    { name: "renderElementWithIdentifier", type: "(identifier: string) => void", description: "Triggers re-render of an element by its unique identifier property" },
+    { name: "renderElement", type: "() => void", description: "Triggers re-render of the current element and its children" },
 ];
 
 /**
@@ -135,21 +135,21 @@ export const domEventContextDefinitions: VariableDefinition[] = [
  * Used in LeftPanelMenu for node.process editing
  */
 export const workflowContextDefinitions: VariableDefinition[] = [
-    { name: "node", type: "Node<any>", description: "Current node being executed (see src/utils/graph/graphType.ts)" },
-    { name: "nodeMap", type: "Map<string, Node<any>>", description: "Map of all nodes in the sheet (see WorkflowWorker.ts)" },
-    { name: "edgeMap", type: "Map<string, Edge[]>", description: "Map of all edges in the sheet (see WorkflowWorker.ts)" },
-    { name: "entryData", type: "any", description: "Entry data from workflow execution (see WorkflowWorker.ts)" },
-    { name: "nodeTypeConfig", type: "Record<NodeType, NodeTypeConfig>", description: "Configuration of all node types (see WorkflowWorker.ts)" },
-    { name: "incoming", type: "incomingWorkflowNode", description: "Data from previous node: { pointId, data, node } (see WorkflowWorker.ts)" },
-    { name: "global", type: "Record<string, any>", description: "Global workflow data shared across all nodes (see WorkflowWorker.ts)" },
-    { name: "parseString", type: "(content: string) => Promise<any>", description: "Parse string with variable interpolation (see WorkflowWorker.ts)" },
-    { name: "initHtml", type: "Function", description: "Initialize HTML render for the node (see WorkflowWorker.ts)" },
-    { name: "yieldData", type: "Function", description: "Yield data from workflow execution (see WorkflowWorker.ts)" },
-    { name: "updateHtml", type: "Function", description: "Update HTML render (see WorkflowWorker.ts)" },
-    { name: "log", type: "(message: string, data?: any) => void", description: "Log message to workflow console (see WorkflowWorker.ts)" },
-    { name: "next", type: "(pointId: string, data?: any) => Promise<any[]>", description: "Execute next connected nodes (see WorkflowWorker.ts)" },
-    { name: "branch", type: "(targetNodeId: string, incomingPointId: string, data?: any) => Promise<any>", description: "Branch to specific node (see WorkflowWorker.ts)" },
-    { name: "delay", type: "(delayedCallback: () => Promise<any>) => Promise<void>", description: "Delay execution until callback completes (see WorkflowWorker.ts)" },
+    { name: "node", type: "Node<any>", description: "Current node being executed with properties: _key (unique ID), graphKey, type, sheet, size {width, height, dynamic?}, posX, posY, process (code), handles (input/output points), data (custom node data)" },
+    { name: "nodeMap", type: "Map<string, Node<any>>", description: "Map of all nodes in the current sheet, indexed by node._key" },
+    { name: "edgeMap", type: "Map<string, Edge[]>", description: "Map of all edges indexed by 'source-{nodeKey}' and 'target-{nodeKey}' for efficient lookup. Edge properties: _key, source, sourceHandle, target, targetHandle, label?" },
+    { name: "entryData", type: "any", description: "Initial input data passed to the workflow when execution started (typically from entry node)" },
+    { name: "nodeTypeConfig", type: "Record<NodeType, NodeTypeConfig>", description: "Configuration dictionary of all available node types with their templates, borders, content (HtmlObject), and default node structure" },
+    { name: "incoming", type: "incomingWorkflowNode", description: "Data received from the previous node that triggered this execution: { data: any, pointId: string (input handle ID), node?: Node<any> (reference to sender) }" },
+    { name: "global", type: "Record<string, any>", description: "Global workflow storage shared across all nodes during execution, persists throughout the workflow lifecycle" },
+    { name: "parseString", type: "(content: string) => Promise<any>", description: "Parses template strings with {{expression}} syntax, evaluates expressions with access to workflow variables (incoming, node, entryData, global, utility functions)" },
+    { name: "initHtml", type: "(html: HtmlObject, id?: string, containerSelector?: string) => void", description: "Initializes HTML rendering for the current node with the given HtmlObject structure" },
+    { name: "yieldData", type: "() => void", description: "Yields current global data immediately without waiting for workflow completion" },
+    { name: "updateHtml", type: "(instructions: Instruction[], id?: string) => void", description: "Updates previously initialized HTML render using instruction-based state changes" },
+    { name: "log", type: "(message: string, data?: any) => void", description: "Logs a message to the workflow execution console with optional data payload" },
+    { name: "next", type: "(pointId: string, data?: any) => Promise<any[]>", description: "Executes all nodes connected to the specified output point ID, passes data to them, returns array of results from all parallel branches" },
+    { name: "branch", type: "(targetNodeId: string, incomingPointId: string, data?: any) => Promise<any>", description: "Directly jumps to a specific node by its _key, bypassing normal edge connections, useful for dynamic routing" },
+    { name: "continueAndDelay", type: "(pointId: string, immediateData: any, delayedCallback: () => Promise<any>) => Promise<void>", description: "Continues execution immediately with initial data, then re-executes the same path later when delayed callback completes with new data" },
 ];
 
 // ============================================================================

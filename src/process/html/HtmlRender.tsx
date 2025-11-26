@@ -254,6 +254,7 @@ export class HtmlRender {
         this.previousObject = deepCopy(object);
         const end = performance.now();
         const durationMicro = (end - start);
+        console.trace();
         console.log("Render time taken in MS:", durationMicro);
     }
 
