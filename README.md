@@ -69,6 +69,121 @@ npm install
 npm run dev
 ```
 
+## 🔐 Authentication
+
+Nodius includes a complete, modular authentication system that protects all API routes.
+
+### Quick Start: Create an Admin User
+
+Before you can use the application, you need to create at least one admin user:
+
+```bash
+# Create an admin user with username and password
+npm run auth:create-admin username=admin password=mySecurePassword
+
+# Optionally include an email
+npm run auth:create-admin username=admin password=mySecurePassword email=admin@example.com
+```
+
+Once created, you can login at `http://localhost:8426/` with your credentials.
+
+### Default Authentication System
+
+By default, Nodius uses:
+- **ArangoDB** for user storage (collection: `nodius_users`)
+- **bcrypt** for password hashing
+- **JWT tokens** for stateless authentication (24-hour expiration)
+- **Automatic route protection** for all `/api/*` endpoints
+
+**Protected Routes:** All `/api/*` routes require a valid JWT token in the `Authorization` header.
+
+**Public Routes:** `/api/auth/*` endpoints (login, logout, refresh, me) are not protected.
+
+### Custom Authentication Provider
+
+Nodius's authentication system is **completely replaceable**. You can integrate your own authentication method (OAuth, LDAP, SSO, etc.) by creating a custom `AuthProvider`.
+
+#### Step 1: Create Your Custom Provider
+
+Create a new file (e.g., `src/server/auth/MyCustomAuthProvider.ts`):
+
+```typescript
+import { AuthProvider, AuthResult, TokenValidationResult } from './AuthProvider';
+
+export class MyCustomAuthProvider extends AuthProvider {
+    async login(username: string, password: string): Promise<AuthResult> {
+        // Your custom authentication logic
+        // Example: OAuth, LDAP, external API, etc.
+
+        return {
+            success: true,
+            token: 'your-jwt-or-session-token',
+            user: {
+                username: username,
+                email: 'user@example.com',
+                roles: ['user']
+            }
+        };
+    }
+
+    async validateToken(token: string): Promise<TokenValidationResult> {
+        // Your custom token validation logic
+
+        return {
+            valid: true,
+            user: {
+                username: 'user',
+                roles: ['user']
+            }
+        };
+    }
+
+    getLoginPageUrl(): string {
+        // Return your custom login page URL
+        return '/my-custom-login';
+    }
+
+    // Optional: implement refreshToken(), logout(), handleLoginPage()
+}
+```
+
+#### Step 2: Inject Your Provider
+
+In `src/server/server.ts`, **before** calling `authManager.initialize()`:
+
+```typescript
+import { AuthManager } from './auth/AuthManager';
+import { MyCustomAuthProvider } from './auth/MyCustomAuthProvider';
+
+// Create your custom provider
+const customProvider = new MyCustomAuthProvider();
+
+// Inject it into the AuthManager
+const authManager = AuthManager.getInstance();
+authManager.setProvider(customProvider);
+
+// Initialize (will use your custom provider)
+await authManager.initialize(args.get("jwt_secret"));
+```
+
+#### Step 3: Replace the Login Page (Optional)
+
+If you want to use a custom login UI:
+
+1. Create your login component in `src/client/pages/MyCustomLogin.tsx`
+2. Update your provider's `getLoginPageUrl()` to return your page's route
+3. Optionally implement `handleLoginPage()` for server-side rendering
+
+### Learn More
+
+For complete authentication documentation, including:
+- API endpoints
+- Security best practices
+- Advanced configuration
+- Troubleshooting
+
+See **[AUTH.md](./AUTH.md)**.
+
 ## 📦 Database Backup and Restore
 
 ### Export Database

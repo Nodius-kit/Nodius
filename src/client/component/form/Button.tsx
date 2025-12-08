@@ -13,6 +13,7 @@ interface ButtonProps {
     className?: string;
     style?:CSSProperties;
     title?:string;
+    type?: "submit" |"button";
 }
 
 export const Button = ({
@@ -25,7 +26,8 @@ export const Button = ({
     style,
     children,
     className,
-    title
+    title,
+    type
 }: PropsWithChildren<ButtonProps>) => {
 
     const Theme = useContext(ThemeContext);
@@ -70,6 +72,8 @@ export const Button = ({
     `);
 
     const getButtonStyles = () => {
+        const isDark = Theme.state.theme === "dark";
+
         const baseStyles = `
             position: relative;
             overflow: hidden;
@@ -93,13 +97,21 @@ export const Button = ({
             justify-content: center;
             gap: 8px;
             font-family: inherit;
+            user-select: none;
+            vertical-align: middle;
+            -webkit-tap-highlight-color: transparent;
         `;
 
+        // Disabled state
         if (disabled) {
+            const disabledBg = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.12)";
+            const disabledText = isDark ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.26)";
+            const disabledBorder = isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.12)";
+
             if (variant === "contained") {
                 return baseStyles + `
-                    background-color: rgba(255, 255, 255, 0.12);
-                    color: rgba(255, 255, 255, 0.3);
+                    background-color: ${disabledBg};
+                    color: ${disabledText};
                     box-shadow: none;
                     cursor: default;
                     pointer-events: none;
@@ -107,37 +119,41 @@ export const Button = ({
             } else if (variant === "outlined") {
                 return baseStyles + `
                     background-color: transparent;
-                    color: rgba(255, 255, 255, 0.3);
-                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    color: ${disabledText};
+                    border: 1px solid ${disabledBorder};
                     cursor: default;
                     pointer-events: none;
                 `;
-            } else {
+            } else { // text
                 return baseStyles + `
                     background-color: transparent;
-                    color: rgba(255, 255, 255, 0.3);
+                    color: ${disabledText};
                     cursor: default;
                     pointer-events: none;
                 `;
             }
         }
 
+        // Active states
         if (variant === "contained") {
             return baseStyles + `
                 background-color: ${getColorVar("main")};
                 color: ${getColorVar("contrastText")};
-                box-shadow: var(--nodius-shadow-2);
+                box-shadow: 0px 3px 1px -2px rgba(0,0,0,0.2),
+                            0px 2px 2px 0px rgba(0,0,0,0.14),
+                            0px 1px 5px 0px rgba(0,0,0,0.12);
             `;
         } else if (variant === "outlined") {
             return baseStyles + `
                 background-color: transparent;
                 color: ${getColorVar("main")};
-                border: 1px solid ${getColorVar("main")}80;
+                border: 1px solid ${isDark ? "rgba(255, 255, 255, 0.23)" : "rgba(0, 0, 0, 0.23)"};
             `;
-        } else {
+        } else { // text
             return baseStyles + `
                 background-color: transparent;
                 color: ${getColorVar("main")};
+                padding: ${size === "small" ? "4px 5px" : size === "large" ? "8px 11px" : "6px 8px"};
             `;
         }
     };
@@ -146,25 +162,28 @@ export const Button = ({
         if (disabled) return "";
 
         const colorValue = Theme.state[color]?.[Theme.state.theme]?.main || Theme.state.primary[Theme.state.theme].main;
+        const isDark = Theme.state.theme === "dark";
 
         if (variant === "contained") {
             return `
                 &:hover {
-                    background-color: ${Theme.state.changeBrightness(colorValue, 0.15, "positive")};
-                    box-shadow: var(--nodius-shadow-3);
+                    background-color: ${Theme.state.changeBrightness(colorValue, 0.08, "positive")};
+                    box-shadow: 0px 2px 4px -1px rgba(0,0,0,0.2),
+                                0px 4px 5px 0px rgba(0,0,0,0.14),
+                                0px 1px 10px 0px rgba(0,0,0,0.12);
                 }
             `;
         } else if (variant === "outlined") {
             return `
                 &:hover {
-                    background-color: ${getColorVar("main")}0A;
+                    background-color: ${isDark ? "rgba(255, 255, 255, 0.08)" : `${getColorVar("main")}08`};
                     border-color: ${getColorVar("main")};
                 }
             `;
-        } else {
+        } else { // text
             return `
                 &:hover {
-                    background-color: ${getColorVar("main")}0A;
+                    background-color: ${isDark ? "rgba(255, 255, 255, 0.08)" : `${getColorVar("main")}08`};
                 }
             `;
         }
@@ -173,14 +192,29 @@ export const Button = ({
     const getActiveStyles = () => {
         if (disabled) return "";
 
+        const isDark = Theme.state.theme === "dark";
+
         if (variant === "contained") {
             return `
                 &:active {
-                    box-shadow: var(--nodius-shadow-4);
+                    box-shadow: 0px 5px 5px -3px rgba(0,0,0,0.2),
+                                0px 8px 10px 1px rgba(0,0,0,0.14),
+                                0px 3px 14px 2px rgba(0,0,0,0.12);
+                }
+            `;
+        } else if (variant === "outlined") {
+            return `
+                &:active {
+                    background-color: ${isDark ? "rgba(255, 255, 255, 0.16)" : `${getColorVar("main")}16`};
+                }
+            `;
+        } else { // text
+            return `
+                &:active {
+                    background-color: ${isDark ? "rgba(255, 255, 255, 0.16)" : `${getColorVar("main")}16`};
                 }
             `;
         }
-        return "";
     };
 
     const buttonClass = useDynamicClass(`
@@ -206,7 +240,7 @@ export const Button = ({
 
     return (
         <div className={containerClass} ref={containerRef}>
-            <button className={buttonClass+" "+(className??"")} onClick={middleWareOnClick} style={style} title={title}>
+            <button className={buttonClass+" "+(className??"")} onClick={middleWareOnClick} style={style} title={title} type={type}>
                 {children}
             </button>
         </div>

@@ -98,9 +98,8 @@ export async function generateSelfSignedCert(options: CertificateOptions = {}): 
     }
 
     // Generate certificate
-    const pems = selfsigned.generate(attrs, {
+    const pems = await selfsigned.generate(attrs, {
         keySize: 2048,
-        days: validityDays,
         algorithm: 'sha256',
         extensions: [
             {

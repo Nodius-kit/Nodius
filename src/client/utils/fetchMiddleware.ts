@@ -1,10 +1,16 @@
 /**
  * @file fetchMiddleware.ts
- * @description Fetch middleware that automatically adds API base URL from environment
+ * @description Fetch middleware that automatically adds API base URL and authentication token
  *
- * This module overrides the native window.fetch to automatically prepend the API base URL
- * to relative URLs. This allows all fetch calls to remain unchanged while centralizing
- * the API endpoint configuration.
+ * This module overrides the native window.fetch to:
+ * - Automatically prepend the API base URL to relative URLs
+ * - Add Authorization header with JWT token from localStorage
+ * - Handle 401 responses by redirecting to login page
+ *
+ * This allows all fetch calls to remain unchanged while centralizing:
+ * - API endpoint configuration
+ * - Authentication token management
+ * - Unauthorized access handling
  */
 
 // Store the original fetch function before overriding
@@ -35,7 +41,15 @@ const isRelativeUrl = (url: string): boolean => {
 };
 
 /**
+ * Get the authentication token from localStorage
+ */
+const getAuthToken = (): string | null => {
+    return localStorage.getItem('authToken');
+};
+
+/**
  * Override the native fetch to automatically prepend API base URL to relative URLs
+ * and add Authorization header with JWT token
  */
 export const initializeFetchMiddleware = (): void => {
     window.fetch = async (
@@ -62,14 +76,61 @@ export const initializeFetchMiddleware = (): void => {
                 // Create a new Request with the updated URL
                 input = new Request(url, input);
             }
+            // Add auth token to Request headers if available
+            const token = getAuthToken();
+            if (token && !input.headers.has('Authorization')) {
+                const headers = new Headers(input.headers);
+                headers.set('Authorization', `Bearer ${token}`);
+                input = new Request(input, { headers });
+            }
             // Call original fetch with the modified Request
             return originalFetch(input, init);
         } else {
             throw new Error('Invalid input type for fetch');
         }
 
-        // Call the original fetch with the potentially modified URL
-        return originalFetch(url, init);
+        // Add Authorization header if token exists and not already set
+        const token = getAuthToken();
+        if (token) {
+            init = init || {};
+            init.headers = init.headers || {};
+
+            // Handle different header types
+            if (init.headers instanceof Headers) {
+                if (!init.headers.has('Authorization')) {
+                    init.headers.set('Authorization', `Bearer ${token}`);
+                }
+            } else if (Array.isArray(init.headers)) {
+                // Check if Authorization is already in array
+                const hasAuth = init.headers.some(([key]) => key.toLowerCase() === 'authorization');
+                if (!hasAuth) {
+                    init.headers.push(['Authorization', `Bearer ${token}`]);
+                }
+            } else {
+                // Plain object
+                const headers = init.headers as Record<string, string>;
+                if (!headers['Authorization'] && !headers['authorization']) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+            }
+        }
+
+        // Call the original fetch with the potentially modified URL and headers
+        const response = await originalFetch(url, init);
+
+        // Handle 401 Unauthorized - redirect to login
+        if (response.status === 401) {
+            // Check if we're already on the login page to avoid infinite redirects
+            if (!window.location.pathname.includes('/login')) {
+                console.warn('Unauthorized access - redirecting to login');
+                // Clear invalid token
+                localStorage.removeItem('authToken');
+                // Redirect to login
+                window.location.href = '/login';
+            }
+        }
+
+        return response;
     };
 };
 
