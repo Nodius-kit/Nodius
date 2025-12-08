@@ -150,7 +150,7 @@ app.use(rateLimit({ windowMs: 60000, max: 100 }));
 
 // Initialize authentication system
 const authManager = AuthManager.getInstance();
-await authManager.initialize(args.get("jwt_secret"));
+await authManager.initialize(db, args.get("jwt_secret"));
 
 // Add authentication middleware (protects /api/* routes except /api/auth/*)
 app.use(authManager.authMiddleware());

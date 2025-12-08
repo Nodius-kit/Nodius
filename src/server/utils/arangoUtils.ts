@@ -19,7 +19,7 @@
 import {db} from "../server";
 import {Collection, DocumentCollection} from "arangojs/collections";
 import { randomBytes } from "crypto";
-import {aql} from "arangojs";
+import {aql, Database} from "arangojs";
 
 /**
  * Ensure a collection exists, otherwise create it.
@@ -27,7 +27,7 @@ import {aql} from "arangojs";
  * @returns The collection instance
  */
 export async function ensureCollection(
-    name: string
+    name: string,
 ): Promise<DocumentCollection> {
     const collection = db.collection(name);
 

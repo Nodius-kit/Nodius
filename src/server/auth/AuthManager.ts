@@ -31,7 +31,7 @@
  */
 
 import { AuthProvider } from "./AuthProvider";
-import { DefaultAuthProvider } from "./DefaultAuthProvider";
+import { Database } from "arangojs";
 import { Middleware, Request, Response, NextFunction } from "../http/HttpServer";
 
 export class AuthManager {
@@ -53,17 +53,20 @@ export class AuthManager {
 
     /**
      * Initialize with default provider
+     * @param db - ArangoDB database instance
      * @param jwtSecret - Optional JWT secret (auto-generated if not provided)
      */
-    async initialize(jwtSecret?: string): Promise<void> {
+    async initialize(db: Database, jwtSecret?: string): Promise<void> {
         if (this.initialized) {
             console.warn('AuthManager already initialized');
             return;
         }
 
         if (!this.provider) {
-            // Use default provider if none set
+            // Use default provider if none set - dynamic import to avoid circular dependency
+            const { DefaultAuthProvider } = await import('./DefaultAuthProvider.js');
             const defaultProvider = new DefaultAuthProvider({
+                db,
                 jwtSecret: jwtSecret,
                 jwtExpiresIn: '24h'
             });

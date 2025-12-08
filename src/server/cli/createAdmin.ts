@@ -32,7 +32,7 @@
  */
 
 import { Database } from "arangojs";
-import { DefaultAuthProvider } from "../auth/DefaultAuthProvider";
+import { DefaultAuthProvider } from "../auth";
 import { parseArgs } from "../utils/env";
 
 async function createAdminUser() {
@@ -77,6 +77,7 @@ async function createAdminUser() {
 
         // Initialize auth provider
         const authProvider = new DefaultAuthProvider({
+            db
         });
 
         await authProvider.initialize();

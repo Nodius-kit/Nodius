@@ -38,12 +38,12 @@
  */
 
 import { AuthProvider, AuthResult, TokenValidationResult, UserInfo } from "./AuthProvider";
+import { Database } from "arangojs";
 import { DocumentCollection } from "arangojs/collections";
 import * as bcrypt from "bcrypt";
 import * as jwt from "jsonwebtoken";
-import { ensureCollection } from "../utils/arangoUtils";
-import {db} from "../server";
 import type {StringValue} from "ms";
+import {db} from "../server";
 
 /**
  * User document structure in ArangoDB
@@ -73,6 +73,7 @@ interface JWTPayload {
  * Configuration for DefaultAuthProvider
  */
 export interface DefaultAuthProviderConfig {
+    db: Database;
     jwtSecret?: string;
     jwtExpiresIn?: number | StringValue; // e.g., '24h', '7d', 86400
     loginPageUrl?: string;
@@ -80,6 +81,7 @@ export interface DefaultAuthProviderConfig {
 }
 
 export class DefaultAuthProvider extends AuthProvider {
+    private db: Database;
     private userCollection!: DocumentCollection;
     private jwtSecret: string;
     private jwtExpiresIn: number | StringValue;
@@ -88,6 +90,7 @@ export class DefaultAuthProvider extends AuthProvider {
 
     constructor(config: DefaultAuthProviderConfig) {
         super();
+        this.db = config.db;
         this.jwtSecret = config.jwtSecret || this.generateDefaultSecret();
         this.jwtExpiresIn = config.jwtExpiresIn || '72h';
         this.loginPageUrl = config.loginPageUrl || '/login';
@@ -99,7 +102,13 @@ export class DefaultAuthProvider extends AuthProvider {
      * Must be called before using the provider
      */
     async initialize(): Promise<void> {
-        this.userCollection = await ensureCollection("nodius_users");
+        const collection = this.db.collection("nodius_users");
+
+        const exists = await collection.exists();
+        if (!exists) {
+            await collection.create();
+        }
+        this.userCollection = collection as DocumentCollection;
     }
 
     /**
@@ -122,7 +131,7 @@ export class DefaultAuthProvider extends AuthProvider {
     ): Promise<{ success: boolean; error?: string; userId?: string }> {
         try {
             // Check if user already exists
-            const cursor = await db.query({
+            const cursor = await this.db.query({
                 query: `
                     FOR user IN nodius_users
                     FILTER user.username == @username
@@ -164,7 +173,7 @@ export class DefaultAuthProvider extends AuthProvider {
     async login(username: string, password: string): Promise<AuthResult> {
         try {
             // Find user by username
-            const cursor = await db.query({
+            const cursor = await this.db.query({
                 query: `
                     FOR user IN nodius_users
                     FILTER user.username == @username
@@ -227,7 +236,7 @@ export class DefaultAuthProvider extends AuthProvider {
             const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
 
             // Optionally, verify user still exists in database
-            const cursor = await db.query({
+            const cursor = await this.db.query({
                 query: `
                     FOR user IN nodius_users
                     FILTER user._key == @userId
@@ -282,7 +291,7 @@ export class DefaultAuthProvider extends AuthProvider {
             }) as JWTPayload;
 
             // Verify user still exists
-            const cursor = await db.query({
+            const cursor = await this.db.query({
                 query: `
                     FOR user IN nodius_users
                     FILTER user._key == @userId
