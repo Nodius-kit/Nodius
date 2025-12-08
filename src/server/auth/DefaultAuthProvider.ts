@@ -41,7 +41,7 @@ import { AuthProvider, AuthResult, TokenValidationResult, UserInfo } from "./Aut
 import { Database } from "arangojs";
 import { DocumentCollection } from "arangojs/collections";
 import * as bcrypt from "bcrypt";
-import * as jwt from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import type {StringValue} from "ms";
 import {db} from "../server";
 
