@@ -17,7 +17,7 @@ import {WorkflowCallbacks, WorkflowManager} from "../../process/workflow/Workflo
 import {HtmlObject} from "../../utils/html/htmlType";
 import {useWorkflowActionRenderer} from "./hook/useWorkflowActionRenderer";
 import {DataTypeClass, DataTypeConfig} from "../../utils/dataType/dataType";
-import {Plus, X, Edit2} from "lucide-react";
+import {Plus, X, Edit2, Maximize} from "lucide-react";
 import toast from "react-hot-toast";
 
 export interface SchemaNodeInfo {
@@ -933,6 +933,48 @@ export const SchemaDisplay = memo(() => {
     }, [Project.state.currentEntryDataType]);
 
 
+    const centerOnRootNode = useCallback(() => {
+        const rootNode = getNode('root');
+        if (rootNode) {
+            projectRef.current.state.getMotor().smoothFitToArea({
+                minX: rootNode.posX,
+                maxX: rootNode.posX + rootNode.size.width,
+                minY: rootNode.posY,
+                maxY: rootNode.posY + rootNode.size.height
+            }, {
+                padding: 100
+            });
+        }
+    }, []);
+
+    const centerButtonClass = useDynamicClass(`
+        & {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: var(--nodius-background-paper);
+            box-shadow: var(--nodius-shadow-2);
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--nodius-transition-default);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            z-index: 2;
+        }
+
+        &:hover {
+            background-color: var(--nodius-background-hover, rgba(0, 0, 0, 0.1));
+            box-shadow: var(--nodius-shadow-4);
+        }
+
+        &:active {
+            transform: scale(0.95);
+        }
+    `);
+
     const sheetListClass = useDynamicClass(`
         & {
             position:absolute;
@@ -1021,6 +1063,17 @@ export const SchemaDisplay = memo(() => {
                     overflow:"hidden"
                 }}
             />
+            {!Project.state.editedNodeConfig ? (
+                <>
+                    <div
+                        className={centerButtonClass}
+                        onClick={centerOnRootNode}
+                        title="Center on root node"
+                    >
+                        <Maximize size={20} />
+                    </div>
+                </>
+            ) : null}
             {!Project.state.editedNodeConfig ? (
                 <div className={sheetListClass}>
                     {
