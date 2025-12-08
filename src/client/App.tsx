@@ -108,7 +108,7 @@ export const App = () => {
                         edge: Project.state.selectedEdge.map((e) => edges.find((edge) => edge._key === e)),
                     }));
                 }
-            }else if (event.ctrlKey && key === "v") {
+            } else if (event.ctrlKey && key === "v") {
                 if(Project.state.editedHtml != undefined ) {
                     // in html
                     const copiedObject = sessionStorage.getItem("copiedHtmlObject") ? JSON.parse(sessionStorage.getItem("copiedHtmlObject")!) : undefined;
@@ -177,6 +177,8 @@ export const App = () => {
                         for (const node of copiedObject.node) {
                             nodeIdMap.set(node._key, ids[idIndex]); // on garde l’ancien avant de l’écraser
                             node._key = ids[idIndex];
+                            node.graphKey = Project.state.graph._key;
+                            node.sheet = Project.state.selectedSheetId;
                             idIndex++;
 
                             minX = Math.min(minX, node.posX);
@@ -197,6 +199,8 @@ export const App = () => {
                         // On traite les edges : nouveau _key + mise à jour source/target
                         for (const edge of copiedObject.edge) {
                             edge._key = ids[idIndex];
+                            edge.graphKey = Project.state.graph._key;
+                            edge.sheet = Project.state.selectedSheetId;
                             idIndex++;
 
                             // Ici la correction critique
