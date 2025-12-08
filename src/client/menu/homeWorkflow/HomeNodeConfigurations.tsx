@@ -22,7 +22,7 @@ import {NodeTypeConfig} from "../../../utils/graph/graphType";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
+import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2} from "lucide-react";
 import {CategoryManager, CategoryData} from "./CategoryManager";
 import {Input} from "../../component/form/Input";
 import {Button} from "../../component/form/Button";
@@ -339,6 +339,39 @@ export const HomeNodeConfigurations = memo(({
     }, [Project.state.openNodeConfig]);
 
     /**
+     * Renames a node configuration
+     * Prompts user for new display name and updates via API
+     */
+    const handleRenameNodeConfig = useCallback(async (nodeConfigKey: string, currentName: string) => {
+        const newName = prompt("Enter new display name for node configuration:", currentName);
+        if (!newName || newName === currentName) return;
+
+        try {
+            const response = await fetch('/api/nodeconfig/rename', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    _key: nodeConfigKey,
+                    newDisplayName: newName
+                }),
+            });
+
+            if (response.status === 200) {
+                await onRefresh();
+            } else {
+                const errorData = await response.json();
+                alert(`Failed to rename node configuration: ${errorData.error || "Unknown error"}`);
+            }
+        } catch (error) {
+            console.error("Error renaming node config:", error);
+            alert("Failed to rename node configuration. Please try again.");
+        }
+    }, [onRefresh]);
+
+    /**
      * Deletes a node configuration with confirmation
      * Refreshes the node config list after successful deletion
      */
@@ -458,6 +491,17 @@ export const HomeNodeConfigurations = memo(({
                                 >
                                     <Edit3 height={14} width={14}/>
                                     Edit
+                                </Button>
+                                <Button
+                                    fullWidth
+                                    size={"small"}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRenameNodeConfig(nodeConfig._key, nodeConfig.displayName);
+                                    }}
+                                >
+                                    <Edit2 height={14} width={14}/>
+                                    Rename
                                 </Button>
                                 <Button
                                     fullWidth

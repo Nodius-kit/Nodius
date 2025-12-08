@@ -23,7 +23,7 @@ import {Graph} from "../../../utils/graph/graphType";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus} from "lucide-react";
+import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2} from "lucide-react";
 import {CategoryManager, CategoryData} from "./CategoryManager";
 import {api_graph_create} from "../../../utils/requests/type/api_workflow.type";
 import {Input} from "../../component/form/Input";
@@ -290,6 +290,38 @@ export const HomeHtmlWorkflow = memo(({
     }, [Project.state.openHtmlClass]);
 
     /**
+     * Renames an HTML workflow
+     * Prompts user for new name and updates via API
+     */
+    const handleRenameHtmlClass = useCallback(async (htmlKey: string, currentName: string) => {
+        const newName = prompt("Enter new name for HTML workflow:", currentName);
+        if (!newName || newName === currentName) return;
+
+        try {
+            const response = await fetch('/api/graph/rename', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    htmlToken: htmlKey,
+                    newName: newName
+                }),
+            });
+
+            if (response.status === 200) {
+                await onRefresh();
+            } else {
+                const errorData = await response.json();
+                alert(`Failed to rename workflow: ${errorData.error || "Unknown error"}`);
+            }
+        } catch (error) {
+            console.error("Error renaming HTML class:", error);
+            alert("Failed to rename workflow. Please try again.");
+        }
+    }, [onRefresh]);
+
+    /**
      * Deletes an HTML workflow with confirmation
      * Refreshes the workflow list after successful deletion
      */
@@ -398,6 +430,17 @@ export const HomeHtmlWorkflow = memo(({
                                 >
                                     <Edit3 height={14} width={14}/>
                                     Edit
+                                </Button>
+                                <Button
+                                    size={"small"}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRenameHtmlClass(item.html._key, item.html.name);
+                                    }}
+                                    fullWidth
+                                >
+                                    <Edit2 height={14} width={14}/>
+                                    Rename
                                 </Button>
                                 <Button
                                     size={"small"}

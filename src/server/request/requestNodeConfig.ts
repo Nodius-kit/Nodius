@@ -253,6 +253,62 @@ export class RequestNodeConfig {
         });
 
         /**
+         * Rename a node config (update displayName)
+         */
+        app.post("/api/nodeconfig/rename", async (req: Request, res: Response) => {
+            try {
+                const body = req.body as { workspace: string; _key: string; newDisplayName: string };
+
+                // Basic validation
+                if (!body._key || !body.workspace || !body.newDisplayName) {
+                    return res.status(400).json({ error: "Missing required fields" });
+                }
+
+                // Check if document exists in workspace
+                const existsQuery = aql`
+                  FOR doc IN nodius_node_config
+                  FILTER doc._key == ${escapeHTML(body._key)}
+                    AND doc.workspace == ${escapeHTML(body.workspace)}
+                  LIMIT 1
+                  RETURN doc
+                `;
+                const existsCursor = await db.query(existsQuery);
+                const existing = await existsCursor.next();
+
+                if (!existing) {
+                    return res.status(404).json({ error: "Node config not found in this workspace" });
+                }
+
+                // Check if new displayName conflicts with another node config
+                const conflictQuery = aql`
+                  FOR doc IN nodius_node_config
+                  FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                    AND doc.displayName == ${escapeHTML(body.newDisplayName)}
+                    AND doc._key != ${escapeHTML(body._key)}
+                  LIMIT 1
+                  RETURN doc
+                `;
+                const conflictCursor = await db.query(conflictQuery);
+                const conflict = await conflictCursor.next();
+
+                if (conflict) {
+                    return res.status(409).json({ error: "Node config with this displayName already exists in workspace" });
+                }
+
+                // Update the displayName
+                await nodeConfig_collection.update(body._key, {
+                    displayName: escapeHTML(body.newDisplayName),
+                    lastUpdatedTime: Date.now()
+                });
+
+                return res.status(200).json({ success: true });
+            } catch (err) {
+                console.error("Error renaming node config:", err);
+                return res.status(500).json({ error: "Internal Server Error" });
+            }
+        });
+
+        /**
          * Delete a node config
          */
         app.post("/api/nodeconfig/delete", async (req: Request, res: Response) => {
