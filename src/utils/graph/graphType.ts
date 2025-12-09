@@ -1,5 +1,6 @@
 import {pickKeys} from "../objectUtils";
 import {HTMLDomEvent, HtmlObject, HTMLWorkflowEvent} from "../html/htmlType";
+import {Instruction} from "../sync/InstructionBuilder";
 
 export type NodeType = "html" | "entryType" | string;
 export type handleSide = "T" /*top*/ | "D"/*down*/ | "R"/*right*/ | "L"/*left*/ | "0"/*middle, uneditable*/
@@ -155,6 +156,66 @@ export interface NodeTypeConfig {
     lastUpdatedTime: number,
     createdTime: number,
 }
+
+export interface GraphHistoryBase {
+    _key: string,
+    timestamp: number,
+    userId: string,
+    graphKey: string,
+    history: GraphHistory,
+    type: "WF" | "node"
+}
+
+export interface GraphHistoryNodeCreate {
+    type: "nodeCreate",
+    node: Node<any>
+}
+
+export interface GraphHistoryNodeDelete {
+    type: "nodeDelete",
+    node: Node<any>
+}
+
+export interface GraphHistoryNodeUpdate {
+    type: "nodeUpdate",
+    instruction: Instruction[],
+    reversedInstruction: Instruction[],
+}
+
+export interface GraphHistoryEdgeDelete {
+    type: "edgeDelete",
+    node: Edge
+}
+
+export interface GraphHistoryEdgeCreate {
+    type: "edgeCreate",
+    node: Edge
+}
+
+export interface sheetRename {
+    type: "sheetRename",
+    oldName: string,
+    newName: string,
+}
+
+export interface sheetDelete {
+    type: "sheetDelete",
+    deleteSheet: Record<string, {
+        nodeMap: Map<string, Node<any>>,
+        edgeMap: Map<string, Edge[]>
+    }>
+}
+
+export interface sheetCreate {
+    type: "sheetCreate",
+    deleteSheet: Record<string, {
+        nodeMap: Map<string, Node<any>>,
+        edgeMap: Map<string, Edge[]>
+    }>
+}
+
+export type GraphHistory = GraphHistoryNodeCreate | GraphHistoryNodeDelete | GraphHistoryNodeUpdate | GraphHistoryEdgeDelete | GraphHistoryEdgeCreate | sheetRename | sheetDelete | sheetCreate
+
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "html",
