@@ -303,17 +303,43 @@ export class WebSocketManager {
     }
     private saveGraphHistory = async (graphKey:string, type: "WF" | "node") => {
         if(!this.graphHistory[type][graphKey] || this.graphHistory[type][graphKey].length === 0) return;
-        const collection = await ensureCollection("nodius_graphs_history");
-        const key = await createUniqueToken(collection);
 
-        const graphHistory:GraphHistoryBase = {
-            _key: key,
-            graphKey: graphKey,
-            type: type,
-            timestamp: Date.now(),
-            history: this.graphHistory[type][graphKey]
+        try {
+            const collection = await ensureCollection("nodius_graphs_history");
+            const key = await createUniqueToken(collection);
+
+            // Convert Maps to arrays for JSON serialization
+            const serializedHistory = this.graphHistory[type][graphKey].map((entry) => {
+                if (entry.type === "sheetDelete" && entry.deleteSheet) {
+                    // Convert Maps to arrays of [key, value] pairs
+                    return {
+                        ...entry,
+                        deleteSheet: {
+                            nodes: Array.from(entry.deleteSheet.nodeMap.entries()),
+                            edges: Array.from(entry.deleteSheet.edgeMap.entries())
+                        }
+                    };
+                }
+                return entry;
+            });
+
+            const graphHistoryBase:GraphHistoryBase = {
+                _key: key,
+                graphKey: graphKey,
+                type: type,
+                timestamp: Date.now(),
+                history: serializedHistory as GraphHistory[]
+            }
+
+            await collection.save(graphHistoryBase);
+
+            // Clear the history after successful save
+            this.graphHistory[type][graphKey] = [];
+
+            console.log(`[WebSocketManager] Saved ${type} history for ${graphKey}: ${graphHistoryBase.history.length} entries`);
+        } catch (error) {
+            console.error(`[WebSocketManager] Error saving ${type} history for ${graphKey}:`, error);
         }
-
     }
 
     private initGraph = async (graphKey:string) => {
