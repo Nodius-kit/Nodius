@@ -40,9 +40,10 @@ import {RightPanelHandleConfig} from "./menu/RightPanelHandleConfig";
 import {LeftPanelEntryTypeSelect} from "./menu/LeftPanelEntryTypeSelect";
 import {LeftPanelNodeLibrary} from "./menu/LeftPanelNodeLibrary";
 import {SaveStatusOverlay} from "./SaveStatusOverlay";
+import {LeftPanelHistory} from "./menu/LeftPanelHistory";
 
 
-export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | ""
+export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | "history" | ""
 
 export const SchemaEditor = memo(({}:AppMenuProps) => {
 
@@ -220,6 +221,9 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                         </div>
                         <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
                             <LeftPanelNodeLibrary nodeConfigsList={nodeConfigsList} />
+                        </div>
+                        <div style={{display:"flex", width:"100%", height: "100%", flexDirection:"column", padding: "8px", gap:"12px"}}>
+                            <LeftPanelHistory />
                         </div>
 
                     </MultiFade>
