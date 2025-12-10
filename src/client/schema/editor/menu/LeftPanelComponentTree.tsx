@@ -22,7 +22,7 @@
  * rendering while maintaining the visual hierarchy.
  */
 
-import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "../../../../utils/html/htmlType";
+import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlList, HtmlObject} from "../../../../utils/html/htmlType";
 import {InstructionBuilder} from "../../../../utils/sync/InstructionBuilder";
 import React, {CSSProperties, Fragment, memo, useCallback, useContext, useEffect, useMemo, useState} from "react";
 import {
@@ -34,7 +34,7 @@ import {
     ListTree,
     Plus,
     Info,
-    Trash2
+    Trash2, BetweenHorizontalStart
 } from "lucide-react";
 import * as Icons from "lucide-react";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
@@ -63,7 +63,7 @@ interface FlatNode {
     isHidden: boolean; // For quick check, though we'll filter them out
 }
 
-interface ComponentCardStockage {identifier:string, element:HTMLElement}
+interface ComponentCardStockage {identifier:string, element:HTMLElement, type?:"onlyList"}
 
 export const LeftPaneComponentTree = memo(({
                                                componentsList
@@ -75,6 +75,7 @@ export const LeftPaneComponentTree = memo(({
     const [hoverIdentifier, setHoverIdentifier] = useState<string|undefined>(undefined);
     const [selectedIdentifier, setSelectedIdentifier] = useState<string|undefined>(undefined);
     const [hidedIdentifier, setHidedIdentifier] = useState<Set<string>>(new Set());
+
 
     const treeContainer = useElementSize();
 
@@ -126,25 +127,58 @@ export const LeftPaneComponentTree = memo(({
             return false;
         }
 
+
         let instruction = new InstructionBuilder();
         let object = searchElementWithIdentifier(showComponentCard.identifier, Project.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction);
 
         let output:ActionContext|undefined = undefined;
         if(object) {
-            if(object.type === "block") {
-                instruction.key("content").set(deepCopy(component.object));
+            if(showComponentCard.type === "onlyList") {
+                // copy current object, place it in empty list object
+                const newBaseObject = deepCopy(object);
+                const newObject:HtmlList = {
+                    type: "list",
+                    identifier: "0",
+                    domEvents: [],
+                    tag: "div",
+                    name: "Column",
+                    css: [
+                        {
+                            selector: "&",
+                            rules: [
+                                ["display", "flex"],
+                                ["flex-direction", "column"],
+                                ["outline", "2px solid red"],
+                                ["padding", "5px"],
+                                ["gap", "10px"],
+                                ["min-height", "50px"]
+                            ]
+                        }
+                    ],
+                    content: [newBaseObject],
+                }
+                instruction.set(newObject);
                 output = await Project.state.editedHtml.updateHtmlObject([{
                     i: instruction.instruction,
                     triggerHtmlRender: true,
                     applyUniqIdentifier: "identifier",
-                }])
-            } else if(object.type === "list") {
-                instruction.key("content").arrayAdd(deepCopy(component.object));
-                output = await Project.state.editedHtml.updateHtmlObject([{
-                    i: instruction.instruction,
-                    triggerHtmlRender: true,
-                    applyUniqIdentifier: "identifier",
-                }])
+                }]);
+            } else {
+                if (object.type === "block") {
+                    instruction.key("content").set(deepCopy(component.object));
+                    output = await Project.state.editedHtml.updateHtmlObject([{
+                        i: instruction.instruction,
+                        triggerHtmlRender: true,
+                        applyUniqIdentifier: "identifier",
+                    }])
+                } else if (object.type === "list") {
+                    instruction.key("content").arrayAdd(deepCopy(component.object));
+                    output = await Project.state.editedHtml.updateHtmlObject([{
+                        i: instruction.instruction,
+                        triggerHtmlRender: true,
+                        applyUniqIdentifier: "identifier",
+                    }])
+                }
             }
         }
         if(output) {
@@ -265,7 +299,21 @@ export const LeftPaneComponentTree = memo(({
                     closeOnBackgroundClick={true}
                 >
                     <div style={{display:"flex", width:"100%", height:"100%", flexDirection:"column", padding:"8px", gap:"12px", overflowY:"auto"}}>
-                        <LeftPanelComponentEditor componentsList={componentsList} onPickup={onPickup}/>
+                        <LeftPanelComponentEditor componentsList={showComponentCard.type === "onlyList" ?  Object.fromEntries(
+                            Object.entries(componentsList ?? {})
+                                .map(([key, components]) => {
+                                    if (!components) return [key, undefined];
+
+                                    // keep only list components
+                                    const listComponents = components.filter(c => c.object.type === "list");
+
+                                    // return category only if listComponents is not empty
+                                    return listComponents.length > 0
+                                        ? [key, listComponents]
+                                        : [key, undefined];
+                                })
+                                .filter(([_, components]) => components !== undefined)
+                        ) as Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> : componentsList} onPickup={onPickup}/>
                     </div>
                 </LinkedCard>
             ) : null}
@@ -294,6 +342,22 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
     const Project = useContext(ProjectContext);
 
     const Theme = useContext(ThemeContext);
+
+    const actionButtonClass = useDynamicClass(`
+        & {
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+            padding: 0px 4px;
+        }
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            transform: scale(1.1);
+        }
+        &:active {
+            transform: scale(0.95);
+        }
+    `);
 
     // Stabilize handlers with useCallback
     const onMouseEnter = useCallback((evt: React.MouseEvent) => {
@@ -528,22 +592,45 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                     </div>
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'row', justifyContent: 'right', gap: '6px', alignItems: 'center', paddingRight:"4px" }}>
 
-                        {selectedIdentifier === object.identifier && object.identifier !== "root" && (
-                            <Trash2 width={16} height={16} onClick={() => {
-                                const deleteEvent = new KeyboardEvent('keydown', {
-                                    key: 'Delete',
-                                    code: 'Delete',
-                                    bubbles: true,
-                                    cancelable: true
-                                });
-                                document.dispatchEvent(deleteEvent);
-                            }} />
+                        {hoverIdentifier === object.identifier && object.identifier !== "root" && (
+                            <div className={actionButtonClass}>
+                                <BetweenHorizontalStart
+                                    width={16}
+                                    height={16}
+                                    onClick={(evt) => {
+                                        props.setShowComponentCard({identifier: object.identifier, element:evt.target as HTMLElement, type: "onlyList"});
+                                    }}
+                                />
+                            </div>
                         )}
 
-                        {canHaveChild && <CirclePlus height={22} width={22} strokeWidth={1} onClick={(evt) => {
-                            evt.stopPropagation();
-                            props.setShowComponentCard({identifier: object.identifier, element:evt.target as HTMLElement});
-                        }} />}
+                        {hoverIdentifier === object.identifier && object.identifier !== "root" && (
+                            <div className={actionButtonClass}>
+                                <Trash2
+                                    width={16}
+                                    height={16}
+                                    onClick={() => {
+                                        const deleteEvent = new KeyboardEvent('keydown', {
+                                            key: 'Delete',
+                                            code: 'Delete',
+                                            bubbles: true,
+                                            cancelable: true
+                                        });
+                                        document.dispatchEvent(deleteEvent);
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {canHaveChild && (
+                            <div className={actionButtonClass}>
+                                <CirclePlus height={22} width={22} strokeWidth={1}
+                                            onClick={(evt) => {
+                                    evt.stopPropagation();
+                                    props.setShowComponentCard({identifier: object.identifier, element:evt.target as HTMLElement});
+                                }} />
+                            </div>
+                        )}
 
                         {haveChild && (
                             hidedIdentifier.has(object.identifier) ? (

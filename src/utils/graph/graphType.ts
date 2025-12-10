@@ -192,13 +192,19 @@ export interface GraphHistoryEdgeCreate {
     node: Edge
 }
 
-export interface sheetRename {
+export interface GraphHistoryEdgeUpdate {
+    type: "edgeUpdate",
+    instruction: Instruction[],
+    reversedInstruction: Instruction[],
+}
+
+export interface GraphHistorySheetRename {
     type: "sheetRename",
     oldName: string,
     newName: string,
 }
 
-export interface sheetDelete {
+export interface GraphHistorySheetDelete {
     type: "sheetDelete",
     deleteSheet: Record<string, {
         nodeMap: Map<string, Node<any>>,
@@ -206,7 +212,7 @@ export interface sheetDelete {
     }>
 }
 
-export interface sheetCreate {
+export interface GraphHistorySheetCreate {
     type: "sheetCreate",
     deleteSheet: Record<string, {
         nodeMap: Map<string, Node<any>>,
@@ -214,7 +220,7 @@ export interface sheetCreate {
     }>
 }
 
-export type GraphHistory = GraphHistoryNodeCreate | GraphHistoryNodeDelete | GraphHistoryNodeUpdate | GraphHistoryEdgeDelete | GraphHistoryEdgeCreate | sheetRename | sheetDelete | sheetCreate
+export type GraphHistory = GraphHistoryNodeCreate | GraphHistoryNodeDelete | GraphHistoryNodeUpdate | GraphHistoryEdgeDelete | GraphHistoryEdgeCreate | GraphHistoryEdgeUpdate | GraphHistorySheetRename | GraphHistorySheetDelete | GraphHistorySheetCreate
 
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
