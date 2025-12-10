@@ -174,7 +174,9 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
             editingPanel === "type" ? 2 : (
                 editingPanel === "enum" ? 3 : (
                     editingPanel === "entryData" ? 4 : (
-                        editingPanel === "nodeLibrary" ? 5 : -1
+                        editingPanel === "nodeLibrary" ? 5 : (
+                            editingPanel === "history" ? 6 : -1
+                        )
                     )
                 )
             )

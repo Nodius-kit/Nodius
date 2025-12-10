@@ -32,6 +32,7 @@ import {RequestDataType} from "./request/requestDataType";
 import {RequestSync} from "./request/requestSync";
 import {RequestNodeConfig} from "./request/requestNodeConfig";
 import {RequestAuth} from "./request/requestAuth";
+import {RequestHistory} from "./request/requestHistory";
 import {AuthManager} from "./auth/AuthManager";
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -177,6 +178,7 @@ RequestBuilder.init(app);
 RequestDataType.init(app);
 RequestSync.init(app);
 RequestNodeConfig.init(app);
+RequestHistory.init(app);
 
 // Start server with proper options
 const serverOptions: { port: number; host: string; https?: { key: string; cert: string } } = {
