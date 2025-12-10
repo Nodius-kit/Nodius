@@ -175,9 +175,10 @@ export const LeftPanelHistory = memo((
         & {
             padding: 12px;
             background: var(--nodius-background-paper);
-            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 8px;
             transition: var(--nodius-transition-default);
+            border: 1px solid var(--nodius-grey-200);
+            box-shadow: var(--nodius-shadow-1);
             cursor: pointer;
         }
         &:hover {

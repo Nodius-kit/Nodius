@@ -45,10 +45,12 @@ import {api_node_config_get} from "../../utils/requests/type/api_nodeconfig.type
 import {deepCopy} from "../../utils/objectUtils";
 import {triggerNodeUpdateOption} from "../schema/SchemaDisplay";
 import {modalManager} from "../../process/modal/ModalManager";
+import {UserContext} from "./contexts/UserContext";
 
 export const useSocketSync = () => {
     const Project = useContext(ProjectContext);
     const projectRef = useStableProjectRef();
+    const User = useContext(UserContext);
     const [serverInfo, setServerInfo] = useState<api_sync_info>();
 
     const { connect, sendMessage, setMessageHandler, connectionState, stats, disconnect } = useWebSocket(
@@ -416,7 +418,7 @@ export const useSocketSync = () => {
 
         const registerUser:WSMessage<WSRegisterUserOnGraph> = {
             type: "registerUserOnGraph",
-            userId: Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
+            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
             name: "User",
             sheetId: selectedSheetId,
             graphKey: htmlGraph._key,
@@ -494,7 +496,7 @@ export const useSocketSync = () => {
             timeTaken: Date.now() - start,
             status: true,
         }
-    }, [connect, disconnect, connectionState]);
+    }, [connect, disconnect, connectionState, User.user?.userId]);
 
     useEffect(() => {
         Project.dispatch({
@@ -616,7 +618,7 @@ export const useSocketSync = () => {
 
         const registerUser:WSMessage<WSRegisterUserOnNodeConfig> = {
             type: "registerUserOnNodeConfig",
-            userId: Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
+            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
             name: "User",
             nodeConfigKey: nodeConfig._key,
             fromTimestamp: nodeConfig.lastUpdatedTime
@@ -713,7 +715,7 @@ export const useSocketSync = () => {
             timeTaken: Date.now() - start,
             status: true,
         }
-    }, [connect, disconnect, connectionState]);
+    }, [connect, disconnect, connectionState, User.user?.userId]);
 
     useEffect(() => {
         Project.dispatch({

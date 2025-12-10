@@ -43,6 +43,7 @@ export interface AuthResult {
  * User information returned after successful authentication
  */
 export interface UserInfo {
+    userId?: string;
     username: string;
     email?: string;
     roles?: string[];

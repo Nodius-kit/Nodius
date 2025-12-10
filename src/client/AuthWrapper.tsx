@@ -21,6 +21,7 @@
 
 import { useState, useEffect, ReactNode } from "react";
 import { Login } from "./pages/Login";
+import { UserProvider, UserInfo } from "./hooks/contexts/UserContext";
 
 interface AuthWrapperProps {
     children: ReactNode;
@@ -29,6 +30,7 @@ interface AuthWrapperProps {
 export const AuthWrapper = ({ children }: AuthWrapperProps) => {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState<UserInfo | null>(null);
 
     useEffect(() => {
         validateToken();
@@ -54,23 +56,27 @@ export const AuthWrapper = ({ children }: AuthWrapperProps) => {
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success) {
+                if (data.success && data.user) {
                     setIsAuthenticated(true);
+                    setUser(data.user);
                 } else {
                     // Token invalid
                     localStorage.removeItem("authToken");
                     setIsAuthenticated(false);
+                    setUser(null);
                 }
             } else {
                 // Token invalid or expired
                 localStorage.removeItem("authToken");
                 setIsAuthenticated(false);
+                setUser(null);
             }
         } catch (error) {
             console.error("Token validation error:", error);
             // On error, assume not authenticated
             localStorage.removeItem("authToken");
             setIsAuthenticated(false);
+            setUser(null);
         } finally {
             setIsLoading(false);
         }
@@ -103,6 +109,10 @@ export const AuthWrapper = ({ children }: AuthWrapperProps) => {
         return <Login />;
     }
 
-    // Show main app if authenticated
-    return <>{children}</>;
+    // Show main app if authenticated, wrapped with UserProvider
+    return (
+        <UserProvider user={user} setUser={setUser}>
+            {children}
+        </UserProvider>
+    );
 };

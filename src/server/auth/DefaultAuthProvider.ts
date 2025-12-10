@@ -211,6 +211,7 @@ export class DefaultAuthProvider extends AuthProvider {
             });
 
             const userInfo: UserInfo = {
+                userId: user._key,
                 username: user.username,
                 email: user.email,
                 roles: user.roles
@@ -253,6 +254,7 @@ export class DefaultAuthProvider extends AuthProvider {
             }
 
             const userInfo: UserInfo = {
+                userId: user._key,
                 username: user.username,
                 email: user.email,
                 roles: user.roles
