@@ -160,20 +160,19 @@ export interface NodeTypeConfig {
 export interface GraphHistoryBase {
     _key: string,
     timestamp: number,
-    userId: string,
     graphKey: string,
-    history: GraphHistory,
+    history: GraphHistory[],
     type: "WF" | "node"
 }
 
 export interface GraphHistoryNodeCreate {
     type: "nodeCreate",
-    node: Node<any>
+    nodes: Node<any>[]
 }
 
 export interface GraphHistoryNodeDelete {
     type: "nodeDelete",
-    node: Node<any>
+    nodes: Node<any>[]
 }
 
 export interface GraphHistoryNodeUpdate {
@@ -184,12 +183,12 @@ export interface GraphHistoryNodeUpdate {
 
 export interface GraphHistoryEdgeDelete {
     type: "edgeDelete",
-    node: Edge
+    edges: Edge[]
 }
 
 export interface GraphHistoryEdgeCreate {
     type: "edgeCreate",
-    node: Edge
+    edges: Edge[]
 }
 
 export interface GraphHistoryEdgeUpdate {
@@ -206,21 +205,22 @@ export interface GraphHistorySheetRename {
 
 export interface GraphHistorySheetDelete {
     type: "sheetDelete",
-    deleteSheet: Record<string, {
+    name: string,
+    deleteSheet: {
         nodeMap: Map<string, Node<any>>,
         edgeMap: Map<string, Edge[]>
-    }>
+    }
 }
 
 export interface GraphHistorySheetCreate {
     type: "sheetCreate",
-    deleteSheet: Record<string, {
-        nodeMap: Map<string, Node<any>>,
-        edgeMap: Map<string, Edge[]>
-    }>
+    name: string
 }
 
-export type GraphHistory = GraphHistoryNodeCreate | GraphHistoryNodeDelete | GraphHistoryNodeUpdate | GraphHistoryEdgeDelete | GraphHistoryEdgeCreate | GraphHistoryEdgeUpdate | GraphHistorySheetRename | GraphHistorySheetDelete | GraphHistorySheetCreate
+export type GraphHistory =
+    (GraphHistoryNodeCreate | GraphHistoryNodeDelete | GraphHistoryNodeUpdate | GraphHistoryEdgeDelete | GraphHistoryEdgeCreate | GraphHistoryEdgeUpdate | GraphHistorySheetRename | GraphHistorySheetDelete | GraphHistorySheetCreate) & {
+        userId: string
+    }
 
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {

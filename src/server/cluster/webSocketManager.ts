@@ -39,13 +39,19 @@ import {
     WSSaveStatus, WSForceSave, WSToggleAutoSave
 } from "../../utils/sync/wsObject";
 import {clusterManager, db} from "../server";
-import {Edge, Node, NodeTypeConfig} from "../../utils/graph/graphType";
+import {Edge, GraphHistory, GraphHistoryBase, Node, NodeTypeConfig} from "../../utils/graph/graphType";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
 import {edgeArrayToMap, findEdgeByKey, nodeArrayToMap} from "../../utils/graph/nodeUtils";
-import {applyInstruction, InstructionBuilder, validateInstruction} from "../../utils/sync/InstructionBuilder";
+import {
+    applyInstruction,
+    getInverseInstruction,
+    InstructionBuilder,
+    validateInstruction
+} from "../../utils/sync/InstructionBuilder";
 import {HtmlObject} from "../../utils/html/htmlType";
 import {travelHtmlObject} from "../../utils/html/htmlUtils";
-import {travelObject} from "../../utils/objectUtils";
+import {deepCopy, travelObject} from "../../utils/objectUtils";
+import {createUniqueToken, ensureCollection} from "../utils/arangoUtils";
 
 interface ManageUser {
     id: string,
@@ -285,6 +291,29 @@ export class WebSocketManager {
                 delete this.managedNodeConfig[nodeConfigId];
             }
         }
+    }
+
+    private graphHistory:Record<"WF" | "node", Record<string, GraphHistory[]>> = {
+        node: {},
+        WF: {}
+    }
+    private addGraphHistory = (graphKey:string, type: "WF" | "node", history: GraphHistory) => {
+        this.graphHistory[type][graphKey] ??= [];
+        this.graphHistory[type][graphKey].push(history);
+    }
+    private saveGraphHistory = async (graphKey:string, type: "WF" | "node") => {
+        if(!this.graphHistory[type][graphKey] || this.graphHistory[type][graphKey].length === 0) return;
+        const collection = await ensureCollection("nodius_graphs_history");
+        const key = await createUniqueToken(collection);
+
+        const graphHistory:GraphHistoryBase = {
+            _key: key,
+            graphKey: graphKey,
+            type: type,
+            timestamp: Date.now(),
+            history: this.graphHistory[type][graphKey]
+        }
+
     }
 
     private initGraph = async (graphKey:string) => {
@@ -624,6 +653,14 @@ export class WebSocketManager {
                     }
                 }
 
+                const reversedInstructions = message.instructions.map((inst) => {
+                    const reverse = getInverseInstruction(currentConfig, inst.i);
+                    if(reverse.success) {
+                        return deepCopy(reverse.value)
+                    }
+                    return undefined;
+                }).filter((v) => v != undefined);
+
                 // Apply all instructions
                 let currentConfig = nodeConfig.config;
                 for(const instruction of message.instructions) {
@@ -658,6 +695,13 @@ export class WebSocketManager {
                 nodeConfig.instructionHistory.push({
                     message: message,
                     time: Date.now()
+                });
+
+                this.addGraphHistory(nodeConfigKey, "node", {
+                    type: "nodeUpdate",
+                    instruction: message.instructions.map((i) => i.i),
+                    reversedInstruction: reversedInstructions,
+                    userId: nodeConfigUser.id
                 });
 
                 // Broadcast save status
@@ -753,6 +797,28 @@ export class WebSocketManager {
                         });
                     }
                 }
+
+                const reversedNodesInstructions = message.instructions.map((inst) => {
+                    if(inst.nodeId) {
+                        const currentNode = modifiedNodes.get(inst.nodeId)!;
+                        const reverse = getInverseInstruction(currentNode, inst.i);
+                        if (reverse.success) {
+                            return deepCopy(reverse.value)
+                        }
+                    }
+                    return undefined;
+                }).filter((v) => v != undefined);
+
+                const reversedEdgesInstructions = message.instructions.map((inst) => {
+                    if(inst.edgeId) {
+                        const currentEdge = modifiedEdges.get(inst.edgeId)!;
+                        const reverse = getInverseInstruction(currentEdge[1], inst.i);
+                        if (reverse.success) {
+                            return deepCopy(reverse.value)
+                        }
+                    }
+                    return undefined;
+                }).filter((v) => v != undefined);
 
                 // apply instructions sequentially to the same object references
                 for(const instruction of message.instructions) {
@@ -885,6 +951,23 @@ export class WebSocketManager {
                     message: message,
                     time: Date.now()
                 });
+
+                if(message.instructions.filter((i) => i.nodeId != undefined).length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "nodeUpdate",
+                        instruction: message.instructions.filter((i) => i.nodeId != undefined).map((i) => i.i),
+                        reversedInstruction: reversedNodesInstructions,
+                        userId: graphUser.id
+                    });
+                }
+                if(message.instructions.filter((i) => i.edgeId != undefined).length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "edgeUpdate",
+                        instruction: message.instructions.filter((i) => i.edgeId != undefined).map((i) => i.i),
+                        reversedInstruction: reversedEdgesInstructions,
+                        userId: graphUser.id
+                    });
+                }
 
                 if (messageId) this.sendMessage(ws, {
                     ...message,
@@ -1058,6 +1141,14 @@ export class WebSocketManager {
                     this.usedIds[graphKey].add(node._key);
                 }
 
+                if(message.nodes.length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "nodeCreate",
+                        userId: graphUser.id,
+                        nodes: message.nodes
+                    });
+                }
+
                 // Add edges to the edgeMap
                 for(const edge of edgesToAdd) {
                     // Track this ID as used
@@ -1074,6 +1165,14 @@ export class WebSocketManager {
                     let sourceEdges = targetSheet.edgeMap.get(sourceKey) || [];
                     sourceEdges.push(edge);
                     targetSheet.edgeMap.set(sourceKey, sourceEdges);
+
+                }
+                if(edgesToAdd.length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "edgeCreate",
+                        userId: graphUser.id,
+                        edges: edgesToAdd
+                    });
                 }
 
                 sheet.instructionHistory.push({
@@ -1157,9 +1256,11 @@ export class WebSocketManager {
                 this.broadcastSaveStatus(graphKey);
 
                 // Delete edges first (to avoid orphaned edges)
+                const deletedEdges: Edge[] = [];
                 for(const edgeKey of finalEdgeKeys) {
                     const edge = findEdgeByKey(targetSheet.edgeMap, edgeKey);
                     if(edge) {
+                        deletedEdges.push(edge);
                         // Remove from target map
                         if(edge.target) {
                             const targetKey = `target-${edge.target}`;
@@ -1185,8 +1286,22 @@ export class WebSocketManager {
                         }
                     }
                 }
+                if(deletedEdges.length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "edgeDelete",
+                        userId: graphUser.id,
+                        edges: deletedEdges
+                    });
+                }
 
                 // Delete nodes
+                if(message.nodeKeys.length > 0) {
+                    this.addGraphHistory(graphKey, "WF", {
+                        type: "nodeDelete",
+                        userId: graphUser.id,
+                        nodes: message.nodeKeys.map((n) => targetSheet.nodeMap.get(n)).filter((v) => v != undefined)
+                    });
+                }
                 for(const nodeKey of message.nodeKeys) {
                     targetSheet.nodeMap.delete(nodeKey);
                 }
@@ -1241,6 +1356,12 @@ export class WebSocketManager {
                     hasUnsavedChanges: false
                 }
 
+                this.addGraphHistory(graphKey, "WF", {
+                    type: "sheetCreate",
+                    userId: graphUser.id,
+                    name: message.name
+                });
+
                 // Save to ArangoDB
                 try {
                     const graph_collection = db.collection("nodius_graphs");
@@ -1279,6 +1400,7 @@ export class WebSocketManager {
                 }
                 const message:WSMessage<WSRenameSheet> = jsonData;
 
+
                 // Save to ArangoDB
                 try {
                     const graph_collection = db.collection("nodius_graphs");
@@ -1286,6 +1408,12 @@ export class WebSocketManager {
 
                     // Update sheet name in sheetsList
                     if (graphDoc.sheetsList && graphDoc.sheetsList[message.key]) {
+                        this.addGraphHistory(graphKey, "WF", {
+                            type: "sheetRename",
+                            userId: graphUser.id,
+                            oldName: graphDoc.sheetsList[message.key],
+                            newName: message.name
+                        });
                         graphDoc.sheetsList[message.key] = message.name;
 
                         await graph_collection.update(graphKey, {
@@ -1320,7 +1448,6 @@ export class WebSocketManager {
 
                 const graph = this.managedGraph[graphKey];
                 const deletedSheet = graph[message.key];
-                delete graph[message.key];
 
                 // Save to ArangoDB
                 try {
@@ -1331,12 +1458,24 @@ export class WebSocketManager {
 
                     // Remove sheet from sheetsList
                     if (graphDoc.sheetsList && graphDoc.sheetsList[message.key]) {
+
+                        this.addGraphHistory(graphKey, "WF", {
+                            type: "sheetDelete",
+                            userId: graphUser.id,
+                            name: graphDoc.sheetsList[message.key],
+                            deleteSheet: {
+                                nodeMap: deletedSheet.nodeMap,
+                                edgeMap: deletedSheet.edgeMap,
+                            }
+                        });
+
                         delete graphDoc.sheetsList[message.key];
 
                         await graph_collection.update(graphKey, {
                             sheetsList: graphDoc.sheetsList,
                             lastUpdatedTime: Date.now()
                         });
+
 
                         console.log(`Deleted sheet ${message.key} from graph ${graphKey} sheetsList`);
                     }
@@ -1372,6 +1511,8 @@ export class WebSocketManager {
                 } catch (error) {
                     console.error(`Error saving deleteSheet to database for graph ${graphKey}:`, error);
                 }
+
+                delete graph[message.key];
 
                 for(const graph of Object.values(this.managedGraph)) {
                     for(const sheet of Object.values(graph)) {
@@ -1625,6 +1766,8 @@ export class WebSocketManager {
         const graph = this.managedGraph[graphKey];
         if (!graph) return;
 
+        await this.saveGraphHistory(graphKey, "WF");
+
         try {
             const node_collection = db.collection("nodius_nodes");
             const edge_collection = db.collection("nodius_edges");
@@ -1790,6 +1933,8 @@ export class WebSocketManager {
     private saveNodeConfigChanges = async (nodeConfigKey: string): Promise<void> => {
         const managedConfig = this.managedNodeConfig[nodeConfigKey];
         if (!managedConfig) return;
+
+        await this.saveGraphHistory(nodeConfigKey, "node");
 
         try {
             if (!managedConfig.hasUnsavedChanges) {
