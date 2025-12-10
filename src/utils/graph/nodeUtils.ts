@@ -11,6 +11,7 @@
  * - findFirstNodeWithId: Locate node by ID
  * - findNodeConnected: Get all nodes connected to a given node
  * - duplicateNodeConfig: Create deep copy of node configuration
+ * - generateHistoryDescription: Generate human-readable description from GraphHistory
  *
  * Key features:
  * - Efficient edge grouping by source-{id} and target-{id} keys
@@ -18,9 +19,10 @@
  * - Directional connection queries (in, out, both)
  * - Deep cloning for node config duplication
  * - Type-safe generic node data handling
+ * - History tracking and reporting
  */
 
-import {Edge, Graph, Node, NodeType, NodeTypeConfig} from "./graphType";
+import {Edge, Graph, GraphHistory, Node, NodeType, NodeTypeConfig} from "./graphType";
 import {deepCopy} from "../objectUtils";
 
 export const flatEdgeMap = (edges:Map<string, Edge[]>):Edge[] => Array.from(edges.entries())
@@ -144,4 +146,124 @@ export const createNodeFromConfig = <T = any>(config:NodeTypeConfig, nodeKey:str
         process: config.node.process,
     }
     return deepCopy(node);
+}
+
+/**
+ * Generate a human-readable description of modifications from GraphHistory array
+ * Groups similar modifications together for concise output
+ *
+ * @param history - Array of GraphHistory entries to describe
+ * @returns A descriptive string of all modifications in English
+ *
+ * @example
+ * const description = generateHistoryDescription([
+ *   { type: "nodeCreate", nodes: [...], userId: "user1" },
+ *   { type: "nodeCreate", nodes: [...], userId: "user1" },
+ *   { type: "edgeUpdate", instruction: [...], userId: "user2" }
+ * ]);
+ * // Returns: "Created 5 node(s). Updated 1 edge(s)."
+ */
+export const generateHistoryDescription = (history: GraphHistory[]): string => {
+    if (!history || history.length === 0) {
+        return "No modifications";
+    }
+
+    // Counters for each type of modification
+    const stats = {
+        nodeCreate: 0,
+        nodeDelete: 0,
+        nodeUpdate: 0,
+        edgeCreate: 0,
+        edgeDelete: 0,
+        edgeUpdate: 0,
+        sheetCreate: [] as string[],
+        sheetRename: [] as Array<{ oldName: string, newName: string }>,
+        sheetDelete: [] as string[]
+    };
+
+    // Aggregate modifications
+    for (const entry of history) {
+        switch (entry.type) {
+            case "nodeCreate":
+                stats.nodeCreate += entry.nodes.length;
+                break;
+            case "nodeDelete":
+                stats.nodeDelete += entry.nodes.length;
+                break;
+            case "nodeUpdate":
+                stats.nodeUpdate += entry.instruction.length;
+                break;
+            case "edgeCreate":
+                stats.edgeCreate += entry.edges.length;
+                break;
+            case "edgeDelete":
+                stats.edgeDelete += entry.edges.length;
+                break;
+            case "edgeUpdate":
+                stats.edgeUpdate += entry.instruction.length;
+                break;
+            case "sheetCreate":
+                stats.sheetCreate.push(entry.name);
+                break;
+            case "sheetRename":
+                stats.sheetRename.push({ oldName: entry.oldName, newName: entry.newName });
+                break;
+            case "sheetDelete":
+                stats.sheetDelete.push(entry.name);
+                break;
+        }
+    }
+
+    // Build description array
+    const descriptions: string[] = [];
+
+    // Node operations
+    if (stats.nodeCreate > 0) {
+        descriptions.push(`Created ${stats.nodeCreate} node${stats.nodeCreate > 1 ? 's' : ''}`);
+    }
+    if (stats.nodeUpdate > 0) {
+        descriptions.push(`Updated ${stats.nodeUpdate} node${stats.nodeUpdate > 1 ? 's' : ''}`);
+    }
+    if (stats.nodeDelete > 0) {
+        descriptions.push(`Deleted ${stats.nodeDelete} node${stats.nodeDelete > 1 ? 's' : ''}`);
+    }
+
+    // Edge operations
+    if (stats.edgeCreate > 0) {
+        descriptions.push(`Created ${stats.edgeCreate} edge${stats.edgeCreate > 1 ? 's' : ''}`);
+    }
+    if (stats.edgeUpdate > 0) {
+        descriptions.push(`Updated ${stats.edgeUpdate} edge${stats.edgeUpdate > 1 ? 's' : ''}`);
+    }
+    if (stats.edgeDelete > 0) {
+        descriptions.push(`Deleted ${stats.edgeDelete} edge${stats.edgeDelete > 1 ? 's' : ''}`);
+    }
+
+    // Sheet operations
+    if (stats.sheetCreate.length > 0) {
+        if (stats.sheetCreate.length === 1) {
+            descriptions.push(`Created sheet "${stats.sheetCreate[0]}"`);
+        } else {
+            descriptions.push(`Created ${stats.sheetCreate.length} sheets: ${stats.sheetCreate.map(n => `"${n}"`).join(', ')}`);
+        }
+    }
+    if (stats.sheetRename.length > 0) {
+        for (const rename of stats.sheetRename) {
+            descriptions.push(`Renamed sheet "${rename.oldName}" to "${rename.newName}"`);
+        }
+    }
+    if (stats.sheetDelete.length > 0) {
+        if (stats.sheetDelete.length === 1) {
+            descriptions.push(`Deleted sheet "${stats.sheetDelete[0]}"`);
+        } else {
+            descriptions.push(`Deleted ${stats.sheetDelete.length} sheets: ${stats.sheetDelete.map(n => `"${n}"`).join(', ')}`);
+        }
+    }
+
+    // Join all descriptions with proper punctuation
+    if (descriptions.length === 0) {
+        return "No significant modifications";
+    }
+
+    return descriptions.join('. ') + '.';
 }
