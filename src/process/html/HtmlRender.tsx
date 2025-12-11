@@ -637,6 +637,73 @@ export class HtmlRender {
                 this.setupExternalChangeTracking(storage);
             }
             return;
+        } else if (newObject.type === "link") {
+            const newText = await this.parseContent(newObject.content.text[this.language], storage);
+            const oldText = await this.parseContent((oldObject.content as any).text[this.language], storage);
+            const newUrl = newObject.content.url;
+            const oldUrl = (oldObject.content as any).url;
+
+            // Three-way merge for link text content
+            if (oldText !== newText) {
+                this.setInnerHTMLInternal(element, newText);
+                storage.externalChanges.innerHTML = false;
+            } else if (!storage.externalChanges.innerHTML) {
+                if (element.innerHTML !== newText) {
+                    this.setInnerHTMLInternal(element, newText);
+                }
+            }
+
+            // Three-way merge for href attribute
+            if (oldUrl !== newUrl) {
+                this.setAttributeInternal(element, 'href', newUrl);
+                storage.externalChanges.attributes.delete('href');
+            } else if (!storage.externalChanges.attributes.has('href')) {
+                const currentHref = (element as HTMLAnchorElement).href;
+                if (currentHref !== newUrl) {
+                    this.setAttributeInternal(element, 'href', newUrl);
+                }
+            }
+
+            this.addDebugListeners(storage);
+
+            if (tagChanged || typeChanged) {
+                this.setupExternalChangeTracking(storage);
+            }
+            return;
+        } else if (newObject.type === "image") {
+            const newAlt = newObject.content[0];
+            const oldAlt = (oldObject.content as any)[0];
+            const newSrc = newObject.content[1];
+            const oldSrc = (oldObject.content as any)[1];
+
+            // Three-way merge for alt attribute
+            if (oldAlt !== newAlt) {
+                this.setAttributeInternal(element, 'alt', newAlt);
+                storage.externalChanges.attributes.delete('alt');
+            } else if (!storage.externalChanges.attributes.has('alt')) {
+                const currentAlt = (element as HTMLImageElement).alt;
+                if (currentAlt !== newAlt) {
+                    this.setAttributeInternal(element, 'alt', newAlt);
+                }
+            }
+
+            // Three-way merge for src attribute
+            if (oldSrc !== newSrc) {
+                this.setAttributeInternal(element, 'src', newSrc);
+                storage.externalChanges.attributes.delete('src');
+            } else if (!storage.externalChanges.attributes.has('src')) {
+                const currentSrc = (element as HTMLImageElement).src;
+                if (currentSrc !== newSrc) {
+                    this.setAttributeInternal(element, 'src', newSrc);
+                }
+            }
+
+            this.addDebugListeners(storage);
+
+            if (tagChanged || typeChanged) {
+                this.setupExternalChangeTracking(storage);
+            }
+            return;
         }
 
         // Reconcile children for block, list, array

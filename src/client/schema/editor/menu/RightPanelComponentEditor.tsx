@@ -35,6 +35,8 @@ import {CssEditor} from "./RightPanelComponentEditor/CssEditor";
 import {EventsEditor} from "./RightPanelComponentEditor/EventsEditor";
 import {ContentEditor} from "./RightPanelComponentEditor/ContentEditor";
 import {Collapse} from "../../../component/animate/Collapse";
+import {AnchorEditor} from "./RightPanelComponentEditor/AnchorEditor";
+import {ImageEditor} from "./RightPanelComponentEditor/ImageEditor";
 
 interface RightPanelComponentEditorProps {
     componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
@@ -257,6 +259,18 @@ export const RightPanelComponentEditor = memo(({
                         <Collapse in={currentEditable.object.type === "icon"}>
                             <div style={{marginBottom: "16px"}}>
                                 <IconEditor object={currentEditable} onUpdate={updateObject} />
+                            </div>
+                        </Collapse>
+
+                        <Collapse in={currentEditable.object.type === "link"}>
+                            <div style={{marginBottom: "16px"}}>
+                                <AnchorEditor object={currentEditable} onUpdate={updateObject} />
+                            </div>
+                        </Collapse>
+
+                        <Collapse in={currentEditable.object.type === "image"}>
+                            <div style={{marginBottom: "16px"}}>
+                                <ImageEditor object={currentEditable} onUpdate={updateObject} />
                             </div>
                         </Collapse>
                         {/* Tabs */}

@@ -64,8 +64,8 @@ export interface HtmlImage extends HtmlBase {
 export interface HtmlLink extends HtmlBase {
     type: "link",
     content: {
-        url: string,
-        text: Record<string, string>
+        url: string, // url of the anchor
+        text: Record<string, string>, // displayed text (key lang "en"/"fr"), value displayed text
     }
 }
 
