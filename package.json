@@ -24,7 +24,8 @@
   "devDependencies": {
     "@types/escape-html": "^1.0.4",
     "@types/jsdom": "^27.0.0",
-    "@types/node": "^24.10.1",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^25.0.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
@@ -49,11 +50,13 @@
     "escape-html": "^1.0.3",
     "jsdom": "^27.3.0",
     "jsonwebtoken": "^9.0.3",
-    "lucide-react": "^0.556.0",
+    "lucide-react": "^0.560.0",
+    "multer": "^2.0.2",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "react-hot-toast": "^2.6.0",
     "selfsigned": "^5.2.0",
+    "sharp": "^0.34.5",
     "ws": "^8.18.3",
     "zeromq": "^6.5.0"
   }

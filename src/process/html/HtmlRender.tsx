@@ -349,6 +349,12 @@ export class HtmlRender {
             element.innerHTML = await this.parseContent(object.content, storage);
         } else if (object.type === "icon") {
             // Icon already created as SVG element, nothing more to do
+        } else if (object.type === "link") {
+            element.innerHTML = await this.parseContent(object.content.text[this.language], storage);
+            (element as HTMLAnchorElement).href = object.content.url;
+        } else if (object.type === "image") {
+            (element as HTMLImageElement).alt = object.content[0];
+            (element as HTMLImageElement).src = object.content[1];
         } else {
             const childrenInfo = await this.getChildrenInfo(object, storage);
             for (const childInfo of childrenInfo) {

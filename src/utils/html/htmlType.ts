@@ -56,8 +56,20 @@ export interface HtmlIcon extends HtmlBase {
     content: string,
 }
 
+export interface HtmlImage extends HtmlBase {
+    type: "image",
+    content: [string, string] // first is alt, then src
+}
 
-export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray | HtmlIcon;
+export interface HtmlLink extends HtmlBase {
+    type: "link",
+    content: {
+        url: string,
+        text: Record<string, string>
+    }
+}
+
+export type HtmlObject = HtmlDiv | HtmlText | HtmlList | HtmlInner | HtmlArray | HtmlIcon | HtmlImage | HtmlLink;
 export interface HtmlClass {
     htmlNodeKey: string;
     object:HtmlObject,
