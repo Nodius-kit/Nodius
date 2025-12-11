@@ -343,10 +343,7 @@ export const LeftPanelHistory = memo((
                                             </span>
                                         </div>
                                     )}
-                                    <div className={classMetadataRow}>
-                                        <FileText size={12} />
-                                        <span>{item.historyCount} {item.historyCount === 1 ? 'change' : 'changes'}</span>
-                                    </div>
+
                                 </div>
                             </div>
                         ))}
