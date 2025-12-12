@@ -1,11 +1,13 @@
 import { HtmlObject } from "../../utils/html/htmlType";
 import { HtmlRender } from "../html/HtmlRender";
+import React from "react";
+import { createRoot, Root } from "react-dom/client";
 
 export interface ModalOptions {
     id?: string;
     nodeId: string;
     title?: string;
-    content: HtmlObject | HTMLElement | string;
+    content: HtmlObject | HTMLElement | string | React.ReactElement;
     width?: string;
     height?: string;
     onClose?: () => void;
@@ -18,6 +20,7 @@ interface ModalInstance {
     element: HTMLElement;
     contentContainer: HTMLElement;
     htmlRender?: HtmlRender;
+    reactRoot?: Root;
     onClose?: () => void;
     zIndex: number;
 }
@@ -65,7 +68,7 @@ export class ModalManager {
             width: 100vw;
             height: 100vh;
             pointer-events: none;
-            z-index: 99999;
+            z-index: 99999999;
         `;
         document.body.appendChild(this.container);
 
@@ -98,10 +101,16 @@ export class ModalManager {
 
         // Setup content
         let htmlRender: HtmlRender | undefined;
+        let reactRoot: Root | undefined;
+
         if (typeof options.content === "string") {
             contentContainer.innerHTML = options.content;
         } else if (options.content instanceof HTMLElement) {
             contentContainer.appendChild(options.content);
+        } else if (React.isValidElement(options.content)) {
+            // React element (JSX)
+            reactRoot = createRoot(contentContainer);
+            reactRoot.render(options.content);
         } else {
             // HtmlObject
             htmlRender = new HtmlRender(contentContainer);
@@ -118,6 +127,7 @@ export class ModalManager {
             element: modalElement,
             contentContainer,
             htmlRender,
+            reactRoot,
             onClose: options.onClose,
             zIndex
         });
@@ -297,6 +307,11 @@ export class ModalManager {
         const modal = this.modals.get(id);
         if (!modal) return;
 
+        // Cleanup React root if exists
+        if (modal.reactRoot) {
+            modal.reactRoot.unmount();
+        }
+
         // Cleanup HtmlRender if exists
         if (modal.htmlRender) {
             modal.htmlRender.dispose();
@@ -325,10 +340,16 @@ export class ModalManager {
         ids.forEach(id => this.close(id));
     }
 
-    async updateContent(id: string, content: HtmlObject | HTMLElement | string) {
+    async updateContent(id: string, content: HtmlObject | HTMLElement | string | React.ReactElement) {
         const modal = this.modals.get(id);
         if (!modal) {
             throw new Error(`Modal with id "${id}" not found`);
+        }
+
+        // Cleanup existing React root
+        if (modal.reactRoot) {
+            modal.reactRoot.unmount();
+            modal.reactRoot = undefined;
         }
 
         // Cleanup existing HtmlRender
@@ -345,6 +366,10 @@ export class ModalManager {
             modal.contentContainer.innerHTML = content;
         } else if (content instanceof HTMLElement) {
             modal.contentContainer.appendChild(content);
+        } else if (React.isValidElement(content)) {
+            // React element (JSX)
+            modal.reactRoot = createRoot(modal.contentContainer);
+            modal.reactRoot.render(content);
         } else {
             // HtmlObject
             modal.htmlRender = new HtmlRender(modal.contentContainer);

@@ -52,7 +52,7 @@ import {
     generateSecureToken,
     calculateHash,
 } from "../../utils/image/imageValidation";
-import { processImage } from "../../utils/image/imageCompression";
+import { processImage, resizeAndCompressImage } from "../../utils/image/imageCompression";
 
 /**
  * Configure multer for memory storage (no disk writes)
@@ -131,7 +131,8 @@ export class RequestImage {
          *
          * Request: multipart/form-data
          * - file: Image file (required)
-         * - workspace: Optional workspace ID
+         * - name: User-defined name for the image (required)
+         * - workspace: Workspace ID (required)
          * - metadata: Optional JSON metadata
          *
          * Response: { token, metadata }
@@ -186,6 +187,15 @@ export class RequestImage {
                     });
                 }
 
+                // Name is required
+                const name = req.body.name;
+                if (!name || typeof name !== "string" || name.trim() === "") {
+                    return res.status(400).json({
+                        error: "Image name is required",
+                        code: "NAME_REQUIRED",
+                    });
+                }
+
                 // Parse optional metadata
                 let customMetadata: Record<string, string> | undefined;
                 if (req.body.metadata) {
@@ -222,6 +232,7 @@ export class RequestImage {
                     return res.status(200).json({
                         token: existingImage.token,
                         metadata: {
+                            name: existingImage.name,
                             originalName: existingImage.originalName,
                             mimeType: existingImage.mimeType,
                             size: existingImage.size,
@@ -248,6 +259,7 @@ export class RequestImage {
                     token,
                     data: processed.buffer.toString("base64"), // Store as base64
                     mimeType,
+                    name: name.trim(),
                     originalName: safeFilename,
                     size: processed.compressedSize,
                     width: processed.metadata.width,
@@ -267,6 +279,7 @@ export class RequestImage {
                 const response: api_image_upload_response = {
                     token,
                     metadata: {
+                        name: name.trim(),
                         originalName: safeFilename,
                         mimeType,
                         size: processed.compressedSize,
@@ -277,7 +290,7 @@ export class RequestImage {
                     },
                 };
 
-                console.log(`✅ Image uploaded: ${token} (${safeFilename}, ${processed.compressedSize} bytes, ${processed.compressed ? "compressed" : "original"}) by user ${userId} in workspace ${workspace}`);
+                console.log(`✅ Image uploaded: ${token} (${name.trim()}, ${safeFilename}, ${processed.compressedSize} bytes, ${processed.compressed ? "compressed" : "original"}) by user ${userId} in workspace ${workspace}`);
 
                 res.status(201).json(response);
             } catch (error) {
@@ -566,6 +579,7 @@ export class RequestImage {
                 // Return metadata
                 const metadata = {
                     token: imageDoc.token,
+                    name: imageDoc.name,
                     originalName: imageDoc.originalName,
                     mimeType: imageDoc.mimeType,
                     size: imageDoc.size,
@@ -594,15 +608,18 @@ export class RequestImage {
          *
          * SECURITY:
          * - Requires authentication (protected by auth middleware)
-         * - Returns only metadata, not image data
+         * - Returns metadata by default, or compressed images with maxSize parameter
          *
          * Query parameters:
          * - userId: Filter by user ID (optional)
          * - workspace: Filter by workspace (optional)
          * - limit: Maximum number of results (default: 100, max: 500)
          * - offset: Number of results to skip (default: 0)
+         * - maxSize: If specified, returns compressed images with longest dimension <= maxSize (optional)
+         *   Useful for image galleries/thumbnails. Returns base64 data in response.
+         * - quality: Compression quality 0-100 (default: 85, only used with maxSize)
          *
-         * Response: { images: ImageMetadata[], total: number }
+         * Response: { images: ImageMetadata[] | ImageWithData[], total: number }
          */
         app.get("/api/image/list", async (req: Request, res: Response) => {
             try {
@@ -614,6 +631,8 @@ export class RequestImage {
                 const filterWorkspace = req.query?.workspace as string | undefined;
                 const limit = Math.min(parseInt(req.query?.limit as string) || 100, 500);
                 const offset = parseInt(req.query?.offset as string) || 0;
+                const maxSize = req.query?.maxSize ? parseInt(req.query.maxSize as string) : undefined;
+                const quality = req.query?.quality ? Math.min(Math.max(parseInt(req.query.quality as string), 1), 100) : 85;
 
                 // Build filter conditions
                 const filters: string[] = [];
@@ -637,6 +656,9 @@ export class RequestImage {
 
                 const filterClause = filters.join("\n                    ");
 
+                // Determine if we need to include image data (for compression)
+                const includeData = maxSize !== undefined;
+
                 // Query images with filters
                 const queryStr = `
                     FOR doc IN nodius_images
@@ -645,6 +667,7 @@ export class RequestImage {
                     LIMIT @offset, @limit
                     RETURN {
                         token: doc.token,
+                        name: doc.name,
                         originalName: doc.originalName,
                         mimeType: doc.mimeType,
                         size: doc.size,
@@ -654,12 +677,58 @@ export class RequestImage {
                         uploadedAt: doc.uploadedAt,
                         userId: doc.userId,
                         workspace: doc.workspace,
-                        metadata: doc.metadata
+                        metadata: doc.metadata${includeData ? ',\n                        data: doc.data' : ''}
                     }
                 `;
 
                 const cursor = await db.query(queryStr, bindVars);
-                const images = await cursor.all();
+                let images = await cursor.all();
+
+                // If maxSize is specified, compress images
+                if (maxSize !== undefined && maxSize > 0) {
+                    images = await Promise.all(
+                        images.map(async (image: any) => {
+                            try {
+                                // Decode base64 data
+                                const originalBuffer = Buffer.from(image.data, 'base64');
+
+                                // Resize and compress
+                                const compressed = await resizeAndCompressImage(
+                                    originalBuffer,
+                                    image.mimeType,
+                                    maxSize,
+                                    quality
+                                );
+
+                                // Return image with compressed data
+                                return {
+                                    token: image.token,
+                                    name: image.name,
+                                    originalName: image.originalName,
+                                    mimeType: image.mimeType,
+                                    size: image.size,
+                                    width: image.width,
+                                    height: image.height,
+                                    compressed: image.compressed,
+                                    uploadedAt: image.uploadedAt,
+                                    userId: image.userId,
+                                    workspace: image.workspace,
+                                    metadata: image.metadata,
+                                    // Compressed image data
+                                    data: compressed.buffer.toString('base64'),
+                                    thumbnailWidth: compressed.width,
+                                    thumbnailHeight: compressed.height,
+                                    thumbnailSize: compressed.size,
+                                };
+                            } catch (error) {
+                                console.error(`Failed to compress image ${image.token}:`, error);
+                                // Return without data if compression fails
+                                const { data, ...imageWithoutData } = image;
+                                return imageWithoutData;
+                            }
+                        })
+                    );
+                }
 
                 // Count total matching images
                 const countQueryStr = `
@@ -676,10 +745,11 @@ export class RequestImage {
                     images,
                     total,
                     limit,
-                    offset
+                    offset,
+                    ...(maxSize !== undefined && { compressed: true, maxSize, quality })
                 });
 
-                console.log(`✅ Listed ${images.length} images (total: ${total}, filters: ${filterUserId ? 'userId' : ''}${filterWorkspace ? ' workspace' : ''})`);
+                console.log(`✅ Listed ${images.length} images (total: ${total}, filters: ${filterUserId ? 'userId' : ''}${filterWorkspace ? ' workspace' : ''}${maxSize ? `, maxSize: ${maxSize}` : ''})`);
             } catch (error) {
                 console.error("❌ Image list retrieval failed:", error);
                 res.status(500).json({

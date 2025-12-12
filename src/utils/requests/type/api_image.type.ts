@@ -31,6 +31,8 @@ export type ImageMimeType =
 export interface api_image_upload {
     /** Image file (multipart upload) */
     file: Buffer;
+    /** User-defined name for the image (required) */
+    name: string;
     /** Original filename for reference */
     filename: string;
     /** Image MIME type */
@@ -49,6 +51,8 @@ export interface api_image_upload_response {
     token: string;
     /** Image metadata */
     metadata: {
+        /** User-defined name for the image */
+        name: string;
         /** Original filename */
         originalName: string;
         /** Final MIME type (may differ if converted) */
@@ -86,6 +90,8 @@ export interface ImageDocument {
     data: string;
     /** MIME type */
     mimeType: ImageMimeType;
+    /** User-defined name for the image (required) */
+    name: string;
     /** Original filename */
     originalName: string;
     /** File size in bytes */

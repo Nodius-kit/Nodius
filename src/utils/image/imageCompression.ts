@@ -211,3 +211,104 @@ export async function processImage(
     // Then compress
     return compressImage(buffer, mimeType, config);
 }
+
+/**
+ * Resize and compress image to fit within maxSize (longest dimension)
+ * Maintains aspect ratio and applies compression
+ * Useful for generating thumbnails for image galleries
+ */
+export async function resizeAndCompressImage(
+    buffer: Buffer,
+    mimeType: ImageMimeType,
+    maxSize: number,
+    quality: number = 85
+): Promise<{ buffer: Buffer; width: number; height: number; size: number }> {
+    try {
+        let image = sharp(buffer);
+        const metadata = await image.metadata();
+
+        if (!metadata.width || !metadata.height) {
+            throw new ImageValidationError(
+                "Could not extract image dimensions",
+                "METADATA_EXTRACTION_FAILED"
+            );
+        }
+
+        // Calculate new dimensions maintaining aspect ratio
+        let newWidth = metadata.width;
+        let newHeight = metadata.height;
+
+        if (metadata.width > maxSize || metadata.height > maxSize) {
+            if (metadata.width > metadata.height) {
+                newWidth = maxSize;
+                newHeight = Math.round((metadata.height * maxSize) / metadata.width);
+            } else {
+                newHeight = maxSize;
+                newWidth = Math.round((metadata.width * maxSize) / metadata.height);
+            }
+        }
+
+        // Resize image
+        image = image.resize(newWidth, newHeight, {
+            fit: 'inside',
+            withoutEnlargement: true, // Don't upscale if image is smaller
+        });
+
+        // Apply format-specific compression
+        let processedBuffer: Buffer;
+        switch (mimeType) {
+            case "image/jpeg":
+                processedBuffer = await image
+                    .jpeg({
+                        quality,
+                        progressive: true,
+                        mozjpeg: true,
+                    })
+                    .toBuffer();
+                break;
+
+            case "image/png":
+                processedBuffer = await image
+                    .png({
+                        compressionLevel: 9,
+                        palette: true,
+                        quality,
+                    })
+                    .toBuffer();
+                break;
+
+            case "image/webp":
+                processedBuffer = await image
+                    .webp({
+                        quality,
+                        effort: 6,
+                    })
+                    .toBuffer();
+                break;
+
+            case "image/gif":
+                // For GIF, just resize without format-specific options
+                processedBuffer = await image.toBuffer();
+                break;
+
+            default:
+                processedBuffer = await image.toBuffer();
+        }
+
+        return {
+            buffer: processedBuffer,
+            width: newWidth,
+            height: newHeight,
+            size: processedBuffer.length,
+        };
+    } catch (error) {
+        if (error instanceof ImageValidationError) {
+            throw error;
+        }
+        throw new ImageValidationError(
+            `Failed to resize and compress image: ${error instanceof Error ? error.message : String(error)}`,
+            "RESIZE_FAILED",
+            { originalError: error }
+        );
+    }
+}

@@ -22,8 +22,9 @@
  * ```typescript
  * import { uploadImage, getImageUrl, listImages } from './utils/imageApi';
  *
- * // Upload image (workspace required)
+ * // Upload image (name and workspace required)
  * const { token } = await uploadImage(file, {
+ *   name: 'My Image',
  *   workspace: 'my-workspace',
  *   onProgress: (percent) => console.log(`${percent}%`)
  * });
@@ -34,8 +35,11 @@
  * // Display image from specific workspace
  * <img src={getImageUrl(token, { workspace: 'my-workspace' })} alt="Shared" />
  *
- * // List images by workspace
- * const { images } = await listImages({ workspace: 'my-workspace' });
+ * // List images by workspace with thumbnails
+ * const { images } = await listImages({
+ *   workspace: 'my-workspace',
+ *   maxSize: 200 // Get 200px thumbnails
+ * });
  * ```
  */
 
@@ -45,6 +49,8 @@ import { ImageMimeType } from "../../utils/requests/type/api_image.type";
  * Image upload options
  */
 export interface ImageUploadOptions {
+    /** User-defined name for the image (required) */
+    name: string;
     /** Workspace identifier (required) */
     workspace: string;
     /** Optional custom metadata */
@@ -65,6 +71,7 @@ export interface ImageUploadResult {
     token: string;
     /** Image metadata */
     metadata: {
+        name: string;
         originalName: string;
         mimeType: ImageMimeType;
         size: number;
@@ -83,6 +90,7 @@ export interface ImageUploadResult {
 export interface ImageMetadataResponse {
     metadata: {
         token: string;
+        name: string;
         originalName: string;
         mimeType: ImageMimeType;
         size: number;
@@ -146,12 +154,13 @@ function getJwtToken(customToken?: string): string {
  * Upload an image to the server
  *
  * @param file - File or Blob to upload
- * @param options - Upload options (workspace is required)
+ * @param options - Upload options (name and workspace are required)
  * @returns Upload result with token and metadata
  *
  * @example
- * // Upload with workspace
+ * // Upload with name and workspace
  * const result = await uploadImage(file, {
+ *   name: 'Profile Photo',
  *   workspace: 'profile-photos'
  * });
  * console.log('Token:', result.token);
@@ -159,6 +168,7 @@ function getJwtToken(customToken?: string): string {
  * @example
  * // Upload with full options
  * const result = await uploadImage(file, {
+ *   name: 'User Avatar',
  *   workspace: 'profile-photos',
  *   metadata: { purpose: 'avatar' },
  *   onProgress: (percent) => setProgress(percent)
@@ -167,7 +177,10 @@ function getJwtToken(customToken?: string): string {
  * @example
  * // Handle errors
  * try {
- *   const result = await uploadImage(file, { workspace: 'gallery' });
+ *   const result = await uploadImage(file, {
+ *     name: 'Gallery Image',
+ *     workspace: 'gallery'
+ *   });
  * } catch (error) {
  *   if (error instanceof ImageApiException) {
  *     console.error(`Error ${error.code}: ${error.message}`);
@@ -184,10 +197,8 @@ export async function uploadImage(
     // Prepare form data
     const formData = new FormData();
     formData.append("file", file);
-
-    if (options.workspace) {
-        formData.append("workspace", options.workspace);
-    }
+    formData.append("name", options.name);
+    formData.append("workspace", options.workspace);
 
     if (options.metadata) {
         formData.append("metadata", JSON.stringify(options.metadata));
@@ -592,6 +603,10 @@ export interface ListImagesOptions {
     limit?: number;
     /** Number of results to skip (default: 0) */
     offset?: number;
+    /** Maximum size for thumbnail generation (longest dimension, optional) */
+    maxSize?: number;
+    /** Compression quality 0-100 (default: 85, only used with maxSize) */
+    quality?: number;
     /** Custom API URL (defaults to VITE_API_URL) */
     apiUrl?: string;
     /** Custom JWT token (defaults to localStorage) */
@@ -603,6 +618,7 @@ export interface ListImagesOptions {
  */
 export interface ImageListItem {
     token: string;
+    name: string;
     originalName: string;
     mimeType: ImageMimeType;
     size: number;
@@ -613,6 +629,14 @@ export interface ImageListItem {
     userId: string;
     workspace: string;
     metadata?: Record<string, string>;
+    /** Base64 image data (only present when maxSize is specified) */
+    data?: string;
+    /** Thumbnail width (only present when maxSize is specified) */
+    thumbnailWidth?: number;
+    /** Thumbnail height (only present when maxSize is specified) */
+    thumbnailHeight?: number;
+    /** Thumbnail size in bytes (only present when maxSize is specified) */
+    thumbnailSize?: number;
 }
 
 /**
@@ -623,13 +647,19 @@ export interface ImageListResponse {
     total: number;
     limit: number;
     offset: number;
+    /** Whether images were compressed (only present when maxSize is specified) */
+    compressed?: boolean;
+    /** Maximum size used for compression (only present when maxSize is specified) */
+    maxSize?: number;
+    /** Quality used for compression (only present when maxSize is specified) */
+    quality?: number;
 }
 
 /**
  * List images filtered by userId and/or workspace
  *
  * @param options - Filter and pagination options
- * @returns List of images with metadata
+ * @returns List of images with metadata (and optionally compressed thumbnail data)
  *
  * @example
  * // List all images for current user
@@ -646,6 +676,28 @@ export interface ImageListResponse {
  *   workspace: 'gallery',
  *   limit: 50,
  *   offset: 0
+ * });
+ *
+ * @example
+ * // List images with thumbnails (200px max dimension)
+ * const result = await listImages({
+ *   workspace: 'gallery',
+ *   maxSize: 200
+ * });
+ * // Each image will have data, thumbnailWidth, thumbnailHeight, thumbnailSize
+ * result.images.forEach(img => {
+ *   if (img.data) {
+ *     const imgSrc = `data:${img.mimeType};base64,${img.data}`;
+ *     console.log(`${img.name}: ${img.thumbnailWidth}x${img.thumbnailHeight}`);
+ *   }
+ * });
+ *
+ * @example
+ * // List images with custom quality thumbnails
+ * const result = await listImages({
+ *   workspace: 'gallery',
+ *   maxSize: 300,
+ *   quality: 70
  * });
  *
  * @example
@@ -675,6 +727,14 @@ export async function listImages(
 
     if (options.offset !== undefined) {
         params.append("offset", options.offset.toString());
+    }
+
+    if (options.maxSize !== undefined) {
+        params.append("maxSize", options.maxSize.toString());
+    }
+
+    if (options.quality !== undefined) {
+        params.append("quality", options.quality.toString());
     }
 
     const queryString = params.toString();

@@ -5,6 +5,7 @@ import {ThemeContext} from "../../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {Image, FileText, FolderOpen} from "lucide-react";
+import {openImageManager} from "../../../../utils/imageManagerHelper";
 
 export interface ImageEditorProps {
     object: CurrentEditObject;
@@ -115,10 +116,17 @@ export const ImageEditor = memo(({
         await onUpdate(newInstruction.instruction);
     };
 
-    const openImageManager = useCallback(() => {
-        // TODO: Open image manager modal
-        console.log("Image manager will be implemented later");
-    }, []);
+    const handleOpenImageManager = useCallback(async () => {
+        await openImageManager({
+            workspace: 'root', // You can make this configurable based on your needs
+            nodeId: object.object.identifier || 'image-editor',
+            mode: 'select',
+            onSelect: async (imageUrl: string, imageToken: string, imageName: string) => {
+                // Update the image src when user selects an image
+                await updateSrc(imageUrl);
+            }
+        });
+    }, [object.object.identifier, updateSrc]);
 
     if (object.object.type !== "image") return null;
 
@@ -187,8 +195,8 @@ export const ImageEditor = memo(({
                     />
                     <button
                         className={browseButtonClass}
-                        onClick={openImageManager}
-                        title="Browse stored images (coming soon)"
+                        onClick={handleOpenImageManager}
+                        title="Browse and manage stored images"
                     >
                         <FolderOpen height={18} width={18} />
                         Browse

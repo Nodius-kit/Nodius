@@ -7,9 +7,10 @@
  * in various React components and scenarios.
  *
  * IMPORTANT CHANGES:
- * - Upload now requires 'workspace' parameter
+ * - Upload now requires 'name' and 'workspace' parameters
  * - Retrieval requires userId match OR workspace match
  * - All endpoints require authentication (JWT)
+ * - List endpoint supports optional maxSize and quality parameters for thumbnails
  */
 
 import React, { useState, useRef, ChangeEvent, DragEvent } from "react";
@@ -45,8 +46,9 @@ export function SimpleImageUpload() {
         setError("");
 
         try {
-            // Upload image (workspace is required)
+            // Upload image (name and workspace are required)
             const result = await uploadImage(file, {
+                name: file.name,
                 workspace: "user-uploads",
             });
             setImageToken(result.token);
@@ -97,6 +99,7 @@ export function ImageUploadWithProgress() {
 
         try {
             const result = await uploadImage(file, {
+                name: file.name,
                 workspace: "user-uploads",
                 metadata: {
                     uploadedBy: "user123",
@@ -171,8 +174,9 @@ export function DragDropImageUpload() {
                 allowedTypes: ["image/jpeg", "image/png", "image/webp"],
             });
 
-            // Upload (workspace is required)
+            // Upload (name and workspace are required)
             const result = await uploadImage(file, {
+                name: file.name,
                 workspace: "drag-drop-uploads",
             });
             setImageToken(result.token);
@@ -229,6 +233,7 @@ export function ImageGalleryManager() {
 
         try {
             const result = await uploadImage(file, {
+                name: file.name,
                 workspace: "gallery",
             });
 
@@ -237,7 +242,7 @@ export function ImageGalleryManager() {
                 ...prev,
                 {
                     token: result.token,
-                    name: result.metadata.originalName,
+                    name: result.metadata.name,
                     size: result.metadata.size,
                     width: result.metadata.width,
                     height: result.metadata.height,
@@ -326,6 +331,7 @@ export function ProfilePhotoUpload({ userId }: { userId: string }) {
 
             // Upload with metadata
             const result = await uploadImage(file, {
+                name: `${userId}-avatar`,
                 workspace: "profile-photos",
                 metadata: {
                     userId,
@@ -477,6 +483,7 @@ export function MultipleFileUpload() {
     const uploadFile = async (upload: UploadItem) => {
         try {
             const result = await uploadImage(upload.file, {
+                name: upload.file.name,
                 workspace: "batch-upload",
                 onProgress: (percent) => {
                     setUploads((prev) =>
@@ -556,6 +563,7 @@ export function ClipboardImageUpload() {
                         setMessage("Uploading pasted image...");
                         try {
                             const result = await uploadImage(blob, {
+                                name: `clipboard-${Date.now()}`,
                                 workspace: "clipboard",
                                 metadata: { source: "clipboard" },
                             });
@@ -607,6 +615,7 @@ export function ImageUrlUpload() {
 
             // Upload to our server
             const result = await uploadImage(blob, {
+                name: `url-import-${Date.now()}`,
                 workspace: "url-imports",
                 metadata: { sourceUrl: url },
             });
