@@ -5,6 +5,11 @@
  *
  * This file contains complete examples of how to use the imageApi utility
  * in various React components and scenarios.
+ *
+ * IMPORTANT CHANGES:
+ * - Upload now requires 'workspace' parameter
+ * - Retrieval requires userId match OR workspace match
+ * - All endpoints require authentication (JWT)
  */
 
 import React, { useState, useRef, ChangeEvent, DragEvent } from "react";
@@ -16,6 +21,7 @@ import {
     triggerImageDownload,
     validateImageFile,
     formatBytes,
+    listImages,
     ImageApiException,
     ImageUploadResult,
 } from "./imageApi";
@@ -39,8 +45,10 @@ export function SimpleImageUpload() {
         setError("");
 
         try {
-            // Upload image
-            const result = await uploadImage(file);
+            // Upload image (workspace is required)
+            const result = await uploadImage(file, {
+                workspace: "user-uploads",
+            });
             setImageToken(result.token);
             console.log("Upload successful:", result);
         } catch (err) {
@@ -163,8 +171,10 @@ export function DragDropImageUpload() {
                 allowedTypes: ["image/jpeg", "image/png", "image/webp"],
             });
 
-            // Upload
-            const result = await uploadImage(file);
+            // Upload (workspace is required)
+            const result = await uploadImage(file, {
+                workspace: "drag-drop-uploads",
+            });
             setImageToken(result.token);
         } catch (err) {
             if (err instanceof ImageApiException) {
@@ -625,6 +635,199 @@ export function ImageUrlUpload() {
 
             {error && <p style={{ color: "red" }}>{error}</p>}
             {imageToken && <img src={getImageUrl(imageToken)} alt="Uploaded" />}
+        </div>
+    );
+}
+
+/* ============================================================================
+ * EXAMPLE 10: Workspace-Based Image Access
+ * ============================================================================
+ * Demonstrates accessing images via workspace parameter
+ */
+
+export function WorkspaceImageGallery({ workspaceName }: { workspaceName: string }) {
+    const [images, setImages] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [selectedToken, setSelectedToken] = useState<string>("");
+
+    const loadWorkspaceImages = async () => {
+        setLoading(true);
+        try {
+            // List all images in this workspace
+            const result = await listImages({
+                workspace: workspaceName,
+                limit: 50,
+            });
+            setImages(result.images);
+        } catch (err) {
+            console.error("Failed to load workspace images:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        loadWorkspaceImages();
+    }, [workspaceName]);
+
+    return (
+        <div>
+            <h2>Workspace Gallery: {workspaceName}</h2>
+            <p>Showing images from workspace (accessible via workspace parameter)</p>
+
+            {loading ? (
+                <p>Loading images...</p>
+            ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "10px" }}>
+                    {images.map((img) => (
+                        <div
+                            key={img.token}
+                            style={{
+                                border: selectedToken === img.token ? "2px solid blue" : "1px solid #ddd",
+                                padding: "10px",
+                                cursor: "pointer",
+                            }}
+                            onClick={() => setSelectedToken(img.token)}
+                        >
+                            {/* Access image via workspace parameter */}
+                            <img
+                                src={getImageUrl(img.token, { workspace: workspaceName })}
+                                alt={img.originalName}
+                                style={{ width: "100%", height: "100px", objectFit: "cover" }}
+                            />
+                            <p style={{ fontSize: "11px", margin: "5px 0" }}>{img.originalName}</p>
+                            <p style={{ fontSize: "10px", color: "#666" }}>
+                                {img.width}x{img.height}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {selectedToken && (
+                <div style={{ marginTop: "20px", padding: "15px", border: "1px solid #ddd" }}>
+                    <h3>Selected Image Details</h3>
+                    <p>Token: {selectedToken}</p>
+                    <button
+                        onClick={async () => {
+                            try {
+                                // Get metadata with workspace access
+                                const { metadata } = await getImageMetadata(selectedToken, {
+                                    workspace: workspaceName,
+                                });
+                                alert(`Metadata:\nSize: ${formatBytes(metadata.size)}\nUser: ${metadata.userId}\nWorkspace: ${metadata.workspace}`);
+                            } catch (err) {
+                                console.error("Failed to load metadata:", err);
+                            }
+                        }}
+                    >
+                        View Metadata
+                    </button>
+                    <button
+                        onClick={() => {
+                            // Download with workspace access
+                            const downloadUrl = getImageUrl(selectedToken, {
+                                workspace: workspaceName,
+                                download: true,
+                            });
+                            window.open(downloadUrl, "_blank");
+                        }}
+                    >
+                        Download
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ============================================================================
+ * EXAMPLE 11: User's Own Images vs Shared Workspace Images
+ * ============================================================================
+ * Demonstrates the difference between accessing own images and workspace images
+ */
+
+export function MyImagesVsSharedImages() {
+    const [myImages, setMyImages] = useState<any[]>([]);
+    const [sharedImages, setSharedImages] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const loadImages = async () => {
+        setLoading(true);
+        try {
+            // Get my own images (no filters = returns current user's images)
+            const myResult = await listImages({ limit: 10 });
+            setMyImages(myResult.images);
+
+            // Get images from a shared workspace
+            const sharedResult = await listImages({
+                workspace: "team-shared",
+                limit: 10,
+            });
+            setSharedImages(sharedResult.images);
+        } catch (err) {
+            console.error("Failed to load images:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        loadImages();
+    }, []);
+
+    return (
+        <div>
+            <h2>My Images vs Shared Images</h2>
+
+            <div style={{ marginBottom: "30px" }}>
+                <h3>My Images (I own these)</h3>
+                <p style={{ fontSize: "12px", color: "#666" }}>
+                    These images are accessed via userId match - no workspace parameter needed
+                </p>
+                {loading ? (
+                    <p>Loading...</p>
+                ) : (
+                    <div style={{ display: "flex", gap: "10px", overflowX: "auto" }}>
+                        {myImages.map((img) => (
+                            <div key={img.token} style={{ minWidth: "120px" }}>
+                                {/* Access own images without workspace parameter */}
+                                <img
+                                    src={getImageUrl(img.token)}
+                                    alt={img.originalName}
+                                    style={{ width: "120px", height: "120px", objectFit: "cover" }}
+                                />
+                                <p style={{ fontSize: "10px" }}>{img.originalName}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <h3>Shared Team Images</h3>
+                <p style={{ fontSize: "12px", color: "#666" }}>
+                    These images require workspace parameter to access (uploaded by other users)
+                </p>
+                {loading ? (
+                    <p>Loading...</p>
+                ) : (
+                    <div style={{ display: "flex", gap: "10px", overflowX: "auto" }}>
+                        {sharedImages.map((img) => (
+                            <div key={img.token} style={{ minWidth: "120px" }}>
+                                {/* Access workspace images WITH workspace parameter */}
+                                <img
+                                    src={getImageUrl(img.token, { workspace: "team-shared" })}
+                                    alt={img.originalName}
+                                    style={{ width: "120px", height: "120px", objectFit: "cover" }}
+                                />
+                                <p style={{ fontSize: "10px" }}>{img.originalName}</p>
+                                <p style={{ fontSize: "9px", color: "#999" }}>By: {img.userId}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }

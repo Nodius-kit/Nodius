@@ -32,7 +32,7 @@ import {
  */
 interface UseImageUploadState {
     /** Upload function */
-    upload: (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => Promise<void>;
+    upload: (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => Promise<void>;
     /** Whether upload is in progress */
     uploading: boolean;
     /** Upload progress (0-100) */
@@ -91,7 +91,7 @@ export function useImageUpload(): UseImageUploadState {
     const [errorCode, setErrorCode] = useState<string | null>(null);
 
     const upload = useCallback(
-        async (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => {
+        async (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => {
             // Reset state
             setUploading(true);
             setProgress(0);
@@ -179,7 +179,7 @@ interface UploadItem {
 
 interface UseMultipleImageUploadState {
     uploads: UploadItem[];
-    uploadFile: (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => void;
+    uploadFile: (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => void;
     removeUpload: (id: string) => void;
     clearAll: () => void;
 }
@@ -188,7 +188,7 @@ export function useMultipleImageUpload(): UseMultipleImageUploadState {
     const [uploads, setUploads] = useState<UploadItem[]>([]);
 
     const uploadFile = useCallback(
-        async (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => {
+        async (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => {
             const id = Math.random().toString(36).substr(2, 9);
             const fileName = file instanceof File ? file.name : "blob";
 
@@ -278,7 +278,7 @@ export function useMultipleImageUpload(): UseMultipleImageUploadState {
  * }
  */
 interface UseImageWithPreviewState {
-    upload: (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => Promise<void>;
+    upload: (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => Promise<void>;
     previewUrl: string | null;
     imageToken: string | null;
     uploading: boolean;
@@ -293,7 +293,7 @@ export function useImageWithPreview(): UseImageWithPreviewState {
     const imageUpload = useImageUpload();
 
     const upload = useCallback(
-        async (file: File | Blob, options?: Omit<ImageUploadOptions, "onProgress">) => {
+        async (file: File | Blob, options: Omit<ImageUploadOptions, "onProgress">) => {
             // Create preview URL
             const url = URL.createObjectURL(file);
             setPreviewUrl(url);

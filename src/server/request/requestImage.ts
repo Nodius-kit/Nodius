@@ -1,31 +1,36 @@
 /**
  * @file requestImage.ts
- * @description Secure image storage API with validation, compression, and token-based retrieval
+ * @description Secure image storage API with validation, compression, and access control
  * @module server/request
  *
  * Provides REST API endpoints for secure image management:
- * - POST /api/image/upload: Upload image with validation and compression
- * - GET /api/image/:token: Retrieve image by secure token
+ * - POST /api/image/upload: Upload image (workspace required, userId auto-extracted from JWT)
+ * - GET /api/image/:token: Retrieve image (requires userId match OR workspace match)
+ * - GET /api/image/metadata/:token: Get metadata (requires userId match OR workspace match)
+ * - GET /api/image/list: List images by userId/workspace
+ * - DELETE /api/image/:token: Delete image (requires ownership)
  *
  * SECURITY FEATURES:
+ * - All endpoints require authentication (JWT)
+ * - Access control: userId match OR workspace match for retrieval
+ * - Ownership verification for delete operations
  * - Magic byte verification (prevents MIME spoofing)
  * - File size limits (default 10MB)
  * - Dimension validation (max 4096x4096)
  * - Filename sanitization (prevents path traversal)
  * - Token-based access control (64 char random tokens)
- * - SHA-256 hash deduplication
+ * - SHA-256 hash deduplication (scoped by userId + workspace)
  * - XSS protection via proper Content-Type headers
  *
  * PERFORMANCE:
  * - Automatic compression (JPEG, PNG, WebP)
  * - Progressive JPEG encoding
  * - Base64 storage in ArangoDB
- * - Indexed token field for fast lookups
+ * - Indexed fields: token, hash, userId, workspace
  *
  * Database Collection:
  * - nodius_images: Stores image data with metadata
- * - Indexed on: token (unique, sparse)
- * - Indexed on: hash (for deduplication)
+ * - Indexed on: token (unique, sparse), hash, userId, workspace
  */
 
 import { HttpServer, Request, Response } from "../http/HttpServer";
@@ -93,6 +98,14 @@ export class RequestImage {
                 name: "idx_hash",
             });
 
+            // Index on userId for filtering by user (optional)
+            await image_collection.ensureIndex({
+                type: "persistent",
+                fields: ["userId"],
+                sparse: true,
+                name: "idx_userId",
+            });
+
             // Index on workspace for filtering (optional)
             await image_collection.ensureIndex({
                 type: "persistent",
@@ -155,8 +168,25 @@ export class RequestImage {
                 const claimedMimeType = file.mimetype;
                 const originalFilename = file.originalname;
 
-                // Parse optional fields
-                const workspace = req.body.workspace || undefined;
+                // Extract userId from authenticated user (set by auth middleware)
+                const userId = (req as any).user?.userId;
+                if (!userId) {
+                    return res.status(401).json({
+                        error: "User ID not found in authentication token",
+                        code: "NO_USER_ID",
+                    });
+                }
+
+                // Workspace is required
+                const workspace = req.body.workspace;
+                if (!workspace || typeof workspace !== "string" || workspace.trim() === "") {
+                    return res.status(400).json({
+                        error: "Workspace is required",
+                        code: "WORKSPACE_REQUIRED",
+                    });
+                }
+
+                // Parse optional metadata
                 let customMetadata: Record<string, string> | undefined;
                 if (req.body.metadata) {
                     try {
@@ -176,10 +206,12 @@ export class RequestImage {
                     DEFAULT_IMAGE_CONFIG
                 );
 
-                // 2. Check for duplicate by hash (deduplication)
+                // 2. Check for duplicate by hash within same userId and workspace (deduplication)
                 const duplicateQuery = aql`
                     FOR doc IN nodius_images
                     FILTER doc.hash == ${hash}
+                    FILTER doc.userId == ${userId}
+                    FILTER doc.workspace == ${workspace}
                     LIMIT 1
                     RETURN doc
                 `;
@@ -222,6 +254,7 @@ export class RequestImage {
                     height: processed.metadata.height,
                     compressed: processed.compressed,
                     uploadedAt: new Date().toISOString(),
+                    userId,
                     workspace,
                     metadata: customMetadata,
                     hash,
@@ -244,7 +277,7 @@ export class RequestImage {
                     },
                 };
 
-                console.log(`✅ Image uploaded: ${token} (${safeFilename}, ${processed.compressedSize} bytes, ${processed.compressed ? "compressed" : "original"})`);
+                console.log(`✅ Image uploaded: ${token} (${safeFilename}, ${processed.compressedSize} bytes, ${processed.compressed ? "compressed" : "original"}) by user ${userId} in workspace ${workspace}`);
 
                 res.status(201).json(response);
             } catch (error) {
@@ -281,7 +314,8 @@ export class RequestImage {
          * Retrieve an image by its secure token
          *
          * SECURITY:
-         * - Token-based access control
+         * - Requires authentication (protected by auth middleware)
+         * - Access control: Only accessible if userId matches OR workspace matches
          * - Proper Content-Type headers (prevents XSS)
          * - Content-Disposition for download option
          *
@@ -298,6 +332,15 @@ export class RequestImage {
                     return res.status(400).json({
                         error: "Invalid or missing token",
                         code: "INVALID_TOKEN",
+                    });
+                }
+
+                // Get authenticated user
+                const authenticatedUserId = (req as any).user?.userId;
+                if (!authenticatedUserId) {
+                    return res.status(401).json({
+                        error: "User ID not found in authentication token",
+                        code: "NO_USER_ID",
                     });
                 }
 
@@ -319,6 +362,22 @@ export class RequestImage {
                 }
 
                 const imageDoc = (await cursor.next()) as ImageDocument;
+
+                // Access control: Check if user has access via userId OR workspace match
+                const hasUserIdAccess = imageDoc.userId === authenticatedUserId;
+
+                // Check workspace access: user must provide the workspace in query param
+                const requestedWorkspace = req.query?.workspace as string | undefined;
+                const hasWorkspaceAccess = requestedWorkspace &&
+                    imageDoc.workspace === requestedWorkspace;
+
+                if (!hasUserIdAccess && !hasWorkspaceAccess) {
+                    return res.status(403).json({
+                        error: "Forbidden: You don't have access to this image",
+                        code: "FORBIDDEN",
+                        details: "Access requires matching userId or workspace parameter"
+                    });
+                }
 
                 // Decode base64 data
                 const imageBuffer = Buffer.from(imageDoc.data, "base64");
@@ -345,7 +404,7 @@ export class RequestImage {
                 // Send image data
                 res.status(200).send(imageBuffer);
 
-                console.log(`✅ Image retrieved: ${token} (${imageDoc.originalName})`);
+                console.log(`✅ Image retrieved: ${token} (${imageDoc.originalName}) by user ${authenticatedUserId}`);
             } catch (error) {
                 console.error("❌ Image retrieval failed:", error);
                 res.status(500).json({
@@ -361,6 +420,7 @@ export class RequestImage {
          *
          * SECURITY:
          * - Requires authentication (protected by auth middleware)
+         * - Verifies ownership: Only the user who uploaded can delete
          * - Token-based deletion
          *
          * Response: { success: true, deleted: { token, originalName } }
@@ -376,8 +436,38 @@ export class RequestImage {
                     });
                 }
 
-                // Query to find and delete
-                const query = aql`
+                // Get authenticated user
+                const authenticatedUserId = (req as any).user?.userId;
+
+                // First, find the image to check ownership
+                const findQuery = aql`
+                    FOR doc IN nodius_images
+                    FILTER doc.token == ${token}
+                    LIMIT 1
+                    RETURN doc
+                `;
+
+                const findCursor = await db.query(findQuery);
+
+                if (!(await findCursor.hasNext)) {
+                    return res.status(404).json({
+                        error: "Image not found",
+                        code: "NOT_FOUND",
+                    });
+                }
+
+                const imageDoc = (await findCursor.next()) as ImageDocument;
+
+                // Verify ownership: user can only delete their own images
+                if (imageDoc.userId && imageDoc.userId !== authenticatedUserId) {
+                    return res.status(403).json({
+                        error: "Forbidden: You can only delete your own images",
+                        code: "FORBIDDEN",
+                    });
+                }
+
+                // Delete the image
+                const deleteQuery = aql`
                     FOR doc IN nodius_images
                     FILTER doc.token == ${token}
                     LIMIT 1
@@ -385,18 +475,10 @@ export class RequestImage {
                     RETURN OLD
                 `;
 
-                const cursor = await db.query(query);
+                const deleteCursor = await db.query(deleteQuery);
+                const deletedDoc = (await deleteCursor.next()) as ImageDocument;
 
-                if (!(await cursor.hasNext)) {
-                    return res.status(404).json({
-                        error: "Image not found",
-                        code: "NOT_FOUND",
-                    });
-                }
-
-                const deletedDoc = (await cursor.next()) as ImageDocument;
-
-                console.log(`✅ Image deleted: ${token} (${deletedDoc.originalName})`);
+                console.log(`✅ Image deleted: ${token} (${deletedDoc.originalName}) by user ${authenticatedUserId}`);
 
                 res.status(200).json({
                     success: true,
@@ -418,6 +500,13 @@ export class RequestImage {
          * GET /api/image/metadata/:token
          * Get image metadata without downloading the image
          *
+         * SECURITY:
+         * - Requires authentication (protected by auth middleware)
+         * - Access control: Only accessible if userId matches OR workspace matches
+         *
+         * Query parameters:
+         * - workspace: Required for workspace-based access
+         *
          * Response: { metadata: ImageMetadata }
          */
         app.get("/api/image/metadata/:token", async (req: Request, res: Response) => {
@@ -431,22 +520,20 @@ export class RequestImage {
                     });
                 }
 
+                // Get authenticated user
+                const authenticatedUserId = (req as any).user?.userId;
+                if (!authenticatedUserId) {
+                    return res.status(401).json({
+                        error: "User ID not found in authentication token",
+                        code: "NO_USER_ID",
+                    });
+                }
+
                 const query = aql`
                     FOR doc IN nodius_images
                     FILTER doc.token == ${token}
                     LIMIT 1
-                    RETURN {
-                        token: doc.token,
-                        originalName: doc.originalName,
-                        mimeType: doc.mimeType,
-                        size: doc.size,
-                        width: doc.width,
-                        height: doc.height,
-                        compressed: doc.compressed,
-                        uploadedAt: doc.uploadedAt,
-                        workspace: doc.workspace,
-                        metadata: doc.metadata
-                    }
+                    RETURN doc
                 `;
 
                 const cursor = await db.query(query);
@@ -458,11 +545,143 @@ export class RequestImage {
                     });
                 }
 
-                const metadata = await cursor.next();
+                const imageDoc = (await cursor.next()) as ImageDocument;
+
+                // Access control: Check if user has access via userId OR workspace match
+                const hasUserIdAccess = imageDoc.userId === authenticatedUserId;
+
+                // Check workspace access: user must provide the workspace in query param
+                const requestedWorkspace = req.query?.workspace as string | undefined;
+                const hasWorkspaceAccess = requestedWorkspace &&
+                    imageDoc.workspace === requestedWorkspace;
+
+                if (!hasUserIdAccess && !hasWorkspaceAccess) {
+                    return res.status(403).json({
+                        error: "Forbidden: You don't have access to this image",
+                        code: "FORBIDDEN",
+                        details: "Access requires matching userId or workspace parameter"
+                    });
+                }
+
+                // Return metadata
+                const metadata = {
+                    token: imageDoc.token,
+                    originalName: imageDoc.originalName,
+                    mimeType: imageDoc.mimeType,
+                    size: imageDoc.size,
+                    width: imageDoc.width,
+                    height: imageDoc.height,
+                    compressed: imageDoc.compressed,
+                    uploadedAt: imageDoc.uploadedAt,
+                    userId: imageDoc.userId,
+                    workspace: imageDoc.workspace,
+                    metadata: imageDoc.metadata
+                };
 
                 res.status(200).json({ metadata });
             } catch (error) {
                 console.error("❌ Image metadata retrieval failed:", error);
+                res.status(500).json({
+                    error: "Internal server error",
+                    code: "INTERNAL_ERROR",
+                });
+            }
+        });
+
+        /**
+         * GET /api/image/list
+         * List images filtered by userId and/or workspace
+         *
+         * SECURITY:
+         * - Requires authentication (protected by auth middleware)
+         * - Returns only metadata, not image data
+         *
+         * Query parameters:
+         * - userId: Filter by user ID (optional)
+         * - workspace: Filter by workspace (optional)
+         * - limit: Maximum number of results (default: 100, max: 500)
+         * - offset: Number of results to skip (default: 0)
+         *
+         * Response: { images: ImageMetadata[], total: number }
+         */
+        app.get("/api/image/list", async (req: Request, res: Response) => {
+            try {
+                // Get authenticated user
+                const authenticatedUserId = (req as any).user?.userId;
+
+                // Parse query parameters
+                const filterUserId = req.query?.userId as string | undefined;
+                const filterWorkspace = req.query?.workspace as string | undefined;
+                const limit = Math.min(parseInt(req.query?.limit as string) || 100, 500);
+                const offset = parseInt(req.query?.offset as string) || 0;
+
+                // Build filter conditions
+                const filters: string[] = [];
+                const bindVars: Record<string, any> = { limit, offset };
+
+                if (filterUserId) {
+                    filters.push("FILTER doc.userId == @userId");
+                    bindVars.userId = filterUserId;
+                }
+
+                if (filterWorkspace) {
+                    filters.push("FILTER doc.workspace == @workspace");
+                    bindVars.workspace = filterWorkspace;
+                }
+
+                // If no filters provided, return images for the authenticated user
+                if (filters.length === 0 && authenticatedUserId) {
+                    filters.push("FILTER doc.userId == @userId");
+                    bindVars.userId = authenticatedUserId;
+                }
+
+                const filterClause = filters.join("\n                    ");
+
+                // Query images with filters
+                const queryStr = `
+                    FOR doc IN nodius_images
+                    ${filterClause}
+                    SORT doc.uploadedAt DESC
+                    LIMIT @offset, @limit
+                    RETURN {
+                        token: doc.token,
+                        originalName: doc.originalName,
+                        mimeType: doc.mimeType,
+                        size: doc.size,
+                        width: doc.width,
+                        height: doc.height,
+                        compressed: doc.compressed,
+                        uploadedAt: doc.uploadedAt,
+                        userId: doc.userId,
+                        workspace: doc.workspace,
+                        metadata: doc.metadata
+                    }
+                `;
+
+                const cursor = await db.query(queryStr, bindVars);
+                const images = await cursor.all();
+
+                // Count total matching images
+                const countQueryStr = `
+                    FOR doc IN nodius_images
+                    ${filterClause}
+                    COLLECT WITH COUNT INTO total
+                    RETURN total
+                `;
+
+                const countCursor = await db.query(countQueryStr, bindVars);
+                const total = (await countCursor.hasNext) ? await countCursor.next() : 0;
+
+                res.status(200).json({
+                    images,
+                    total,
+                    limit,
+                    offset
+                });
+
+                console.log(`✅ Listed ${images.length} images (total: ${total}, filters: ${filterUserId ? 'userId' : ''}${filterWorkspace ? ' workspace' : ''})`);
+            } catch (error) {
+                console.error("❌ Image list retrieval failed:", error);
                 res.status(500).json({
                     error: "Internal server error",
                     code: "INTERNAL_ERROR",

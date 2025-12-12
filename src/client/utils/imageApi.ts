@@ -4,24 +4,38 @@
  * @module client/utils
  *
  * Provides easy-to-use functions for interacting with the Image Storage API:
- * - uploadImage: Upload image with validation and progress tracking
- * - getImageUrl: Get URL for displaying images
- * - getImageMetadata: Fetch image metadata without downloading
- * - deleteImage: Delete image by token
+ * - uploadImage: Upload image with validation and progress tracking (workspace required)
+ * - getImageUrl: Get URL for displaying images (supports workspace-based access)
+ * - getImageMetadata: Fetch image metadata without downloading (supports workspace-based access)
+ * - listImages: List images filtered by userId and/or workspace
+ * - deleteImage: Delete image by token (ownership verified)
  * - downloadImage: Download image to user's device
+ *
+ * SECURITY:
+ * - All endpoints require authentication (JWT token)
+ * - Images are scoped by userId and workspace
+ * - Access control: userId match OR workspace match required for retrieval
+ * - Upload requires workspace parameter
+ * - Delete requires ownership (userId match)
  *
  * USAGE:
  * ```typescript
- * import { uploadImage, getImageUrl } from './utils/imageApi';
+ * import { uploadImage, getImageUrl, listImages } from './utils/imageApi';
  *
- * // Upload image
+ * // Upload image (workspace required)
  * const { token } = await uploadImage(file, {
  *   workspace: 'my-workspace',
  *   onProgress: (percent) => console.log(`${percent}%`)
  * });
  *
- * // Display image
+ * // Display your own image
  * <img src={getImageUrl(token)} alt="Uploaded" />
+ *
+ * // Display image from specific workspace
+ * <img src={getImageUrl(token, { workspace: 'my-workspace' })} alt="Shared" />
+ *
+ * // List images by workspace
+ * const { images } = await listImages({ workspace: 'my-workspace' });
  * ```
  */
 
@@ -31,8 +45,8 @@ import { ImageMimeType } from "../../utils/requests/type/api_image.type";
  * Image upload options
  */
 export interface ImageUploadOptions {
-    /** Optional workspace identifier */
-    workspace?: string;
+    /** Workspace identifier (required) */
+    workspace: string;
     /** Optional custom metadata */
     metadata?: Record<string, string>;
     /** Progress callback (0-100) */
@@ -76,7 +90,8 @@ export interface ImageMetadataResponse {
         height: number;
         compressed: boolean;
         uploadedAt: string;
-        workspace?: string;
+        userId: string;
+        workspace: string;
         metadata?: Record<string, string>;
     };
 }
@@ -131,26 +146,28 @@ function getJwtToken(customToken?: string): string {
  * Upload an image to the server
  *
  * @param file - File or Blob to upload
- * @param options - Upload options
+ * @param options - Upload options (workspace is required)
  * @returns Upload result with token and metadata
  *
  * @example
- * // Basic upload
- * const result = await uploadImage(file);
+ * // Upload with workspace
+ * const result = await uploadImage(file, {
+ *   workspace: 'profile-photos'
+ * });
  * console.log('Token:', result.token);
  *
  * @example
- * // Upload with options
+ * // Upload with full options
  * const result = await uploadImage(file, {
  *   workspace: 'profile-photos',
- *   metadata: { userId: '123', purpose: 'avatar' },
+ *   metadata: { purpose: 'avatar' },
  *   onProgress: (percent) => setProgress(percent)
  * });
  *
  * @example
  * // Handle errors
  * try {
- *   const result = await uploadImage(file);
+ *   const result = await uploadImage(file, { workspace: 'gallery' });
  * } catch (error) {
  *   if (error instanceof ImageApiException) {
  *     console.error(`Error ${error.code}: ${error.message}`);
@@ -159,7 +176,7 @@ function getJwtToken(customToken?: string): string {
  */
 export async function uploadImage(
     file: File | Blob,
-    options: ImageUploadOptions = {}
+    options: ImageUploadOptions
 ): Promise<ImageUploadResult> {
     const apiUrl = getApiUrl(options.apiUrl);
     const jwtToken = getJwtToken(options.jwtToken);
@@ -261,8 +278,12 @@ export async function uploadImage(
  * @returns Full URL to the image
  *
  * @example
- * // Simple usage
+ * // Display image (user owns it)
  * <img src={getImageUrl(token)} alt="Image" />
+ *
+ * @example
+ * // Display image from workspace
+ * <img src={getImageUrl(token, { workspace: 'profile-photos' })} alt="Image" />
  *
  * @example
  * // Force download
@@ -274,11 +295,21 @@ export async function uploadImage(
  */
 export function getImageUrl(
     token: string,
-    options: { download?: boolean; apiUrl?: string } = {}
+    options: { workspace?: string; download?: boolean; apiUrl?: string } = {}
 ): string {
     const apiUrl = getApiUrl(options.apiUrl);
-    const downloadParam = options.download ? "?download=true" : "";
-    return `${apiUrl}/api/image/${token}${downloadParam}`;
+    const params = new URLSearchParams();
+
+    if (options.download) {
+        params.append("download", "true");
+    }
+
+    if (options.workspace) {
+        params.append("workspace", options.workspace);
+    }
+
+    const queryString = params.toString();
+    return `${apiUrl}/api/image/${token}${queryString ? `?${queryString}` : ""}`;
 }
 
 /**
@@ -289,18 +320,39 @@ export function getImageUrl(
  * @returns Image metadata
  *
  * @example
+ * // Get metadata (user owns the image)
  * const { metadata } = await getImageMetadata(token);
  * console.log(`Size: ${metadata.width}x${metadata.height}`);
- * console.log(`File size: ${metadata.size} bytes`);
+ *
+ * @example
+ * // Get metadata from workspace
+ * const { metadata } = await getImageMetadata(token, {
+ *   workspace: 'profile-photos'
+ * });
  */
 export async function getImageMetadata(
     token: string,
-    options: { apiUrl?: string } = {}
+    options: { workspace?: string; apiUrl?: string; jwtToken?: string } = {}
 ): Promise<ImageMetadataResponse> {
     const apiUrl = getApiUrl(options.apiUrl);
+    const jwtToken = getJwtToken(options.jwtToken);
+
+    // Build query parameters
+    const params = new URLSearchParams();
+    if (options.workspace) {
+        params.append("workspace", options.workspace);
+    }
+
+    const queryString = params.toString();
+    const url = `${apiUrl}/api/image/metadata/${token}${queryString ? `?${queryString}` : ""}`;
 
     try {
-        const response = await fetch(`${apiUrl}/api/image/metadata/${token}`);
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${jwtToken}`,
+            },
+        });
 
         if (!response.ok) {
             const errorData: ImageApiError = await response.json();
@@ -526,6 +578,138 @@ export function validateImageFile(
     }
 
     return true;
+}
+
+/**
+ * Options for listing images
+ */
+export interface ListImagesOptions {
+    /** Filter by user ID (optional) */
+    userId?: string;
+    /** Filter by workspace (optional) */
+    workspace?: string;
+    /** Maximum number of results (default: 100, max: 500) */
+    limit?: number;
+    /** Number of results to skip (default: 0) */
+    offset?: number;
+    /** Custom API URL (defaults to VITE_API_URL) */
+    apiUrl?: string;
+    /** Custom JWT token (defaults to localStorage) */
+    jwtToken?: string;
+}
+
+/**
+ * Image list item
+ */
+export interface ImageListItem {
+    token: string;
+    originalName: string;
+    mimeType: ImageMimeType;
+    size: number;
+    width: number;
+    height: number;
+    compressed: boolean;
+    uploadedAt: string;
+    userId: string;
+    workspace: string;
+    metadata?: Record<string, string>;
+}
+
+/**
+ * Image list response
+ */
+export interface ImageListResponse {
+    images: ImageListItem[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+/**
+ * List images filtered by userId and/or workspace
+ *
+ * @param options - Filter and pagination options
+ * @returns List of images with metadata
+ *
+ * @example
+ * // List all images for current user
+ * const result = await listImages();
+ * console.log(`Found ${result.total} images`);
+ *
+ * @example
+ * // List images for specific workspace
+ * const result = await listImages({ workspace: 'profile-photos' });
+ *
+ * @example
+ * // List images with pagination
+ * const result = await listImages({
+ *   workspace: 'gallery',
+ *   limit: 50,
+ *   offset: 0
+ * });
+ *
+ * @example
+ * // List images for specific user
+ * const result = await listImages({ userId: 'user123' });
+ */
+export async function listImages(
+    options: ListImagesOptions = {}
+): Promise<ImageListResponse> {
+    const apiUrl = getApiUrl(options.apiUrl);
+    const jwtToken = getJwtToken(options.jwtToken);
+
+    // Build query parameters
+    const params = new URLSearchParams();
+
+    if (options.userId) {
+        params.append("userId", options.userId);
+    }
+
+    if (options.workspace) {
+        params.append("workspace", options.workspace);
+    }
+
+    if (options.limit !== undefined) {
+        params.append("limit", options.limit.toString());
+    }
+
+    if (options.offset !== undefined) {
+        params.append("offset", options.offset.toString());
+    }
+
+    const queryString = params.toString();
+    const url = `${apiUrl}/api/image/list${queryString ? `?${queryString}` : ""}`;
+
+    try {
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                Authorization: `Bearer ${jwtToken}`,
+            },
+        });
+
+        if (!response.ok) {
+            const errorData: ImageApiError = await response.json();
+            throw new ImageApiException(
+                errorData.error,
+                errorData.code,
+                errorData.details
+            );
+        }
+
+        const result: ImageListResponse = await response.json();
+        return result;
+    } catch (error) {
+        if (error instanceof ImageApiException) {
+            throw error;
+        }
+
+        throw new ImageApiException(
+            error instanceof Error ? error.message : "Failed to list images",
+            "LIST_FAILED",
+            { originalError: error }
+        );
+    }
 }
 
 /**

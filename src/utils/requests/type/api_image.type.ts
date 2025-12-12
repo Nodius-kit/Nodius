@@ -98,8 +98,10 @@ export interface ImageDocument {
     compressed: boolean;
     /** Upload timestamp (ISO string) */
     uploadedAt: string;
-    /** Optional workspace */
-    workspace?: string;
+    /** User ID of the uploader (from JWT, indexed, required) */
+    userId: string;
+    /** Workspace identifier (required, indexed) */
+    workspace: string;
     /** Optional custom metadata */
     metadata?: Record<string, string>;
     /** SHA-256 hash of original data (deduplication) */
