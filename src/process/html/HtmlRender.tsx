@@ -311,13 +311,9 @@ export class HtmlRender {
             applyCSSBlocks(element, object.css);
         }
 
-        if(object.domEvents) {
+        if(object.domEvents && this.workflowMode) {
 
             object.domEvents.forEach((event) => {
-
-                if(!this.workflowMode /*&& !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))*/) {
-                    return;
-                }
 
                 const caller = (evt: Event) => {
                     this.callDOMEvent(evt, storage, event.call);
@@ -351,7 +347,7 @@ export class HtmlRender {
             // Icon already created as SVG element, nothing more to do
         } else if (object.type === "link") {
             element.innerHTML = await this.parseContent(object.content.text[this.language], storage);
-            (element as HTMLAnchorElement).href = object.content.url;
+            (element as HTMLAnchorElement).href = this.workflowMode ? object.content.url : "#";
         } else if (object.type === "image") {
             (element as HTMLImageElement).alt = object.content[0];
             (element as HTMLImageElement).src = object.content[1];
@@ -521,11 +517,8 @@ export class HtmlRender {
         storage.domEvents.clear();
 
 
-        if (newObject.domEvents) {
+        if (newObject.domEvents && this.workflowMode) {
             newObject.domEvents.forEach(event => {
-                if(!this.workflowMode /*&& !HTMLWorkflowEvent.includes(event.name as (typeof HTMLWorkflowEvent[number]))*/) {
-                    return;
-                }
                 const caller = (evt: Event) => this.callDOMEvent(evt, storage, event.call);
                 element.addEventListener(event.name, caller);
                 const events = storage.domEvents.get(event.name) || [];
@@ -641,7 +634,7 @@ export class HtmlRender {
             const newText = await this.parseContent(newObject.content.text[this.language], storage);
             const oldText = await this.parseContent((oldObject.content as any).text[this.language], storage);
             const newUrl = newObject.content.url;
-            const oldUrl = (oldObject.content as any).url;
+            const oldUrl = this.workflowMode ? (oldObject.content as any).url : "#";
 
             // Three-way merge for link text content
             if (oldText !== newText) {
@@ -654,6 +647,7 @@ export class HtmlRender {
             }
 
             // Three-way merge for href attribute
+
             if (oldUrl !== newUrl) {
                 this.setAttributeInternal(element, 'href', newUrl);
                 storage.externalChanges.attributes.delete('href');
