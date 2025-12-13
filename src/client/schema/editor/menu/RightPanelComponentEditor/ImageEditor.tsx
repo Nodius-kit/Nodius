@@ -6,6 +6,7 @@ import {useDynamicClass} from "../../../../hooks/useDynamicClass";
 import {EditableDiv} from "../../../../component/form/EditableDiv";
 import {Image, FileText, FolderOpen} from "lucide-react";
 import {openImageManager} from "../../../../utils/imageManagerHelper";
+import {Button} from "../../../../component/form/Button";
 
 export interface ImageEditorProps {
     object: CurrentEditObject;
@@ -58,10 +59,17 @@ export const ImageEditor = memo(({
         & {
             display: flex;
             gap: 8px;
-            align-items: stretch;
+            align-items: center;
         }
         & > div:first-child {
             flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+        & > div:first-child > div {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     `);
 
@@ -77,7 +85,7 @@ export const ImageEditor = memo(({
         }
     `);
 
-    const browseButtonClass = useDynamicClass(`
+    /*const browseButtonClass = useDynamicClass(`
         & {
             display: flex;
             align-items: center;
@@ -102,7 +110,7 @@ export const ImageEditor = memo(({
         &:active {
             transform: translateY(0);
         }
-    `);
+    `);*/
 
     const updateAlt = async (newAlt: string) => {
         const newInstruction = new InstructionBuilder(object.instruction);
@@ -183,7 +191,6 @@ export const ImageEditor = memo(({
                         placeholder="Enter image URL or click Browse..."
                         onChange={updateSrc}
                         style={{
-                            width: "100%",
                             padding: "12px",
                             border: "1px solid var(--nodius-background-paper)",
                             borderRadius: "8px",
@@ -193,14 +200,14 @@ export const ImageEditor = memo(({
                             fontSize: "14px"
                         }}
                     />
-                    <button
-                        className={browseButtonClass}
+                    <Button
                         onClick={handleOpenImageManager}
+                        size={"small"}
+                        variant={"outlined"}
                         title="Browse and manage stored images"
                     >
                         <FolderOpen height={18} width={18} />
-                        Browse
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

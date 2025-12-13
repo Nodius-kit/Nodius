@@ -43,7 +43,5 @@ export class RequestAuth {
 
         // GET /api/auth/me - Get current user info
         app.get("/api/auth/me", authManager.meHandler());
-
-        console.log('✅ Auth endpoints registered: /api/auth/login, /api/auth/logout, /api/auth/refresh, /api/auth/me');
     };
 }

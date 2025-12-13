@@ -11,14 +11,14 @@
  * - Two modes: selection mode (for picking an image) and view-only mode
  */
 
-import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     uploadImage,
     listImages,
     deleteImage,
+    renameImage,
     getImageUrl,
     ImageListItem,
-    ImageApiException,
     formatBytes
 } from '../utils/imageApi';
 import {
@@ -26,7 +26,6 @@ import {
     Upload,
     X,
     Search,
-    Filter,
     SortAsc,
     SortDesc,
     Calendar,
@@ -38,7 +37,6 @@ import {
     ChevronLeft,
     ChevronRight
 } from 'lucide-react';
-import { ThemeContext } from '../hooks/contexts/ThemeContext';
 import { useDynamicClass } from '../hooks/useDynamicClass';
 
 export interface ImageManagerModalProps {
@@ -61,8 +59,6 @@ export const ImageManagerModal = ({
     onSelect,
     onClose
 }:ImageManagerModalProps) => {
-    const Theme = useContext(ThemeContext);
-
     // State
     const [images, setImages] = useState<ImageListItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -73,6 +69,7 @@ export const ImageManagerModal = ({
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [editingImageId, setEditingImageId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
+    const [renameError, setRenameError] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [page, setPage] = useState(0);
     const [total, setTotal] = useState(0);
@@ -85,11 +82,12 @@ export const ImageManagerModal = ({
         setLoading(true);
         try {
             const result = await listImages({
-                workspace,
+                workspace: workspace,
                 maxSize: 200, // Get 200px thumbnails
                 quality: 85,
                 limit: pageSize,
-                offset: page * pageSize
+                offset: page * pageSize,
+
             });
             setImages(result.images);
             setTotal(result.total);
@@ -141,15 +139,33 @@ export const ImageManagerModal = ({
     const handleUpload = async (files: FileList | null) => {
         if (!files || files.length === 0) return;
 
+        // Prevent multiple uploads
+        if (uploading) {
+            console.warn('Upload already in progress, ignoring');
+            return;
+        }
+
         setUploading(true);
         const uploadPromises = Array.from(files).map(async (file) => {
             try {
+                // Validate file
+                if (!file || file.size === 0) {
+                    console.error(`Invalid file: ${file?.name || 'unknown'} (empty or null)`);
+                    return;
+                }
+
+                if (!file.type.startsWith('image/')) {
+                    console.error(`Invalid file type: ${file.name} (${file.type})`);
+                    return;
+                }
+
                 await uploadImage(file, {
                     name: file.name,
                     workspace
                 });
+
             } catch (error) {
-                console.error(`Failed to upload ${file.name}:`, error);
+                console.error(`❌ Failed to upload ${file.name}:`, error);
             }
         });
 
@@ -171,7 +187,12 @@ export const ImageManagerModal = ({
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-        handleUpload(e.dataTransfer.files);
+
+        // Only handle file drops, not dragged images from the modal
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            handleUpload(files);
+        }
     };
 
     // Delete image
@@ -191,18 +212,37 @@ export const ImageManagerModal = ({
     const startRename = (image: ImageListItem) => {
         setEditingImageId(image.token);
         setEditingName(image.name);
+        setRenameError(false);
     };
 
     const cancelRename = () => {
         setEditingImageId(null);
         setEditingName('');
+        setRenameError(false);
     };
 
     const saveRename = async (token: string) => {
-        // Note: This requires a rename endpoint which doesn't exist yet
-        // For now, we'll just cancel
-        console.log('Rename not implemented on server yet');
-        cancelRename();
+        if (!editingName || editingName.trim() === '') {
+            setRenameError(true);
+            return;
+        }
+
+        try {
+            await renameImage(token, editingName.trim());
+
+            // Update local state
+            setImages(images.map(img =>
+                img.token === token
+                    ? { ...img, name: editingName.trim() }
+                    : img
+            ));
+
+            cancelRename();
+            console.log(`✅ Image renamed to: ${editingName.trim()}`);
+        } catch (error) {
+            console.error('Failed to rename image:', error);
+            setRenameError(true);
+        }
     };
 
     // Select image
@@ -230,6 +270,7 @@ export const ImageManagerModal = ({
             gap: 12px;
             flex-wrap: wrap;
             align-items: center;
+            padding-top: 12px;
         }
     `);
 
@@ -288,7 +329,7 @@ export const ImageManagerModal = ({
             padding: 8px 16px;
             border: 1px solid var(--nodius-primary-main);
             border-radius: 8px;
-            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.1)};
+            background-color: color-mix(in srgb, var(--nodius-primary-main) 10%, transparent);
             color: var(--nodius-primary-main);
             cursor: pointer;
             transition: var(--nodius-transition-default);
@@ -296,7 +337,7 @@ export const ImageManagerModal = ({
             font-weight: 500;
         }
         &:hover {
-            background-color: ${Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.2)};
+            background-color: color-mix(in srgb, var(--nodius-primary-main) 20%, transparent);
         }
     `);
 
@@ -307,7 +348,7 @@ export const ImageManagerModal = ({
             border: 2px dashed ${isDragging ? 'var(--nodius-primary-main)' : 'var(--nodius-background-paper)'};
             border-radius: 8px;
             padding: 16px;
-            background-color: ${isDragging ? Theme.state.changeOpacity(Theme.state.primary[Theme.state.theme].main, 0.05) : 'transparent'};
+            background-color: ${isDragging ? 'color-mix(in srgb, var(--nodius-primary-main) 5%, transparent)' : 'transparent'};
             transition: var(--nodius-transition-default);
         }
     `);
@@ -322,7 +363,7 @@ export const ImageManagerModal = ({
 
     const imageCardClass = useDynamicClass(`
         & {
-            border: 2px solid ${selectedImage ? 'var(--nodius-primary-main)' : 'var(--nodius-background-paper)'};
+            border: 2px solid var(--nodius-background-paper);
             border-radius: 8px;
             padding: 8px;
             background-color: var(--nodius-background-default);
@@ -331,6 +372,9 @@ export const ImageManagerModal = ({
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+        &.selected {
+            border: 2px solid var(--nodius-primary-main);
         }
         &:hover {
             border-color: ${mode === 'select' ? 'var(--nodius-primary-main)' : 'var(--nodius-background-paper)'};
@@ -423,6 +467,112 @@ export const ImageManagerModal = ({
         }
         & p {
             margin: 0;
+        }
+    `);
+
+    const renameInputClass = useDynamicClass(`
+        & {
+            flex: 1;
+            min-width: 0;
+            max-width: 100%;
+            padding: 6px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 2px solid var(--nodius-primary-main);
+            border-radius: 6px;
+            background-color: var(--nodius-background-paper);
+            color: var(--nodius-text-primary);
+            outline: none;
+            transition: var(--nodius-transition-default);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--nodius-primary-main) 10%, transparent);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        &:focus {
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--nodius-primary-main) 20%, transparent);
+        }
+        &::selection {
+            background-color: color-mix(in srgb, var(--nodius-primary-main) 30%, transparent);
+        }
+        &.error {
+            border-color: var(--nodius-error-main, #f44336);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--nodius-error-main, #f44336) 10%, transparent);
+            animation: shake 0.3s ease-in-out;
+        }
+        &.error:focus {
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--nodius-error-main, #f44336) 20%, transparent);
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+    `);
+
+    const renameContainerClass = useDynamicClass(`
+        & {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+            padding: 6px;
+            background: linear-gradient(
+                135deg,
+                color-mix(in srgb, var(--nodius-primary-main) 8%, transparent),
+                color-mix(in srgb, var(--nodius-primary-main) 3%, transparent)
+            );
+            border-radius: 8px;
+            margin: -4px;
+            box-shadow:
+                0 2px 4px color-mix(in srgb, var(--nodius-primary-main) 10%, transparent),
+                inset 0 1px 2px rgba(255, 255, 255, 0.1);
+            min-width: 0;
+            width: 100%;
+        }
+    `);
+
+    const renameButtonClass = useDynamicClass(`
+        & {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            min-height: 28px;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: transparent;
+            flex-shrink: 0;
+        }
+        &.save {
+            color: var(--nodius-success-main, #4caf50);
+            border: 1px solid color-mix(in srgb, var(--nodius-success-main, #4caf50) 30%, transparent);
+        }
+        &.save:hover {
+            background-color: var(--nodius-success-main, #4caf50);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 2px 6px color-mix(in srgb, var(--nodius-success-main, #4caf50) 40%, transparent);
+        }
+        &.save:active {
+            transform: scale(0.95);
+        }
+        &.cancel {
+            color: var(--nodius-error-main, #f44336);
+            border: 1px solid color-mix(in srgb, var(--nodius-error-main, #4caf50) 30%, transparent);
+        }
+        &.cancel:hover {
+            background-color: var(--nodius-error-main, #f44336);
+            color: white;
+            transform: scale(1.05);
+            box-shadow: 0 2px 6px color-mix(in srgb, var(--nodius-error-main, #f44336) 40%, transparent);
+        }
+        &.cancel:active {
+            transform: scale(0.95);
         }
     `);
 
@@ -535,7 +685,7 @@ export const ImageManagerModal = ({
                         {filteredAndSortedImages.map((image) => (
                             <div
                                 key={image.token}
-                                className={imageCardClass}
+                                className={imageCardClass+" "+(selectedImage === image.token ? `selected` : '')}
                                 style={{
                                     borderColor: selectedImage === image.token ? 'var(--nodius-primary-main)' : undefined
                                 }}
@@ -552,37 +702,44 @@ export const ImageManagerModal = ({
                                         src={`data:${image.mimeType};base64,${image.data}`}
                                         alt={image.name}
                                         className={imageThumbClass}
+                                        draggable={false}
+                                        onDragStart={(e) => e.preventDefault()}
                                     />
                                 )}
 
                                 {/* Info */}
                                 <div className={imageInfoClass}>
                                     {editingImageId === image.token ? (
-                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                        <div className={renameContainerClass}>
                                             <input
                                                 type="text"
+                                                className={`${renameInputClass}${renameError ? ' error' : ''}`}
                                                 value={editingName}
-                                                onChange={(e) => setEditingName(e.target.value)}
+                                                onChange={(e) => {
+                                                    setEditingName(e.target.value);
+                                                    if (renameError) setRenameError(false);
+                                                }}
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') saveRename(image.token);
                                                     if (e.key === 'Escape') cancelRename();
                                                 }}
-                                                style={{
-                                                    flex: 1,
-                                                    padding: '2px 4px',
-                                                    fontSize: '12px',
-                                                    border: '1px solid var(--nodius-primary-main)',
-                                                    borderRadius: '4px',
-                                                    background: 'var(--nodius-background-default)',
-                                                    color: 'var(--nodius-text-primary)'
-                                                }}
+                                                placeholder={renameError ? "Name cannot be empty!" : "Enter image name..."}
                                                 autoFocus
+                                                onFocus={(e) => e.target.select()}
                                             />
-                                            <button onClick={() => saveRename(image.token)} title="Save">
-                                                <Check size={12} />
+                                            <button
+                                                className={`${renameButtonClass} save`}
+                                                onClick={() => saveRename(image.token)}
+                                                title="Save (Enter)"
+                                            >
+                                                <Check size={16} strokeWidth={2.5} />
                                             </button>
-                                            <button onClick={cancelRename} title="Cancel">
-                                                <X size={12} />
+                                            <button
+                                                className={`${renameButtonClass} cancel`}
+                                                onClick={cancelRename}
+                                                title="Cancel (Escape)"
+                                            >
+                                                <X size={16} strokeWidth={2.5} />
                                             </button>
                                         </div>
                                     ) : (
@@ -590,6 +747,9 @@ export const ImageManagerModal = ({
                                             {image.name}
                                         </div>
                                     )}
+                                    <div className="meta" title={`Workspace: ${image.workspace}`}>
+                                        📁 {image.workspace}
+                                    </div>
                                     <div className="meta">
                                         {formatBytes(image.size)} • {image.width}×{image.height}
                                     </div>

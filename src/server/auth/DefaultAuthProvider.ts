@@ -32,7 +32,8 @@
  *
  * Security Considerations:
  * - Passwords are never stored in plain text
- * - Tokens expire after configured duration (default: 24 hours)
+ * - Tokens expire after configured duration (default: 72 hours)
+ * - JWT secret is auto-generated and persisted in .jwt_secret file (git-ignored)
  * - JWT secret should be strong and kept secure
  * - Rate limiting should be applied to login endpoint
  */
@@ -44,6 +45,9 @@ import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import type {StringValue} from "ms";
 import {db} from "../server";
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
 
 /**
  * User document structure in ArangoDB
@@ -112,10 +116,41 @@ export class DefaultAuthProvider extends AuthProvider {
     }
 
     /**
-     * Generate a default JWT secret (not recommended for production)
+     * Generate or retrieve JWT secret from file
+     * - Checks if .jwt_secret file exists
+     * - If exists, reads and returns the stored secret
+     * - If not, generates a new secure secret, saves it to the file, and returns it
+     * - File is git-ignored for security
      */
     private generateDefaultSecret(): string {
-        return 'nodius-default-secret-' + Math.random().toString(36).substring(2, 15);
+        const secretFilePath = path.join(process.cwd(), '.jwt_secret');
+
+        try {
+            // Check if secret file exists
+            if (fs.existsSync(secretFilePath)) {
+                // Read existing secret
+                const secret = fs.readFileSync(secretFilePath, 'utf-8').trim();
+
+                if (secret && secret.length > 0) {
+                    console.log('✅ Loaded JWT secret from .jwt_secret file');
+                    return secret;
+                }
+            }
+
+            // Generate new cryptographically secure secret (64 bytes = 128 hex chars)
+            const newSecret = crypto.randomBytes(64).toString('hex');
+
+            // Save to file
+            fs.writeFileSync(secretFilePath, newSecret, 'utf-8');
+            console.log('✅ Generated new JWT secret and saved to .jwt_secret file');
+            console.log('⚠️  IMPORTANT: Keep this file secure and never commit it to version control');
+
+            return newSecret;
+        } catch (error) {
+            console.error('❌ Failed to read/write JWT secret file:', error);
+            console.warn('⚠️  Falling back to random secret (will change on restart)');
+            return 'nodius-fallback-secret-' + crypto.randomBytes(32).toString('hex');
+        }
     }
 
     /**

@@ -199,7 +199,6 @@ export class HttpServer {
 
             const routeParts = route.path.split('/');
             const pathParts = pathname.split('/');
-
             if (routeParts.length !== pathParts.length) continue;
 
             const params: Record<string, string> = {};
@@ -513,8 +512,12 @@ export class HttpServer {
                 req.params = routeMatch.params;
 
                 // Parse body for POST/PUT/PATCH requests
+                // IMPORTANT: Skip parsing for multipart/form-data (handled by multer)
                 if (['POST', 'PUT', 'PATCH'].includes(req.method || '')) {
-                    await this.parseBody(req);
+                    const contentType = req.headers['content-type'] || '';
+                    if (!contentType.includes('multipart/form-data')) {
+                        await this.parseBody(req);
+                    }
                 }
 
                 // Execute route-specific middlewares

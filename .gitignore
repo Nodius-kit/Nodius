@@ -142,3 +142,6 @@ vite.config.ts.timestamp-*
 
 # SSL certificates (auto-generated for development)
 certs/
+
+# JWT secret (auto-generated for authentication)
+.jwt_secret

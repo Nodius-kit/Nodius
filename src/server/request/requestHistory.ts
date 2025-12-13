@@ -175,7 +175,5 @@ export class RequestHistory {
                 });
             }
         });
-
-        console.log('✅ History endpoints registered: /api/history/list');
     };
 }

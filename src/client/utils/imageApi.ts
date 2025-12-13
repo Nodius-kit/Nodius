@@ -8,6 +8,7 @@
  * - getImageUrl: Get URL for displaying images (supports workspace-based access)
  * - getImageMetadata: Fetch image metadata without downloading (supports workspace-based access)
  * - listImages: List images filtered by userId and/or workspace
+ * - renameImage: Rename image by token (ownership verified)
  * - deleteImage: Delete image by token (ownership verified)
  * - downloadImage: Download image to user's device
  *
@@ -16,7 +17,7 @@
  * - Images are scoped by userId and workspace
  * - Access control: userId match OR workspace match required for retrieval
  * - Upload requires workspace parameter
- * - Delete requires ownership (userId match)
+ * - Rename/Delete requires ownership (userId match)
  *
  * USAGE:
  * ```typescript
@@ -140,7 +141,7 @@ function getApiUrl(customUrl?: string): string {
 function getJwtToken(customToken?: string): string {
     if (customToken) return customToken;
 
-    const token = localStorage.getItem("jwt_token") || localStorage.getItem("token");
+    const token = localStorage.getItem("authToken");
     if (!token) {
         throw new ImageApiException(
             "No JWT token found. Please login first.",
@@ -194,9 +195,33 @@ export async function uploadImage(
     const apiUrl = getApiUrl(options.apiUrl);
     const jwtToken = getJwtToken(options.jwtToken);
 
+    // Validate file before upload
+    if (!file) {
+        throw new ImageApiException(
+            "No file provided",
+            "NO_FILE"
+        );
+    }
+
+    if (file.size === 0) {
+        throw new ImageApiException(
+            "File is empty",
+            "EMPTY_FILE"
+        );
+    }
+
     // Prepare form data
     const formData = new FormData();
-    formData.append("file", file);
+
+    // If it's a Blob without a name, provide one
+    if (file instanceof File) {
+        formData.append("file", file, file.name);
+    } else {
+        // Blob: use provided name or default
+        const fileName = options.name || 'image.jpg';
+        formData.append("file", file, fileName);
+    }
+
     formData.append("name", options.name);
     formData.append("workspace", options.workspace);
 
@@ -277,7 +302,21 @@ export async function uploadImage(
         // Send request
         xhr.open("POST", `${apiUrl}/api/image/upload`);
         xhr.setRequestHeader("Authorization", `Bearer ${jwtToken}`);
+
+        // Add timeout
+        xhr.timeout = 60000; // 60 seconds timeout
+
+        xhr.addEventListener("timeout", () => {
+            reject(
+                new ImageApiException(
+                    "Upload timeout (60s)",
+                    "UPLOAD_TIMEOUT"
+                )
+            );
+        });
+
         xhr.send(formData);
+
     });
 }
 
@@ -434,6 +473,70 @@ export async function deleteImage(
         throw new ImageApiException(
             `Failed to delete image: ${error instanceof Error ? error.message : String(error)}`,
             "DELETE_FAILED",
+            { originalError: error }
+        );
+    }
+}
+
+/**
+ * Rename an image by its token
+ *
+ * @param token - Image token to rename
+ * @param newName - New name for the image
+ * @param options - Optional configuration
+ * @returns Rename confirmation
+ *
+ * @example
+ * await renameImage(token, 'New Image Name');
+ * console.log('Image renamed successfully');
+ *
+ * @example
+ * // Custom JWT token
+ * await renameImage(token, 'Updated Name', { jwtToken: customToken });
+ */
+export async function renameImage(
+    token: string,
+    newName: string,
+    options: { apiUrl?: string; jwtToken?: string } = {}
+): Promise<{ success: true; updated: { token: string; name: string } }> {
+    const apiUrl = getApiUrl(options.apiUrl);
+    const jwtToken = getJwtToken(options.jwtToken);
+
+    // Validate new name
+    if (!newName || newName.trim() === '') {
+        throw new ImageApiException(
+            "New name cannot be empty",
+            "EMPTY_NAME"
+        );
+    }
+
+    try {
+        const response = await fetch(`${apiUrl}/api/image/${token}`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${jwtToken}`,
+            },
+            body: JSON.stringify({ name: newName.trim() }),
+        });
+
+        if (!response.ok) {
+            const errorData: ImageApiError = await response.json();
+            throw new ImageApiException(
+                errorData.error,
+                errorData.code,
+                errorData.details
+            );
+        }
+
+        return await response.json();
+    } catch (error) {
+        if (error instanceof ImageApiException) {
+            throw error;
+        }
+        throw new ImageApiException(
+            `Failed to rename image: ${error instanceof Error ? error.message : String(error)}`,
+            "RENAME_FAILED",
             { originalError: error }
         );
     }
@@ -736,6 +839,7 @@ export async function listImages(
     if (options.quality !== undefined) {
         params.append("quality", options.quality.toString());
     }
+
 
     const queryString = params.toString();
     const url = `${apiUrl}/api/image/list${queryString ? `?${queryString}` : ""}`;
