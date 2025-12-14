@@ -112,6 +112,7 @@ export class AuthManager {
      * Authentication middleware for protecting API routes
      * Automatically protects all routes starting with /api/
      * Excludes /api/auth/* routes (login, etc.)
+     * Excludes GET /api/image/:token (public image retrieval)
      *
      * @returns Express-like middleware function
      */
@@ -127,6 +128,15 @@ export class AuthManager {
 
             // Allow /api/auth/* routes (login, register, etc.)
             if (pathname.startsWith('/api/auth/')) {
+                next();
+                return;
+            }
+
+            // Allow public GET access to /api/image/:token (but not /api/image/list or /api/image/metadata)
+            if (req.method === 'GET' &&
+                pathname.startsWith('/api/image/') &&
+                !pathname.startsWith('/api/image/list') &&
+                !pathname.startsWith('/api/image/metadata/')) {
                 next();
                 return;
             }

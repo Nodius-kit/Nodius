@@ -5,16 +5,17 @@
  *
  * Provides REST API endpoints for secure image management:
  * - POST /api/image/upload: Upload image (workspace required, userId auto-extracted from JWT)
- * - GET /api/image/list: List images by userId/workspace
+ * - GET /api/image/list: List images by userId/workspace (requires authentication)
  * - GET /api/image/metadata/:token: Get metadata (requires userId match OR workspace match)
- * - GET /api/image/:token: Retrieve image (requires userId match OR workspace match)
+ * - GET /api/image/:token: Retrieve image (PUBLIC - no authentication required, token only)
  * - PATCH /api/image/:token: Rename image (requires ownership)
  * - DELETE /api/image/:token: Delete image (requires ownership)
  *
  * SECURITY FEATURES:
- * - All endpoints require authentication (JWT)
- * - Access control: userId match OR workspace match for retrieval
- * - Ownership verification for delete operations
+ * - Most endpoints require authentication (JWT)
+ * - GET /api/image/:token is public (token-based access only)
+ * - Access control: userId match OR workspace match for metadata retrieval
+ * - Ownership verification for rename/delete operations
  * - Magic byte verification (prevents MIME spoofing)
  * - File size limits (default 10MB)
  * - Dimension validation (max 4096x4096)
@@ -603,11 +604,11 @@ export class RequestImage {
 
         /**
          * GET /api/image/:token
-         * Retrieve an image by its secure token
+         * Retrieve an image by its secure token (public endpoint)
          *
          * SECURITY:
-         * - Requires authentication (protected by auth middleware)
-         * - Access control: Only accessible if userId matches OR workspace matches
+         * - Public access (no authentication required)
+         * - Token-based access only
          * - Proper Content-Type headers (prevents XSS)
          * - Content-Disposition for download option
          *
@@ -624,15 +625,6 @@ export class RequestImage {
                     return res.status(400).json({
                         error: "Invalid or missing token",
                         code: "INVALID_TOKEN",
-                    });
-                }
-
-                // Get authenticated user
-                const authenticatedUserId = (req as any).user?.userId;
-                if (!authenticatedUserId) {
-                    return res.status(401).json({
-                        error: "User ID not found in authentication token",
-                        code: "NO_USER_ID",
                     });
                 }
 
@@ -654,22 +646,6 @@ export class RequestImage {
                 }
 
                 const imageDoc = (await cursor.next()) as ImageDocument;
-
-                // Access control: Check if user has access via userId OR workspace match
-                const hasUserIdAccess = imageDoc.userId === authenticatedUserId;
-
-                // Check workspace access: user must provide the workspace in query param
-                const requestedWorkspace = req.query?.workspace as string | undefined;
-                const hasWorkspaceAccess = requestedWorkspace &&
-                    imageDoc.workspace === requestedWorkspace;
-
-                if (!hasUserIdAccess && !hasWorkspaceAccess) {
-                    return res.status(403).json({
-                        error: "Forbidden: You don't have access to this image",
-                        code: "FORBIDDEN",
-                        details: "Access requires matching userId or workspace parameter"
-                    });
-                }
 
                 // Decode base64 data
                 const imageBuffer = Buffer.from(imageDoc.data, "base64");
