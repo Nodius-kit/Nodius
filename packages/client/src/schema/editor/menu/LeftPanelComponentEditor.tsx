@@ -1,0 +1,578 @@
+/**
+ * @file LeftPanelComponentEditor.tsx
+ * @description Component library panel for drag-and-drop HTML component building
+ * @module dashboard/Editor
+ *
+ * Provides a searchable library of reusable HTML components that can be:
+ * - Dragged onto the canvas to add to the current HTML structure
+ * - Organized by category (Most Used, Layout, etc.)
+ * - Filtered by search query
+ * - Collapsed/expanded by category
+ *
+ * Features:
+ * - Drag-and-drop component insertion
+ * - Live search filtering across all categories
+ * - Category collapse/expand state management
+ * - Visual feedback during drag operations
+ * - Icon-based component representation
+ * - Theme-aware styling
+ *
+ *
+ * The drag-and-drop system uses native HTML5 drag events and integrates with
+ * the instruction-based synchronization system for undo/redo support.
+ */
+
+import React, {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
+import * as Icons from "lucide-react";
+import {ChevronDown,  CloudAlert, Search, Box, Info} from "lucide-react";
+import {HtmlBuilderCategoryType, HtmlBuilderComponent, HtmlObject} from "@nodius/utils";
+import {deepCopy, disableTextSelection, enableTextSelection} from "@nodius/utils";
+import {InstructionBuilder, OpType} from "@nodius/utils";
+import {searchElementWithIdentifier, travelHtmlObject} from "@nodius/utils";
+import {useDynamicClass} from "../../../hooks/useDynamicClass";
+import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
+import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
+import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
+import {Input} from "../../../component/form/Input";
+import {Collapse} from "../../../component/animate/Collapse";
+
+interface LeftPaneComponentEditorProps {
+    componentsList: Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined,
+    onPickup?: (component:HtmlBuilderComponent) => Promise<boolean>,
+}
+
+export const LeftPanelComponentEditor = memo(({
+                                                  componentsList,
+                                                  onPickup
+                                              }:LeftPaneComponentEditorProps) => {
+
+    const IconDict = Object.fromEntries(Object.entries(Icons));
+    const [componentSearch, setComponentSearch] = useState<string>("");
+    const [components, setComponents] = useState<
+        Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>> | undefined
+    >(componentsList);
+
+
+
+    const [hideCategory, setHideCategory] = useState<string[]>([]);
+
+    const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
+    const Theme = useContext(ThemeContext);
+
+    useEffect(() => {
+        setComponents(componentsList);
+    }, [componentsList]);
+
+
+    const filteredComponents = useMemo(() => {
+        const search = componentSearch.trim().toLowerCase();
+        if(!components) {
+            return null;
+        }
+        return Object.fromEntries(
+            Object.entries(components)
+                .map(([category, items]) => {
+                    if (!items) return [category, []]; // skip null/undefined
+                    const filtered = items.filter((item) =>
+                        item.object.name.toLowerCase().includes(search)
+                    );
+                    return [category, filtered];
+                })
+                .filter(([_, items]) => items.length > 0) // remove empty arrays
+        ) as Partial<Record<HtmlBuilderCategoryType, HtmlBuilderComponent[]>>;
+    }, [components, componentSearch]);
+
+    const onMouseDown = (event:React.MouseEvent, component:HtmlBuilderComponent) => {
+
+        let haveMoved = false;
+
+        const container = document.querySelector("[data-builder-component='"+component.object.name+"']") as HTMLElement;
+        if(!container) return;
+        const containerSize = container.getBoundingClientRect();
+
+        const newObject = deepCopy(component.object);
+        travelHtmlObject(newObject, (obj) => {
+            obj.temporary = true;
+            return true;
+        });
+
+        const overlayContainer = document.createElement("div");
+        overlayContainer.style.position = "absolute";
+        overlayContainer.style.left = (event.clientX-(containerSize.width/2))+"px";
+        overlayContainer.style.top = (event.clientY+3)+"px";
+        overlayContainer.style.width = containerSize.width+"px";
+        overlayContainer.style.height = containerSize.height+"px";
+        overlayContainer.style.zIndex = "10000000";
+        overlayContainer.style.display = "flex";
+        overlayContainer.style.flexDirection = "column";
+        overlayContainer.style.justifyContent = "center";
+        overlayContainer.style.alignItems = "center";
+
+        const toCopyStyle = getComputedStyle(container);
+        overlayContainer.style.border = toCopyStyle.border;
+        overlayContainer.style.borderRadius = toCopyStyle.borderRadius;
+        overlayContainer.style.boxShadow = toCopyStyle.boxShadow;
+
+        overlayContainer.style.backgroundColor = "var(--nodius-background-default)";
+        overlayContainer.innerHTML = container.innerHTML;
+
+
+        disableTextSelection();
+
+        let lastX = event.clientX;
+        let velocityX = 0;
+        let velocityXAdd = 0;
+        let rotationAngle = 0;
+        let animationId = 0;
+        const whileSwingAnimation = () => {
+            let diff = 1;
+            if(velocityXAdd > diff) {
+                velocityXAdd -= diff;
+            } else if(velocityXAdd < -diff) {
+                velocityXAdd += diff;
+            } else {
+                velocityXAdd = 0;
+            }
+            velocityXAdd = Math.max(-45, Math.min(45, velocityXAdd));
+            rotationAngle = Math.max(-45, Math.min(45, velocityXAdd*0.4));
+            overlayContainer.style.transform = `rotate(${rotationAngle}deg)`;
+            animationId = requestAnimationFrame(whileSwingAnimation);
+        }
+
+        animationId = requestAnimationFrame(whileSwingAnimation);
+
+        let lastObjectHover:HtmlObject|undefined;
+        let lastInstruction:InstructionBuilder|undefined;
+
+        let lastMoveTime = 0;
+        const throttleDelay = 100;
+
+        let moveWorking = false;
+
+        const mouseMove = async (event: MouseEvent) => {
+            if(!haveMoved) {
+                document.body.appendChild(overlayContainer);
+                haveMoved = true;
+            }
+            overlayContainer.style.left = `${event.clientX - (containerSize.width / 2)}px`;
+            overlayContainer.style.top = `${event.clientY + 3}px`;
+
+            velocityX = event.clientX - lastX;
+            lastX = event.clientX;
+
+            velocityXAdd += velocityX;
+
+            if (!projectRef.current.state.editedHtml) return;
+
+            const node = projectRef.current.state.editedHtml.htmlRenderContext.retrieveNode();
+            if(!node) return;
+
+            if(moveWorking) return;
+
+            const now = Date.now();
+            if (now - lastMoveTime < throttleDelay) return;
+            lastMoveTime = now;
+
+            moveWorking = true;
+
+
+            const hoverElements = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
+            const hoverElement = hoverElements.find((el) => el.getAttribute("data-identifier") != undefined);
+
+            const currentIdentifier = hoverElement?.getAttribute("data-identifier");
+
+            let instruction = new InstructionBuilder();
+            let object = currentIdentifier ? searchElementWithIdentifier(currentIdentifier, projectRef.current.state.editedHtml.htmlRenderContext.retrieveHtmlObject(node), instruction) : undefined;
+            const removeLastInstruction = async () => {
+                if (lastInstruction) {
+                    const removeInstruction = lastInstruction.clone();
+                    if(removeInstruction.instruction.o === OpType.ARR_INS) {
+                        removeInstruction.instruction.o = OpType.ARR_REM_IDX;
+                    } else {
+                        removeInstruction.remove();
+                    }
+                    removeInstruction.instruction.v = undefined;
+
+
+                    await projectRef.current.state.editedHtml!.updateHtmlObject([{
+                        i: removeInstruction.instruction,
+                        triggerHtmlRender: true,
+                    }]);
+
+                    lastInstruction = undefined;
+                    lastObjectHover = undefined;
+                }
+            };
+
+
+            if (!object) {
+                await removeLastInstruction();
+                requestAnimationFrame(() => moveWorking = false);
+                return;
+            }
+            if(object.temporary) {
+                requestAnimationFrame(() => moveWorking = false);
+                return;
+            }
+
+            const isNewHover = !lastObjectHover || lastObjectHover !== object;
+            if (lastObjectHover && lastObjectHover.identifier !== object.identifier) {
+                await removeLastInstruction();
+            }
+
+            if (!isNewHover) {
+                requestAnimationFrame(() => moveWorking = false);
+                return;
+            }
+
+            let shouldAdd = false;
+
+
+            if (object.type === "block") {
+                if (!object.content) {
+                    instruction.key("content").set(deepCopy(newObject));
+                    shouldAdd = true;
+                }
+            } else if (object.type === "list") {
+                const direction = getComputedStyle(hoverElement!).flexDirection as "row" | "column";
+                instruction.key("content");
+
+                if (object.content.length === 0) {
+                    instruction.arrayInsertAtIndex(0,deepCopy(newObject));
+                    shouldAdd = true;
+                } else if(object.content) {
+                    let insertAt = 0.5;
+                    const indexOfTemporary = object.content.findIndex((obj) => obj.temporary);
+                    const posX = event.clientX;
+                    const posY = event.clientY;
+
+                    for (let i = 0; i < hoverElement!.children.length; i++) {
+                        if (i === indexOfTemporary) continue;
+
+                        const child = hoverElement!.children[i];
+                        const bounds = child.getBoundingClientRect();
+                        if (direction === "row") {
+                            if (posX > bounds.x && posX < bounds.x + bounds.width) {
+                                if (posX > bounds.x + (bounds.width / 2)) {  // Assumed fix for likely typo in original code
+                                    insertAt += 0.5;
+                                } else {
+                                    insertAt -= 0.5;
+                                }
+                            } else if (posX < bounds.x) {
+                                insertAt -= 0.5;
+                                break;
+                            } else {
+                                insertAt += 1;
+                            }
+                        } else {
+                            if (posY > bounds.y && posY < bounds.y + bounds.height) {
+                                if (posY > bounds.y + (bounds.height / 2)) {  // Assumed fix for likely typo in original code
+                                    insertAt += 0.5;
+                                } else {
+                                    insertAt -= 0.5;
+                                }
+                            } else if (posY < bounds.y) {
+                                insertAt -= 0.5;
+                                break;
+                            } else {
+                                insertAt += 1;
+                            }
+                        }
+                    }
+
+                    insertAt = Math.floor(insertAt);
+
+
+                    if(indexOfTemporary != insertAt) {
+                        if(indexOfTemporary != -1) {
+
+                            const removeInstruction = instruction.clone();
+                            removeInstruction.arrayRemoveIndex(indexOfTemporary);
+
+                            /*const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
+                            if(applyInstruction(newHtmlObject, removeInstruction.instruction)) {
+                                editedHtmlRef.current!.html = newHtmlObject;
+                            }*/
+
+                            // Send to server
+                            await projectRef.current.state.editedHtml!.updateHtmlObject([{
+                                i: removeInstruction.instruction,
+                                targetedIdentifier: object.identifier,
+                                triggerHtmlRender: true,
+                                applyUniqIdentifier: "identifier"
+                            }]);
+
+                            if (indexOfTemporary < insertAt) {
+                                insertAt--;
+                            }
+
+                        }
+                        instruction.arrayInsertAtIndex(insertAt, deepCopy(newObject));
+                        shouldAdd = true;
+                    }
+                }
+            }
+
+            if (shouldAdd) {
+                /*// Apply locally first (optimistic update)
+                const newHtmlObject = deepCopy(editedHtmlRef.current!.html);
+                if(applyInstruction(newHtmlObject, instruction.instruction)) {
+                    editedHtmlRef.current!.html = newHtmlObject;
+                }*/
+
+                // Send to server
+                await projectRef.current.state.editedHtml!.updateHtmlObject([{
+                    i: instruction.instruction,
+                    targetedIdentifier: object.identifier,
+                    triggerHtmlRender: true,
+                    applyUniqIdentifier: "identifier"
+                }]);
+
+                lastObjectHover = object;
+                lastInstruction = instruction.clone();
+            }
+            requestAnimationFrame(() => moveWorking = false);
+        };
+
+        const mouseOut = async (evt:MouseEvent) => {
+            overlayContainer.remove();
+            window.removeEventListener("mouseleave", mouseOut);
+            window.removeEventListener("mouseup", mouseOut);
+            window.removeEventListener("mousemove", mouseMove);
+            cancelAnimationFrame(animationId);
+            enableTextSelection();
+
+            if(lastInstruction) {
+                // Create instruction to remove temporary flag
+                const cleanupInstruction = lastInstruction.clone();
+                cleanupInstruction.instruction.v = undefined;
+                if(cleanupInstruction.instruction.o === OpType.ARR_INS) {
+                    cleanupInstruction.index(cleanupInstruction.instruction.i!).key("temporary").remove();
+                } else {
+                    cleanupInstruction.key("temporary").remove();
+                }
+
+
+                // Send cleanup to server and wait for confirmation
+                await projectRef.current.state.editedHtml!.updateHtmlObject([{
+                    i: cleanupInstruction.instruction,
+                    triggerHtmlRender: true
+                }]);
+                //lastInstruction = undefined;
+            }
+
+            if(!haveMoved) {
+                if(!(onPickup?.(component) ?? true)) {
+                    return;
+                }
+            }
+        }
+
+        window.addEventListener("mouseleave", mouseOut);
+        window.addEventListener("mousemove", mouseMove);
+        window.addEventListener("mouseup", mouseOut);
+
+
+    }
+
+    const componentCardClass = useDynamicClass(`
+        & {
+            border: 2px solid var(--nodius-background-paper);
+            border-radius: 12px;
+            aspect-ratio: 1 / 1;
+            flex: 1;
+            max-width: 120px;
+            min-width: 85px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            cursor: grab;
+            box-shadow: var(--nodius-shadow-1);
+            transition: var(--nodius-transition-default);
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.02)};
+        }
+
+        &:hover {
+            background-color: var(--nodius-background-paper);
+            transform: translateY(-2px);
+            box-shadow: var(--nodius-shadow-2);
+        }
+
+        &:active {
+            cursor: grabbing;
+            transform: scale(0.98);
+        }
+    `);
+
+    const categoryHeaderClass = useDynamicClass(`
+        & {
+            display: flex;
+            flex-direction: row;
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 10px;
+            transition: var(--nodius-transition-default);
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.08)};
+        }
+
+        &:hover {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.06)};
+        }
+    `);
+
+    const infoCardClass = useDynamicClass(`
+        & {
+            background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.04)};
+            border: 1px solid ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.1)};
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        & .info-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--nodius-primary-main);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        & .info-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.7)};
+        }
+    `);
+
+    return (
+        <div style={{display:"flex", flexDirection:"column", gap:"16px", padding:"8px", height:"100%", width:"100%"}}>
+            {/* Header Section */}
+            <div style={{
+                display:"flex",
+                flexDirection:"row",
+                gap:"12px",
+                alignItems:"center",
+                borderBottom:"2px solid var(--nodius-primary-main)",
+                paddingBottom:"12px"
+            }}>
+                <div style={{
+                    background: "var(--nodius-primary-main)",
+                    borderRadius: "8px",
+                    padding: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                }}>
+                    <Box height={24} width={24} color="white"/>
+                </div>
+                <div style={{display:"flex", flexDirection:"column"}}>
+                    <h5 style={{fontSize:"18px", fontWeight:"600", margin:"0"}}>Components Library</h5>
+                    <p style={{fontSize:"12px", opacity:"0.7", margin:"0"}}>Drag and drop to build your interface</p>
+                </div>
+            </div>
+
+            {/* Info Card */}
+            <div className={infoCardClass}>
+                <div className="info-header">
+                    <Info height={18} width={18}/>
+                    <span>How to Use Components</span>
+                </div>
+                <div className="info-content">
+                    Drag components from the library and drop them onto your canvas. Components can be nested and rearranged to create complex layouts.
+                </div>
+            </div>
+
+            <hr/>
+
+            {/* Search Bar */}
+            <Input
+                type={"text"}
+                placeholder={"Search components..."}
+                value={componentSearch}
+                onChange={(value) => setComponentSearch(value)}
+                startIcon={<Search height={18} width={18}/>}
+            />
+
+            {/* Components List */}
+            <div style={{flex: 1, overflowY: "auto", paddingRight: "4px"}}>
+                {filteredComponents ? (
+                    <div style={{display:"flex", flexDirection:"column", gap:"20px"}}>
+                        {Object.entries(filteredComponents).map(([category, components]) => (
+                            <div style={{display:"flex", flexDirection: "column", gap:"12px"}} key={category}>
+                                <div
+                                    className={categoryHeaderClass}
+                                    onClick={() => {
+                                        if(hideCategory.includes(category)) {
+                                            setHideCategory(hideCategory.filter(h => h !== category));
+                                        } else {
+                                            setHideCategory([...hideCategory, category]);
+                                        }
+                                    }}
+                                >
+                                    <h3 style={{flex:"1", fontSize:"16px", fontWeight:"600", margin:"0"}}>{category}</h3>
+                                    <div style={{display:"flex", alignItems:"center", transition:"transform 0.2s", transform: hideCategory.includes(category) ? "rotate(180deg)" : "rotate(0deg)"}}>
+                                        <ChevronDown height={20} width={20}/>
+                                    </div>
+                                </div>
+                                <Collapse in={!hideCategory.includes(category)}>
+                                    <div style={{display:"flex", flexDirection:"row", gap:"12px", flexWrap:"wrap", paddingTop:"4px", paddingBottom: "4px"}}>
+                                        {components.map((comp, i) => {
+                                            const Icon = IconDict[comp.icon] as any;
+
+                                            return (
+                                                <div key={i}
+                                                     className={componentCardClass}
+                                                     data-builder-component={comp.object.name}
+                                                     onMouseDown={(e) => onMouseDown(e, comp)}
+                                                     title={`Drag to add ${comp.object.name}`}
+                                                >
+                                                    {Icon ? (
+                                                        <Icon width={40} height={40} strokeWidth={1.5} color={"var(--nodius-primary-main)"} />
+                                                    ) : <CloudAlert width={40} height={40} strokeWidth={1.5} color={"var(--nodius-text-secondary)"}/>}
+                                                    <h5 style={{
+                                                        fontSize:"13px",
+                                                        fontWeight:"500",
+                                                        color:"var(--nodius-text-primary)",
+                                                        textAlign:"center",
+                                                        margin:"0",
+                                                        lineHeight:"1.3"
+                                                    }}>
+                                                        {comp.object.name}
+                                                    </h5>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </Collapse>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div style={{
+                        padding:"32px",
+                        textAlign:"center",
+                        color:"var(--nodius-red-500)",
+                        backgroundColor: Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.03),
+                        borderRadius:"12px",
+                        border:"2px dashed var(--nodius-red-500)"
+                    }}>
+                        <CloudAlert height={48} width={48} style={{margin:"0 auto 16px", opacity:0.6}}/>
+                        <h5 style={{fontSize:"16px", fontWeight:"600", margin:"0 0 8px 0"}}>Error Loading Components</h5>
+                        <p style={{fontSize:"14px", opacity:"0.8", margin:"0"}}>
+                            An error occurred while retrieving components. Please try again.
+                        </p>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+});
+LeftPanelComponentEditor.displayName = "LeftPaneComponentEditor";
