@@ -50,7 +50,7 @@
     "escape-html": "^1.0.3",
     "jsdom": "^27.3.0",
     "jsonwebtoken": "^9.0.3",
-    "lucide-react": "^0.560.0",
+    "lucide-react": "^0.561.0",
     "multer": "^2.0.2",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
