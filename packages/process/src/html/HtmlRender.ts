@@ -278,7 +278,7 @@ export class HtmlRender {
 
         const storage: ObjectStorage = {
             element: element,
-            object: object,
+            object: deepCopy(object), // Deep copy to prevent issues with in-place modifications
             domEvents: new Map(),
             debugEvents: new Map(),
             externalChanges: {
@@ -378,6 +378,11 @@ export class HtmlRender {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = Icon;
                 newElement = tempDiv.firstElementChild as HTMLElement;
+
+                // Ensure we properly detach the element from tempDiv
+                if (newElement && newElement.parentNode) {
+                    newElement.parentNode.removeChild(newElement);
+                }
             } else {
                 // Create normal element
                 newElement = document.createElement(newObject.tag);
@@ -390,7 +395,10 @@ export class HtmlRender {
                 }
             }
 
-            element.parentNode!.replaceChild(newElement, element);
+            // Properly replace the old element with the new one
+            if (element.parentNode) {
+                element.parentNode.replaceChild(newElement, element);
+            }
             storage.element = newElement;
             element = newElement;
 
@@ -559,7 +567,8 @@ export class HtmlRender {
             });
         }*/
 
-        storage.object = newObject;
+        // Store a deep copy to prevent issues with in-place modifications affecting future comparisons
+        storage.object = deepCopy(newObject);
 
         if (newObject.type === "text") {
             const newText = await this.parseContent(newObject.content[this.language], storage);
@@ -717,10 +726,12 @@ export class HtmlRender {
             const old = oldChildMap.get(idf);
             if (old) {
                 await this.updateDOM(childInfo.obj, old.element, old.storage);
-                if (old.element.previousSibling !== lastInserted) {
-                    element.insertBefore(old.element, lastInserted ? lastInserted.nextSibling : element.firstChild);
+                // Use storage.element instead of old.element as it may have been replaced in updateDOM
+                const currentElement = old.storage.element;
+                if (currentElement.previousSibling !== lastInserted) {
+                    element.insertBefore(currentElement, lastInserted ? lastInserted.nextSibling : element.firstChild);
                 }
-                lastInserted = old.element;
+                lastInserted = currentElement;
                 oldChildMap.delete(idf);
             } else {
                 const nextNode = lastInserted ? lastInserted.nextSibling : element.firstChild;
