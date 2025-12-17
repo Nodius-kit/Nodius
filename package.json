@@ -4,7 +4,7 @@
   ],
   "scripts": {
     "dev": "node dev-cli.mjs",
-    "build": "npm run barrelize -ws && npm run build -ws",
+    "build": "npm run barrelize -ws && npm run build --workspace=@nodius/utils && npm run build --workspace=@nodius/process && npm run build --workspace=@nodius/client && npm run build --workspace=@nodius/server",
     "publish": "npm publish -ws --access public",
     "server:dev": "npm run dev port=8426 host=192.168.1.72 https=true --workspace=@nodius/server",
     "client:dev": "npm run dev port=8426 host=192.168.1.72 https=true --workspace=@nodius/client"
