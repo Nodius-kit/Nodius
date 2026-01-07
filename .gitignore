@@ -8,3 +8,5 @@ packages/server/certs
 packages/client/certs
 package-lock.json
 .idea
+.claude/settings.local.json
+CLAUDE.md

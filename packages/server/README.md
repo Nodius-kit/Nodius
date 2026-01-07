@@ -55,7 +55,7 @@ npm run dev
 ```
 
 The server starts on:
-- **HTTP/HTTPS**: `https://localhost:8426`
+- **HTTP/HTTPS**: `https://localhost:5173`
 - **WebSocket**: `wss://localhost:10426`
 - **Cluster Manager**: Port `9426` (internal)
 
@@ -150,71 +150,6 @@ Custom HTTP server with Express-like support for routing and middlewares.
 - **HTTPS**: SSL support with automatic self-signed certificate generation
 - **Route Parameters**: Parameter extraction (`/api/workflow/:id`)
 - **Query Strings**: Automatic parsing
-
-#### Usage
-
-```typescript
-import { HttpServer, cors, logger } from '@nodius/server';
-
-const app = new HttpServer();
-
-// Middlewares
-app.use(logger());
-app.use(cors());
-
-// Routes
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'Hello World' });
-});
-
-app.post('/api/data', async (req, res) => {
-  const data = req.body;
-  // Process data
-  res.json({ success: true, data });
-});
-
-// Route parameters
-app.get('/api/workflow/:id', (req, res) => {
-  const workflowId = req.params?.id;
-  res.json({ workflowId });
-});
-
-// Start server
-app.listen({
-  port: 8426,
-  host: '0.0.0.0',
-  https: {
-    key: certKey,
-    cert: certFile
-  }
-});
-```
-
-#### Available Middlewares
-
-```typescript
-// CORS
-app.use(cors({
-  origin: '*',
-  methods: 'GET,POST,PUT,DELETE,OPTIONS',
-  allowedHeaders: 'Content-Type,Authorization'
-}));
-
-// Logger
-app.use(logger());
-
-// Rate limiting
-app.use(rateLimit({
-  windowMs: 60000,  // 1 minute
-  max: 100          // 100 requests per window
-}));
-
-// Static files
-app.use(staticFiles('./public'));
-
-// Auth middleware (provided by AuthManager)
-app.use(authManager.authMiddleware());
-```
 
 ### WebSocket Manager
 
