@@ -55,9 +55,9 @@ npm run dev
 ```
 
 The server starts on:
-- **HTTP/HTTPS**: `https://localhost:5173`
-- **WebSocket**: `wss://localhost:10426`
-- **Cluster Manager**: Port `9426` (internal)
+- **HTTP/HTTPS**: `https://localhost:8426` (default port)
+- **WebSocket**: `wss://localhost:8426/ws` (same port as HTTP/HTTPS)
+- **Cluster Manager**: Port `9426` (internal, for ZeroMQ)
 
 ### Custom Configuration
 
@@ -633,33 +633,154 @@ node dist/server.js \
 
 ## CLI Tools
 
-The server package includes several CLI tools:
+The server package includes several CLI tools for database management:
 
 ### Create Admin
 
-Create an administrator user:
+Create an administrator user with secure password hashing:
 
 ```bash
+# From packages/server directory
 npm run create-admin
 
-# Or with tsx
-npx tsx src/cli/createAdmin.ts
+# With custom credentials
+npm run create-admin username=admin password=yourSecurePassword
+
+# With all options
+npm run create-admin \
+  username=admin \
+  password=yourSecurePassword \
+  email=admin@example.com \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius
+
+# Or using tsx directly
+npx tsx src/cli/createAdmin.ts username=admin password=yourPassword
 ```
 
-### Export Data
+**Required Arguments:**
+- `username`: Admin username
+- `password`: Admin password (will be hashed with bcrypt)
 
-Export all workflows and configurations:
+**Optional Arguments:**
+- `email`: Admin email address
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+
+**Features:**
+- Secure bcrypt password hashing
+- Duplicate username prevention
+- Automatic admin role assignment
+- User and admin roles by default
+
+### Export Database
+
+Export all collections and documents to a JSON backup file:
 
 ```bash
-npx tsx src/cli/export.ts output.json
+# Export with default settings (./backup/nodius-export.json)
+npx tsx src/cli/export.ts
+
+# Export to custom location
+npx tsx src/cli/export.ts output=./my-backup.json
+
+# Export with custom database connection
+npx tsx src/cli/export.ts \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius \
+  output=./backups/backup-$(date +%Y%m%d).json
 ```
 
-### Import Data
+**Options:**
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+- `output`: Output file path (default: `./backup/nodius-export.json`)
 
-Import workflows from a file:
+**Export includes:**
+- All user collections (workflows, nodes, edges, configurations, users, etc.)
+- All documents with complete metadata (`_key`, `_id`, `_rev`)
+- Collection types (document or edge collection)
+- Export metadata (timestamp, database name, version)
+
+### Import Database
+
+Import data from a JSON backup file:
 
 ```bash
-npx tsx src/cli/import.ts input.json
+# Import with default settings (./backup/nodius-export.json)
+npx tsx src/cli/import.ts
+
+# Import from custom file
+npx tsx src/cli/import.ts input=./my-backup.json
+
+# Import to different database
+npx tsx src/cli/import.ts \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius_staging \
+  input=./backups/production-backup.json
+```
+
+**Options:**
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+- `input`: Input file path (default: `./backup/nodius-export.json`)
+
+**Import behavior:**
+- Creates target database if it doesn't exist
+- Creates collections if they don't exist (preserving type: document/edge)
+- **Replaces** existing documents (matched by `_key`)
+- **Inserts** new documents that don't exist
+- **Does NOT delete** existing documents not in the import file
+- Reports statistics: replaced, inserted, errors
+
+**Use Cases:**
+
+1. **Regular Backups:**
+```bash
+# Create daily backup
+npx tsx src/cli/export.ts output=./backups/backup-$(date +%Y%m%d).json
+```
+
+2. **Environment Migration:**
+```bash
+# Export from production
+npx tsx src/cli/export.ts output=./prod-export.json
+
+# Import to staging
+npx tsx src/cli/import.ts \
+  input=./prod-export.json \
+  arangodb_name=nodius_staging
+```
+
+3. **Disaster Recovery:**
+```bash
+# Restore from backup
+npx tsx src/cli/import.ts input=./backups/backup-20260107.json
+```
+
+4. **Database Cloning:**
+```bash
+# Export source database
+npx tsx src/cli/export.ts \
+  arangodb_name=nodius_source \
+  output=./clone.json
+
+# Import to new database
+npx tsx src/cli/import.ts \
+  arangodb_name=nodius_clone \
+  input=./clone.json
 ```
 
 ## Development

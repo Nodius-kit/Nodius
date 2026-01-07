@@ -680,6 +680,10 @@ export class WebSocketManager {
                     }
                 }
 
+
+                // Apply all instructions
+                let currentConfig = nodeConfig.config;
+
                 const reversedInstructions = message.instructions.map((inst) => {
                     const reverse = getInverseInstruction(currentConfig, inst.i);
                     if(reverse.success) {
@@ -688,8 +692,6 @@ export class WebSocketManager {
                     return undefined;
                 }).filter((v) => v != undefined);
 
-                // Apply all instructions
-                let currentConfig = nodeConfig.config;
                 for(const instruction of message.instructions) {
                     const result = applyInstruction(currentConfig, instruction.i, (objectBeingApplied) => {
                         if(instruction.targetedIdentifier && objectBeingApplied != undefined && !Array.isArray(objectBeingApplied) && "identifier" in objectBeingApplied) {

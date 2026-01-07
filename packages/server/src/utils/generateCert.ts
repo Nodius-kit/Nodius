@@ -9,6 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import {SubjectAltNameEntry} from "selfsigned";
 
 interface CertificateOptions {
     commonName?: string;
@@ -86,7 +87,7 @@ export async function generateSelfSignedCert(options: CertificateOptions = {}): 
     ];
 
     // Build Subject Alternative Names
-    const altNamesList: Array<{ type: number; value?: string; ip?: string }> = [];
+    const altNamesList: Array<SubjectAltNameEntry> = [];
 
     // Add DNS names
     altNamesList.push({ type: 2, value: commonName }); // DNS name for commonName

@@ -170,15 +170,49 @@ arangosh
 db._createDatabase("nodius");
 ```
 
-### 4. Environment Variables Configuration
+### 4. Create Admin Account
+
+Before you can use Nodius, you need to create an admin account:
+
+```bash
+# From root directory
+cd packages/server
+npm run create-admin
+
+# Or with custom database settings
+npm run create-admin username=admin password=yourSecurePassword
+
+# With all options
+npm run create-admin \
+  username=admin \
+  password=yourSecurePassword \
+  email=admin@example.com \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius
+```
+
+**Available Options:**
+- `username`: Admin username (required)
+- `password`: Admin password (required)
+- `email`: Admin email (optional)
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+
+The password will be securely hashed using bcrypt before storage. You can use these credentials to log into the Nodius web interface.
+
+### 5. Environment Variables Configuration
 
 The project automatically generates necessary configuration files at startup. However, you can customize the configuration:
 
 **For the server** (optional - environment variables or CLI arguments):
-- `ARANGO_URL`: ArangoDB connection URL (default: `http://localhost:8529`)
+- `ARANGO_URL`: ArangoDB connection URL (default: `http://127.0.0.1:8529`)
 - `ARANGO_DB`: Database name (default: `nodius`)
 - `ARANGO_USER`: ArangoDB user (default: `root`)
-- `ARANGO_PASSWORD`: ArangoDB password (default: empty)
+- `ARANGO_PASS`: ArangoDB password (default: `azerty`)
 
 ## Development
 
@@ -191,8 +225,8 @@ npm run dev
 ```
 
 This command:
-1. Starts the API server on `https://192.168.1.72:8426`
-2. Starts the React client on an available port (usually `https://192.168.1.72:5173`)
+1. Starts the API server on `https://localhost:8426`
+2. Starts the React client on an available port (usually `https://localhost:5173`)
 3. Automatically configures HTTPS with self-signed certificates
 4. Synchronizes server and client logs
 
@@ -498,6 +532,86 @@ To deploy multiple server instances in cluster:
 2. Ensure all instances can communicate with each other
 3. Share the same ArangoDB database
 4. Use a load balancer (nginx, HAProxy) in front of instances
+
+## Database Management
+
+### Exporting the Database
+
+You can export all workflows, node configurations, and data to a JSON file for backup or migration:
+
+```bash
+# From packages/server directory
+cd packages/server
+
+# Export with default settings
+npx tsx src/cli/export.ts
+
+# Export with custom output path
+npx tsx src/cli/export.ts output=./my-backup.json
+
+# Export with custom database connection
+npx tsx src/cli/export.ts \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius \
+  output=./backup/nodius-backup.json
+```
+
+**Available Options:**
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+- `output`: Output file path (default: `./backup/nodius-export.json`)
+
+The export file contains:
+- All collections (workflows, nodes, edges, node configurations, etc.)
+- All documents with their metadata
+- Export timestamp and database information
+
+### Importing the Database
+
+Import data from a JSON backup file:
+
+```bash
+# From packages/server directory
+cd packages/server
+
+# Import with default settings
+npx tsx src/cli/import.ts
+
+# Import from custom path
+npx tsx src/cli/import.ts input=./my-backup.json
+
+# Import to custom database
+npx tsx src/cli/import.ts \
+  arangodb=http://127.0.0.1:8529 \
+  arangodb_user=root \
+  arangodb_pass=azerty \
+  arangodb_name=nodius \
+  input=./backup/nodius-backup.json
+```
+
+**Available Options:**
+- `arangodb`: ArangoDB URL (default: `http://127.0.0.1:8529`)
+- `arangodb_user`: Database username (default: `root`)
+- `arangodb_pass`: Database password (default: `azerty`)
+- `arangodb_name`: Database name (default: `nodius`)
+- `input`: Input file path (default: `./backup/nodius-export.json`)
+
+**Import Behavior:**
+- Creates the database if it doesn't exist
+- Creates collections if they don't exist (with correct type: document or edge)
+- Replaces existing documents (based on `_key`)
+- Inserts new documents that don't exist
+- Does NOT delete existing documents not in the import file
+
+**Use Cases:**
+- **Backup & Restore**: Regular backups of your workflows and data
+- **Migration**: Moving data between development, staging, and production environments
+- **Cloning**: Duplicating a Nodius instance for testing
+- **Disaster Recovery**: Restoring data after system failures
 
 ## Contributing
 
