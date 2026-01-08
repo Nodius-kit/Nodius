@@ -117,6 +117,35 @@ export const htmlRenderContextDefinitions: VariableDefinition[] = [
     { name: "renderElement", type: "() => void", description: "Triggers re-render of the current element and its children" },
 ];
 
+// ============================================================================
+// GRAPH RENDER CONTEXT VARIABLES (from src/client/schema/SchemaDisplay.tsx)
+// ============================================================================
+
+/**
+ * Extra variables available in graph render contexts
+ * Used in SchemaDisplay for node rendering and interaction
+ * Available via getExtraRenderGraphVariable()
+ */
+export const graphRenderContextDefinitions: VariableDefinition[] = [
+    { name: "getNode", type: "(nodeId: string) => Node<any> | undefined", description: "Retrieves a node by its ID, returns a deep copy of the node or undefined if not found" },
+    { name: "nodeId", type: "string", description: "The unique identifier (_key) of the current node being rendered" },
+    { name: "updateNode", type: "(newNode: Node<any>) => Promise<boolean>", description: "Updates the current node by generating instructions to match the new state, returns true if successful" },
+    { name: "InstructionBuilder", type: "typeof InstructionBuilder", description: "Class for building instruction objects to modify graph state via path-based operations" },
+    { name: "deletePointId", type: "(nodeId: string, pointId: string) => Promise<boolean>", description: "Deletes a handle point from a node and all connected edges, returns true if successful" },
+    { name: "generateUniqueHandlePointId", type: "(nodeId: string) => string", description: "Generates a unique handle point ID for the specified node" },
+    { name: "updateGraph", type: "(instructions: GraphInstruction[]) => Promise<UpdateGraphResponse>", description: "Applies instruction-based state changes to the graph, sends updates to server and other clients" },
+    { name: "gpuMotor", type: "GraphicalMotor", description: "WebGPU motor instance for rendering the graph, provides methods for coordinate transformation and scene management" },
+    { name: "initiateNewHtmlRender", type: "(config: HtmlRenderConfig) => htmlRenderContext | undefined", description: "Creates a new HTML render context for a node with specified configuration" },
+    { name: "getHtmlRenderWithId", type: "(nodeId: string, renderId: string) => htmlRenderContext | undefined", description: "Retrieves an existing HTML render context by node ID and render ID" },
+    { name: "getHtmlRenderOfNode", type: "(nodeId: string) => htmlRenderContext[]", description: "Gets all HTML render contexts associated with a specific node" },
+    { name: "getAllHtmlRender", type: "() => htmlRenderContext[]", description: "Returns all HTML render contexts across all nodes" },
+    { name: "removeHtmlRender", type: "(nodeId: string, renderId: string) => void", description: "Removes and cleans up an HTML render context by node ID and render ID" },
+    { name: "openHtmlEditor", type: "(context: htmlRenderContext, path: string[]) => void", description: "Opens the HTML editor modal for editing HTML content at the specified path" },
+    { name: "currentEntryDataType", type: "DataTypeClass | undefined", description: "The current entry data type definition for the workflow, if an entry type node is connected" },
+    { name: "HtmlRender", type: "typeof HtmlRender", description: "Class for rendering HtmlObject structures into DOM elements with event handling and update support" },
+    { name: "container", type: "HTMLElement", description: "The DOM container element for the current node" },
+];
+
 /**
  * Variables available in DOM event handlers
  * Used in EventsEditor for event handlers (onClick, onChange, etc.)
@@ -180,5 +209,16 @@ export const htmlContentEditorDefinitions: VariableDefinition[] = [
  */
 export const workflowNodeEditorDefinitions: VariableDefinition[] = [
     ...workflowContextDefinitions,
+    ...standardFunctionDefinitions,
+];
+
+/**
+ * Complete variable definitions for graph render context
+ * Includes: graph context, HTML context, and all standard functions
+ * Used in SchemaDisplay for node rendering and DOM event handling
+ */
+export const graphRenderEditorDefinitions: VariableDefinition[] = [
+    ...domEventContextDefinitions,
+    ...graphRenderContextDefinitions,
     ...standardFunctionDefinitions,
 ];
