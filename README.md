@@ -413,125 +413,243 @@ npm run dev --workspace=@nodius/[package-name]
 
 ## Deployment
 
+### Deployment Overview
+
+Nodius provides built-in HTTPS support with self-signed certificates for development. For production deployments with custom domains, SSL certificates, and advanced security configurations (Let's Encrypt, DNS management, CDN, etc.), please refer to standard web server deployment guides as these configurations are beyond the scope of this tool.
+
 ### Production Deployment
 
-#### 1. Build Packages
+#### 1. Build All Packages
 
 ```bash
+# Build all packages in correct order
 npm run build
 ```
 
-#### 2. Server Configuration
+#### 2. Configure ArangoDB Connection
 
-Create a configuration file for the server (or use environment variables):
+Set up environment variables or CLI arguments for database connection:
 
 ```bash
-# Configure ArangoDB
-export ARANGO_URL=https://your-arangodb-server:8529
+# Configure ArangoDB connection
+export ARANGO_URL=http://127.0.0.1:8529
 export ARANGO_DB=nodius
 export ARANGO_USER=nodius_user
-export ARANGO_PASSWORD=your_secure_password
-
-# SSL certificates (recommended for production)
-export SSL_CERT=/path/to/cert.pem
-export SSL_KEY=/path/to/key.pem
+export ARANGO_PASS=your_secure_password
 ```
 
-#### 3. Start the Server
+#### 3. Deployment Scenarios
+
+##### Option A: Simple Deployment (Development/Testing)
+
+Start the server with built-in HTTPS (self-signed certificates):
 
 ```bash
 cd packages/server
-node dist/server.js --port=8426 --host=0.0.0.0 --https=true --cert=$SSL_CERT --key=$SSL_KEY
+node dist/server.js --port=8426 --host=0.0.0.0 --https=true
 ```
 
-#### 4. Serve the Client
+Access the application directly at `https://your-server:8426`
 
-The client can be served by any static web server (nginx, Apache, etc.):
+**Note**: Self-signed certificates will trigger browser warnings. This is suitable for development or internal testing only.
+
+##### Option B: Production Deployment with Nginx (Recommended)
+
+This setup uses nginx as a reverse proxy handling SSL termination, with the Nodius server running on HTTP internally.
+
+**Step 1**: Build and deploy the client
 
 ```bash
 cd packages/client
-# Build the client
 npm run build
 
-# Copy dist folder to your web server
+# Copy built files to web server directory
 cp -r dist /var/www/nodius
 ```
 
-Nginx configuration example:
+**Step 2**: Start the server without SSL (nginx handles it)
+
+```bash
+cd packages/server
+node dist/server.js --port=8426 --host=127.0.0.1 --https=false
+```
+
+**Step 3**: Configure nginx
 
 ```nginx
 server {
     listen 443 ssl http2;
-    server_name nodius.example.com;
+    server_name your-domain.com;
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
+    # SSL configuration (use your own certificates)
+    ssl_certificate /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
 
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    # Serve static client files
     root /var/www/nodius;
     index index.html;
 
+    # Client routing (SPA)
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy for API
+    # Proxy API requests to backend
     location /api {
-        proxy_pass https://localhost:8426;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-
-    # Proxy for WebSocket
-    location /ws {
-        proxy_pass https://localhost:8426;
+        proxy_pass http://127.0.0.1:8426;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
     }
+
+    # Proxy WebSocket connections to backend
+    location /ws {
+        proxy_pass http://127.0.0.1:8426;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+
+        # WebSocket specific settings
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
 }
 ```
 
+**Important Notes:**
+- Server listens on `127.0.0.1:8426` (localhost only, not exposed externally)
+- Nginx handles SSL termination and proxies to HTTP backend
+- WebSocket connections are properly upgraded through nginx
+- For Let's Encrypt certificates and DNS configuration, refer to nginx and certbot documentation
+
 ### Docker Deployment (Optional)
 
-You can create Docker images for easier deployment. Example Dockerfile:
+You can containerize Nodius using Docker for easier deployment and scaling.
+
+**Example Dockerfile for server:**
 
 ```dockerfile
-# Dockerfile for server
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy workspace files
-COPY package.json .
-COPY packages/server packages/server
-COPY packages/utils packages/utils
-COPY packages/process packages/process
+# Copy workspace configuration
+COPY package.json package-lock.json ./
+COPY packages/server/package.json packages/server/
+COPY packages/utils/package.json packages/utils/
+COPY packages/process/package.json packages/process/
 
 # Install dependencies
 RUN npm install
 
-# Build packages
-RUN npm run build
+# Copy source code
+COPY packages/server packages/server
+COPY packages/utils packages/utils
+COPY packages/process packages/process
 
-# Expose ports
+# Build packages (utils → process → server)
+RUN npm run build --workspace=@nodius/utils
+RUN npm run build --workspace=@nodius/process
+RUN npm run build --workspace=@nodius/server
+
+# Expose server port
 EXPOSE 8426
 
-# Start server
-CMD ["node", "packages/server/dist/server.js"]
+# Start server (HTTP mode - SSL handled by reverse proxy)
+CMD ["node", "packages/server/dist/server.js", "--port=8426", "--host=0.0.0.0", "--https=false"]
+```
+
+**Example docker-compose.yml:**
+
+```yaml
+version: '3.8'
+
+services:
+  arangodb:
+    image: arangodb:latest
+    environment:
+      ARANGO_ROOT_PASSWORD: your_secure_password
+    ports:
+      - "8529:8529"
+    volumes:
+      - arangodb_data:/var/lib/arangodb3
+
+  nodius-server:
+    build: .
+    ports:
+      - "8426:8426"
+    environment:
+      ARANGO_URL: http://arangodb:8529
+      ARANGO_DB: nodius
+      ARANGO_USER: root
+      ARANGO_PASS: your_secure_password
+    depends_on:
+      - arangodb
+
+volumes:
+  arangodb_data:
 ```
 
 ### Cluster Configuration (Advanced)
 
-To deploy multiple server instances in cluster:
+For high-availability deployments with multiple server instances:
 
-1. Configure ZeroMQ on each instance
-2. Ensure all instances can communicate with each other
-3. Share the same ArangoDB database
-4. Use a load balancer (nginx, HAProxy) in front of instances
+1. **Configure ZeroMQ** on each server instance for inter-process communication
+2. **Shared Database**: Ensure all instances connect to the same ArangoDB database
+3. **Load Balancer**: Use nginx or HAProxy with sticky sessions for WebSocket support
+4. **Session Persistence**: Configure sticky sessions based on client IP or cookies
+
+**Example nginx load balancer configuration:**
+
+```nginx
+upstream nodius_backend {
+    ip_hash;  # Sticky sessions for WebSocket
+    server 127.0.0.1:8426;
+    server 127.0.0.1:8427;
+    server 127.0.0.1:8428;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    location /api {
+        proxy_pass http://nodius_backend;
+        # ... (same headers as single server setup)
+    }
+
+    location /ws {
+        proxy_pass http://nodius_backend;
+        # ... (same headers as single server setup)
+    }
+}
+```
+
+**Note**: Advanced production deployments with custom domains, DNS management, SSL/TLS automation (Let's Encrypt), CDN integration, and enterprise security configurations are beyond the scope of this documentation. Please consult standard DevOps resources for these setups.
 
 ## Database Management
 
