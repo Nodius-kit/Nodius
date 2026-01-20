@@ -8,7 +8,7 @@ export interface WorkflowCallbacks {
     onLog?: (message: string, timestamp: number) => void;
     onComplete?: (totalTimeMs: number, data:any) => void;
     onError?: (error: string, timestamp: number) => void;
-    onInitHtml?: (html: HtmlObject, id?:string, containerSelector?:string) => void;
+    onInitHtml?: (html: HtmlObject, nodeKey: string, id?:string, containerSelector?:string) => void;
     onUpdateHtml?: (instructions:Instruction[], id?:string) => void;
     onDomEvent?: (nodeKey: string, pointId: string, eventType: string, eventData: any) => void;
 }
@@ -101,8 +101,8 @@ export class WorkflowManager {
             console.log('[WorkflowManager] Execution completed in', message.totalTimeMs, 'ms');
             this.currentCallbacks?.onComplete?.(message.totalTimeMs, message.data);
         } else if (message.type === "initHtml") {
-            console.log('[WorkflowManager] initHtml:', message.html, "with render id", message.id, "on element selector", message.containerSelector);
-            this.currentCallbacks?.onInitHtml?.(message.html, message.id, message.containerSelector);
+            console.log('[WorkflowManager] initHtml:', message.html, "with render id", message.id, "on element selector", message.containerSelector, "for node", message.nodeKey);
+            this.currentCallbacks?.onInitHtml?.(message.html, message.nodeKey, message.id, message.containerSelector);
         } else if (message.type === "applyHtmlInstruction") {
             console.log('[WorkflowManager] applyHtmlInstruction: ', message.instructions, "on render id", message.id);
             this.currentCallbacks?.onUpdateHtml?.(message.instructions, message.id);

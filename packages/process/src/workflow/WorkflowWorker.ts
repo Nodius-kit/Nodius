@@ -207,7 +207,7 @@ const executeTask = async (task: Task): Promise<any> => {
         incoming: incoming,
         global: globalData,
         parseString: (content:string) => parseString(content, node, incoming),
-        initHtml: WF_initHtml,
+        initHtml: (html: HtmlObject, id?: string, containerSelector?: string) => WF_initHtml(node._key, html, id, containerSelector),
         yieldData: WF_yieldData,
         updateHtml: WF_updateHtml,
         log: (message: string, data?: any) => sendLog(message, node._key, data),
@@ -396,11 +396,12 @@ function sendMessage(message: any) {
     }
 }
 
-function WF_initHtml(html: HtmlObject, id?: string, containerSelector?: string) {
+function WF_initHtml(nodeKey: string, html: HtmlObject, id?: string, containerSelector?: string) {
     sendMessage({
         containerSelector: containerSelector,
         html: html,
         id: id,
+        nodeKey: nodeKey,
         type: "initHtml",
     });
 }

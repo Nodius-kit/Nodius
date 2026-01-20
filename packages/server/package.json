@@ -1,6 +1,6 @@
 {
   "name": "@nodius/server",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "",
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
