@@ -17,6 +17,7 @@ When writing process code, you have access to these environment variables:
 - `updateHtml(instructions, id?)` - Update HTML with instructions
 - `log(message, data?)` - Log message with optional data
 - `next(pointId, data?)` - Continue to next nodes via specified output point. **Returns**: `Promise<any[]>` - Array of return values from all downstream branches
+- `nextFromNode(nodeId, pointId, data?)` - Continue execution from another node's output point (teleport execution). **Returns**: `Promise<any[]>` - Array of return values from all downstream branches
 - `branch(targetNodeId, incomingPointId, data?)` - Start a new workflow branch to a specific node. **Returns**: `Promise<any>` - Result from the branch execution
 - `continueAndDelay(pointId, immediateData, delayedCallback)` - Continue with immediate data, then re-execute with delayed data. **Returns**: `Promise<void>`
 
@@ -410,11 +411,64 @@ await continueAndDelay("0", { status: "loading", url: url }, async () => {
 });
 ```
 
+## Example 11: Execution Teleport Node (nextFromNode)
+
+**Purpose**: Teleport execution to continue from another node's output point, useful for dynamic routing or skipping parts of the workflow.
+
+```javascript
+// Get target node ID from node data or incoming data
+const teleportToNodeId = node.data["teleportNodeId"] || incoming?.data?.teleportTo;
+
+if (teleportToNodeId) {
+    log("Teleporting execution to continue from node: " + teleportToNodeId);
+
+    // Continue execution as if we were at the target node
+    // This will follow the edges from the target node's output point "0"
+    const results = await nextFromNode(teleportToNodeId, "0", {
+        originalNode: node._key,
+        teleportedFrom: node._key,
+        data: incoming?.data
+    });
+
+    log("Teleported execution completed with results: " + JSON.stringify(results));
+
+    // Optionally store results
+    global.teleportResults = results;
+} else {
+    // No teleport target, continue normally
+    await next("0", incoming?.data);
+}
+```
+
+**Use Cases for nextFromNode:**
+
+- **Dynamic routing**: Skip nodes conditionally and continue from a different part of the graph
+- **Reusing subgraphs**: Execute a shared subgraph from multiple entry points
+- **Error recovery**: Jump to a recovery node's output to resume normal flow
+- **Workflow shortcuts**: Allow users to skip optional steps
+
+**Difference from `branch`:**
+- `branch(nodeId, pointId, data)` - Executes the target node itself with incoming data on `pointId`
+- `nextFromNode(nodeId, pointId, data)` - Skips the target node, continues from its output edges on `pointId`
+
+```javascript
+// Example: Conditional teleport based on data
+if (incoming?.data?.skipProcessing) {
+    // Skip the processing node and continue from its output
+    log("Skipping processing, teleporting to continue from processingNode output");
+    await nextFromNode("processingNode", "success", incoming.data);
+} else {
+    // Normal flow through processing
+    await next("0", incoming.data);
+}
+```
+
 ## Notes on Usage
 
 - **Global Storage**: Use `global` to share data across the entire workflow
 - **Local Data**: Use `incoming.data` for data that follows the current execution path
 - **Branching**: Use `branch()` to spawn parallel workflow paths
+- **Teleporting**: Use `nextFromNode()` to continue from another node's output point
 - **Delayed Execution**: Use `continueAndDelay()` to send immediate data and then update with delayed data
 - **Logging**: Use `log()` to track execution flow and debug issues
 - **Error Handling**: Always wrap risky operations in try-catch blocks

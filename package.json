@@ -10,7 +10,10 @@
     "client:dev": "npm run dev port=8426 host=192.168.1.72 https=true --workspace=@nodius/client",
     "auth:create-admin": "npm run create-admin username=admin password=azerty --workspace=@nodius/server",
     "db:export": "npm run export --workspace=@nodius/server",
-    "db:import": "npm run import --workspace=@nodius/server"
+    "db:import": "npm run import --workspace=@nodius/server",
+    "version:patch": "npm version patch -ws --no-git-tag-version",
+    "version:minor": "npm version minor -ws --no-git-tag-version",
+    "version:major": "npm version major -ws --no-git-tag-version"
   },
   "devDependencies": {
 

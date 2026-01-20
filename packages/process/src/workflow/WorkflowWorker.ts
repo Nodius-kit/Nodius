@@ -269,6 +269,38 @@ const executeTask = async (task: Task): Promise<any> => {
 
             await continuePromise;
         },
+        nextFromNode: async (fromNodeId: string, pointId: string, data?: any): Promise<any[]> => {
+            const fromNode = nodeMap!.get(fromNodeId);
+            if (!fromNode) {
+                sendLog(`nextFromNode: Node ${fromNodeId} not found`, node._key, undefined);
+                return [];
+            }
+
+            const validEdges = edgeMap!.get(`source-${fromNodeId}`)?.filter((e) => e.sourceHandle === pointId) || [];
+            if (validEdges.length === 0) {
+                sendLog(`nextFromNode: No outgoing edges from node ${fromNodeId} at point ${pointId}`, node._key, undefined);
+                return [];
+            }
+
+            sendLog(`nextFromNode: Teleporting execution from ${node._key} to continue from ${fromNodeId}:${pointId}`, node._key, data);
+
+            const childPromises: Promise<any>[] = [];
+            for (const edge of validEdges) {
+                const targetNode = nodeMap!.get(edge.target);
+                if (targetNode) {
+                    const childIncoming: incomingWorkflowNode = {
+                        pointId: edge.targetHandle,
+                        data: deepCopy(data),
+                        node: fromNode,
+                    };
+
+                    const childTask = createTask(targetNode, childIncoming);
+                    queueMicrotask(() => startTask(childTask));
+                    childPromises.push(childTask.promise);
+                }
+            }
+            return Promise.all(childPromises);
+        },
         ...utilsFunctionList
     };
 
