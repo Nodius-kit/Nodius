@@ -302,13 +302,24 @@ export class RequestWorkFlow {
                         res.status(500).end();
                         return;
                     }
-                    let query = aql`
+
+                    const offset = Number(body.retrieveGraph.offset);
+                    const limit = Number(body.retrieveGraph.length);
+
+                    if (!Number.isInteger(offset) || !Number.isInteger(limit) || offset < 0 || limit < 1) {
+                        res.status(400).json({ error: "Invalid pagination parameters" });
+                        return;
+                    }
+
+                    const query = aql`
                         FOR doc IN nodius_graphs
-                        FILTER doc.htmlKeyLinked == null AND doc.workspace == ${escapeHTML(body.workspace)}
-                        SORT doc.lastUpdatedTime DESC
-                        LIMIT ${escapeHTML(body.retrieveGraph.offset+"")}, ${escapeHTML(body.retrieveGraph.length+"")}
-                        RETURN doc
+                            FILTER doc.htmlKeyLinked == null
+                            AND doc.workspace == ${escapeHTML(body.workspace)}
+                            SORT doc.lastUpdatedTime DESC
+                            LIMIT ${offset}, ${limit}
+                            RETURN doc
                     `;
+
                     const cursor = await db.query(query);
                     const graphs:GraphWF[] = await cursor.all();
 
