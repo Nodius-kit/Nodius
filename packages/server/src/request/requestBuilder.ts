@@ -78,7 +78,6 @@ export class RequestBuilder {
                         {
                             selector: "&",
                             rules: [
-                                ["outline", "2px solid red"],
                                 ["padding", "5px"],
                                 ["min-height", "50px"]
                             ]
@@ -142,7 +141,6 @@ export class RequestBuilder {
                             rules: [
                                 ["display", "flex"],
                                 ["flex-direction", "column"],
-                                ["outline", "2px solid red"],
                                 ["padding", "5px"],
                                 ["gap", "10px"],
                                 ["min-height", "50px"]
@@ -170,7 +168,6 @@ export class RequestBuilder {
                             rules: [
                                 ["display", "flex"],
                                 ["flex-direction", "row"],
-                                ["outline", "2px solid red"],
                                 ["padding", "5px"],
                                 ["gap", "10px"],
                                 ["min-height", "50px"]
@@ -196,7 +193,7 @@ export class RequestBuilder {
                     name:"Icon",
                     css: [
                         {
-                            selector: "& > svg",
+                            selector: "&",
                             rules: [
                                 ["width", "40px"],
                                 ["height", "40px"],
