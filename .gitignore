@@ -10,3 +10,6 @@ package-lock.json
 .idea
 .claude/settings.local.json
 CLAUDE.md
+packages/client/.claude/settings.local.json
+packages/.claude/settings.local.json
+packages/process/.claude/settings.local.json
