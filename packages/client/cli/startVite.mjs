@@ -4,9 +4,41 @@ import {join} from "node:path";
 import {dirname} from "path";
 import {fileURLToPath} from "url";
 import {spawn} from "node:child_process";
+import {networkInterfaces} from "node:os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Get the local IP address of the network interface that can access the internet.
+ * @returns {string} The local IP address or 'localhost' as fallback
+ */
+function getLocalIP() {
+    const nets = networkInterfaces();
+    const priorityPrefixes = ['192.168.', '10.', '172.'];
+    let fallbackIP = null;
+
+    for (const name of Object.keys(nets)) {
+        const netInterface = nets[name];
+        if (!netInterface) continue;
+
+        for (const net of netInterface) {
+            if (net.internal || net.family !== 'IPv4') continue;
+
+            for (const prefix of priorityPrefixes) {
+                if (net.address.startsWith(prefix)) {
+                    return net.address;
+                }
+            }
+
+            if (!fallbackIP) {
+                fallbackIP = net.address;
+            }
+        }
+    }
+
+    return fallbackIP || 'localhost';
+}
 
 const args = process.argv.slice(2);
 
@@ -30,8 +62,12 @@ const config = parseArgs(args);
 
 // Now assign to variables with default values
 const port = config.port !== undefined ? config.port : 8426;
-const host = config.host || 'localhost';
+const detectedIP = getLocalIP();
+const host = config.host || detectedIP;
 const https = config.https || false;
+
+console.log(`🌐 Using host: ${host}${config.host ? ' (from CLI)' : ' (auto-detected)'}`);
+
 
 const protocol = https ? 'https' : 'http';
 const apiUrl = `${protocol}://${host}:${port}`;
@@ -55,13 +91,20 @@ VITE_WS_URL=${wsUrl}
 
 # HTTPS Configuration
 VITE_USE_HTTPS=${https}
+
+# Host Configuration (for Vite dev server binding)
+VITE_HOST=${host}
 `;
 
 const envPath = join(__dirname, '..', '.env');
 writeFileSync(envPath, envContent, 'utf-8');
 console.log(`✅ Generated .env file with API URL: ${apiUrl}`);
 
-const proc = spawn("npx", ["vite"], { stdio: "pipe", shell: true });
+const proc = spawn("npx", ["vite"], {
+    stdio: "pipe",
+    shell: true,
+    env: { ...process.env, VITE_HOST: host }
+});
 proc.stdout.on("data", (data) => {
     process.stdout.write(data);
 });

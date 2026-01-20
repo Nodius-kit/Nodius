@@ -3,6 +3,10 @@
 import { spawn } from 'child_process';
 import { platform } from 'os';
 
+// Get CLI arguments to forward to server and client
+const userArgs = process.argv.slice(2);
+const argsString = userArgs.length > 0 ? ' ' + userArgs.join(' ') : '';
+
 // ANSI color codes
 const colors = {
   reset: '\x1b[0m',
@@ -81,7 +85,7 @@ function startServer() {
   const isWindows = platform() === 'win32';
   const npmCmd = isWindows ? 'npm.cmd' : 'npm';
 
-  serverProcess = spawn(npmCmd, ['run', 'server:dev'], {
+  serverProcess = spawn(npmCmd, ['run', 'server:dev' + argsString], {
     stdio: 'pipe',
     shell: isWindows,
   });
@@ -140,7 +144,7 @@ function startClient() {
   const isWindows = platform() === 'win32';
   const npmCmd = isWindows ? 'npm.cmd' : 'npm';
 
-  clientProcess = spawn(npmCmd, ['run', 'client:dev'], {
+  clientProcess = spawn(npmCmd, ['run', 'client:dev' + argsString], {
     stdio: 'pipe',
     shell: isWindows,
   });
@@ -202,4 +206,7 @@ console.log(`${colors.cyan}${colors.bright}
 ${colors.reset}`);
 
 logSystem('Initializing development environment...');
+if (userArgs.length > 0) {
+  logSystem(`CLI arguments: ${userArgs.join(' ')}`);
+}
 startServer();

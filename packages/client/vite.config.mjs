@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => {
         },
         publicDir: "src/client/public",
         server: {
-            host: "0.0.0.0",
+            host: process.env.VITE_HOST || "localhost",
             https: httpsConfig,
         }
     };

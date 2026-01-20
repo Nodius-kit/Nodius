@@ -20,5 +20,6 @@ export * from './server';
 export * from './utils/arangoUtils';
 export * from './utils/env';
 export * from './utils/generateCert';
+export * from './utils/getLocalIP';
 export * from './utils/image/imageCompression';
 export * from './utils/image/imageValidation';

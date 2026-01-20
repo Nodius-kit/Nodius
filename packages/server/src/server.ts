@@ -38,14 +38,21 @@ import {readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { loadOrGenerateCert } from './utils/generateCert';
+import { getLocalIP } from './utils/getLocalIP';
 
 const args =  parseArgs();
 
 // Auto-generate .env file for Vite
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const host = args.get('host', 'localhost');
+
+// Auto-detect local IP if not specified via CLI args
+const detectedIP = getLocalIP();
+const host = args.get('host', detectedIP);
 const port = parseInt(args.get('port', '8426'));
+
+console.log(`🌐 Using host: ${host}${args.get('host') ? ' (from CLI)' : ' (auto-detected)'}`);
+
 
 // HTTPS configuration
 const useHttps = args.get('https', 'false') === 'true';
@@ -68,10 +75,12 @@ if (useHttps) {
         console.log(`Using provided SSL certificate from ${certPath}`);
     } else {
         // Generate self-signed certificate (async)
+        // Include auto-detected IP in certificate SANs for network access
         console.log(`Generating self-signed SSL certificate...`);
         httpsConfig = await loadOrGenerateCert({
             commonName: host,
-            outputDir: [join(__dirname, '..', 'certs'), join(__dirname, '..', '..', 'client', 'certs')]
+            outputDir: [join(__dirname, '..', 'certs'), join(__dirname, '..', '..', 'client', 'certs')],
+            altIPs: host !== 'localhost' && host !== '127.0.0.1' ? [host] : []
         });
     }
 }
@@ -157,8 +166,8 @@ RequestImage.init(app);
 
 // Start server with proper options
 const serverOptions: { port: number; host: string; https?: { key: string; cert: string } } = {
-    port: parseInt(args.get("port", "8426")),
-    host: args.get("host", "localhost"),
+    port,
+    host,
 };
 
 if (httpsConfig) {

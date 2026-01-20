@@ -225,10 +225,44 @@ npm run dev
 ```
 
 This command:
-1. Starts the API server on `https://localhost:8426`
-2. Starts the React client on an available port (usually `https://localhost:5173`)
+1. Starts the API server on `https://[auto-detected-ip]:8426`
+2. Starts the React client on an available port (usually `https://[auto-detected-ip]:5173`)
 3. Automatically configures HTTPS with self-signed certificates
 4. Synchronizes server and client logs
+
+### Network Configuration
+
+By default, Nodius **automatically detects your local network IP** (the one that provides internet access), making the server accessible from other devices on the same network. This is useful for:
+- Testing on mobile devices
+- Collaborative development
+- Multi-machine setups
+
+#### Override the Host IP
+
+You can override the auto-detected IP using the `host` argument:
+
+```bash
+# Use a specific IP
+npm run dev host=192.168.1.100
+
+# Use localhost only (not accessible from network)
+npm run dev host=localhost
+
+# Use all interfaces
+npm run dev host=0.0.0.0
+```
+
+The same `host` parameter works for individual startup commands:
+
+```bash
+# Server with custom host
+npm run server:dev host=192.168.1.100 https=true
+
+# Client with custom host
+npm run client:dev host=192.168.1.100 https=true
+```
+
+**Note**: When using HTTPS with auto-detected IP, the self-signed certificate automatically includes the detected IP in its Subject Alternative Names (SANs), allowing secure connections without certificate errors for that IP.
 
 ### Individual Startup
 
