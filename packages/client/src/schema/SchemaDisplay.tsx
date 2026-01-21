@@ -83,8 +83,8 @@ export const SchemaDisplay = memo(() => {
         onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
             console.log(`[SchemaDisplay] DOM event: ${eventType} from node ${nodeKey}, point ${pointId}`, eventData);
         },
-        onInitHtml: async (html: HtmlObject, id?: string, containerSelector?: string) => {
-            console.log('[SchemaDisplay] Init HTML render', { id, containerSelector });
+        onInitHtml: async (html: HtmlObject, nodeKey: string, id?: string, containerSelector?: string) => {
+            console.log('[SchemaDisplay] Init HTML render', { nodeKey, id, containerSelector });
 
             const renderId = id || '';
             const rootSchemaNode = inSchemaNode.current.get('root');
@@ -115,10 +115,10 @@ export const SchemaDisplay = memo(() => {
                         language: "en",
                         buildingMode: false,
                         workflowMode: true,
-                        onDomEvent: (nodeKey: string, pointId: string, eventType: string, eventData: any) => {
+                        onDomEvent: (nKey: string, pointId: string, eventType: string, eventData: any) => {
                             // Forward DOM event to workflow manager
                             if (workflowManager.current) {
-                                workflowManager.current.sendDomEvent(nodeKey, pointId, eventType, eventData);
+                                workflowManager.current.sendDomEvent(nKey, pointId, eventType, eventData);
                             }
                         }
                     });
@@ -135,7 +135,7 @@ export const SchemaDisplay = memo(() => {
                             ...projectRef.current.state.workFlowState.global,
                             entryData: projectRef.current.state.workFlowState.entryData
                         })
-                        context.htmlRender.setNodeKey(rootNode._key);
+                        context.htmlRender.setNodeKey(nodeKey);
                         await context.htmlRender.render(html);
                     }
                 }
