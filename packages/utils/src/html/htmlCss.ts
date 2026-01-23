@@ -27,6 +27,9 @@ export interface CSSBlock {
 const cssCache = new Map<string, string>();
 let classCounter = 0;
 
+// Track parent classes added to ancestor elements for cleanup
+const parentClassesMap = new WeakMap<HTMLElement, Map<HTMLElement, string[]>>();
+
 // Ensure we have a <style> tag in the document
 function ensureStyleSheet(): CSSStyleSheet {
     let styleTag = document.getElementById("dynamic-css") as HTMLStyleElement;
@@ -42,11 +45,21 @@ function generateClassName(): string {
     return `css-${classCounter++}`;
 }
 
-function rulesToString(rules: string[][]): string {
-    return rules.map(([key, value]) => `${key}: ${value}`).join('; ');
+function normalizeValue(value: string): string {
+    // Handle !important without space: "red!important" → "red !important"
+    return value.replace(/([^ ])!important/gi, '$1 !important');
 }
 
-function parseSelector(selector: string, className: string): string {
+function rulesToString(rules: string[][]): string {
+    return rules.map(([key, value]) => `${key}: ${normalizeValue(value)}`).join('; ');
+}
+
+interface ParsedSelector {
+    selector: string;
+    parentDepth: number; // How many :parent levels (0 = current element)
+}
+
+function parseSelector(selector: string, className: string): ParsedSelector {
     // Handle HTML entity decoding if necessary
     let decodedSelector = selector.replace(/&lt;/g, '<')
                                   .replace(/&gt;/g, '>')
@@ -54,24 +67,64 @@ function parseSelector(selector: string, className: string): string {
                                   .replace(/&quot;/g, '"')
                                   .replace(/&#39;/g, "'");
 
+    // Count and remove :parent pseudo-selectors
+    // Matches &:parent, &:parent:parent, etc.
+    let parentDepth = 0;
+    const parentPattern = /:parent/g;
+    const matches = decodedSelector.match(parentPattern);
+    if (matches) {
+        parentDepth = matches.length;
+        // Remove all :parent from the selector
+        decodedSelector = decodedSelector.replace(parentPattern, '');
+    }
+
     // Replace & with the actual class name
     // This handles &, &:hover, &.other-class, & > child, etc.
-    return decodedSelector.replace(/&/g, `.${className}`);
+    const finalSelector = decodedSelector.replace(/&/g, `.${className}`);
+
+    return { selector: finalSelector, parentDepth };
+}
+
+function getAncestor(el: HTMLElement, depth: number): HTMLElement | null {
+    let current: HTMLElement | null = el;
+    for (let i = 0; i < depth && current; i++) {
+        current = current.parentElement;
+    }
+    return current;
 }
 
 export function applyCSSBlocks(el: HTMLElement, blocks: CSSBlock[]): void {
     const sheet = ensureStyleSheet();
 
-    // Generate a single class name for this element
-    const className = generateClassName();
-
-    // Add the class to the element
-    el.classList.add(className);
+    // Track classes added to ancestor elements for this element
+    const ancestorClasses = new Map<HTMLElement, string[]>();
 
     // Process each CSS block
     for (const block of blocks) {
-        const finalSelector = parseSelector(block.selector, className);
+        // Generate a class name for this block
+        const className = generateClassName();
+
+        const { selector: finalSelector, parentDepth } = parseSelector(block.selector, className);
         const cssText = rulesToString(block.rules);
+
+        // Determine target element based on parent depth
+        const targetEl = parentDepth > 0 ? getAncestor(el, parentDepth) : el;
+
+        if (!targetEl) {
+            console.warn(`Cannot find ancestor at depth ${parentDepth} for selector: ${block.selector}`);
+            continue;
+        }
+
+        // Add the class to the target element
+        targetEl.classList.add(className);
+
+        // Track parent classes for cleanup
+        if (parentDepth > 0) {
+            if (!ancestorClasses.has(targetEl)) {
+                ancestorClasses.set(targetEl, []);
+            }
+            ancestorClasses.get(targetEl)!.push(className);
+        }
 
         // Create cache key based on the final selector and rules
         const cacheKey = `${finalSelector}|${cssText}`;
@@ -91,12 +144,24 @@ export function applyCSSBlocks(el: HTMLElement, blocks: CSSBlock[]): void {
             console.error(`Failed to insert CSS rule: ${rule}`, error);
         }
     }
+
+    // Store ancestor classes map for cleanup
+    if (ancestorClasses.size > 0) {
+        parentClassesMap.set(el, ancestorClasses);
+    }
 }
 
 export function removeCSSBlocks(el: HTMLElement, blocks: CSSBlock[]): void {
-    // Remove all dynamically added classes
+    // Remove all dynamically added classes from the element
     const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('css-'));
     classesToRemove.forEach(cls => el.classList.remove(cls));
 
-
+    // Remove classes added to ancestor elements via :parent
+    const ancestorClasses = parentClassesMap.get(el);
+    if (ancestorClasses) {
+        for (const [ancestorEl, classes] of ancestorClasses) {
+            classes.forEach(cls => ancestorEl.classList.remove(cls));
+        }
+        parentClassesMap.delete(el);
+    }
 }

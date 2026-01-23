@@ -217,8 +217,17 @@ async function importDatabase() {
     }
 }
 
-// Run import
-importDatabase().catch(error => {
-    console.error('Fatal error:', error);
-    process.exit(1);
-});
+// Export the function for programmatic use
+export { importDatabase };
+
+// CLI execution: run only if this file is executed directly
+const isMainModule = import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` ||
+    process.argv[1]?.endsWith('import.ts') ||
+    process.argv[1]?.endsWith('import.js');
+
+if (isMainModule) {
+    importDatabase().catch(error => {
+        console.error('Fatal error:', error);
+        process.exit(1);
+    });
+}

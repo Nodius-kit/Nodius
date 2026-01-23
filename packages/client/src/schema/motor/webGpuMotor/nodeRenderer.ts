@@ -72,7 +72,7 @@ export class NodeRenderer {
 
       @fragment
       fn fs() -> @location(0) vec4<f32> {
-        return vec4<f32>(0, 0, 0, 0); 
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0); 
       }
     `;
         const nodeModule = this.device.createShaderModule({ code: nodeShaderCode });
@@ -99,7 +99,21 @@ export class NodeRenderer {
             fragment: {
                 module: nodeModule,
                 entryPoint: "fs",
-                targets: [{ format: this.format }],
+                targets: [{
+                    format: this.format,
+                    blend: {
+                        color: {
+                            srcFactor: 'src-alpha',
+                            dstFactor: 'one-minus-src-alpha',
+                            operation: 'add',
+                        },
+                        alpha: {
+                            srcFactor: 'one',
+                            dstFactor: 'one-minus-src-alpha',
+                            operation: 'add',
+                        }
+                    }
+                }],
             },
             primitive: { topology: "triangle-list" },
             multisample: { count: this.sampleCount },

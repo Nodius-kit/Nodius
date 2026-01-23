@@ -113,5 +113,14 @@ async function createAdminUser() {
     }
 }
 
-// Run the CLI
-createAdminUser();
+// Export the function for programmatic use
+export { createAdminUser };
+
+// CLI execution: run only if this file is executed directly
+const isMainModule = import.meta.url === `file://${process.argv[1]?.replace(/\\/g, '/')}` ||
+    process.argv[1]?.endsWith('createAdmin.ts') ||
+    process.argv[1]?.endsWith('createAdmin.js');
+
+if (isMainModule) {
+    createAdminUser();
+}
