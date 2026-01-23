@@ -72,7 +72,7 @@ export class NodeRenderer {
 
       @fragment
       fn fs() -> @location(0) vec4<f32> {
-        return vec4<f32>(0.8, 0.8, 0.8, 1.0); // Light gray for nodes
+        return vec4<f32>(0, 0, 0, 0); 
       }
     `;
         const nodeModule = this.device.createShaderModule({ code: nodeShaderCode });
