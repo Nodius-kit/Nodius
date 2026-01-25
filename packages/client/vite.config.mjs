@@ -31,6 +31,13 @@ export default defineConfig(({ mode }) => {
     return {
         plugins: [react()],
 
+        resolve: {
+            alias: {
+                "@nodius/utils": path.resolve(__dirname, "../utils/src/index.ts"),
+                "@nodius/process": path.resolve(__dirname, "../process/src/index.ts"),
+            },
+        },
+
         build: {
             outDir: "export"
         },
