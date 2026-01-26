@@ -206,7 +206,7 @@ export const LeftPanelNodeLibrary = memo(({
                     nodeType.posX = pos.x - (nodeType.size.width/2);
                     nodeType.posY = pos.y - (nodeType.size.height/2);
 
-                    const output = await Project.state.batchCreateElements!([nodeType], []);
+                    const output = await Project.state.batchCreateElements!([nodeType], [], Project.state.selectedSheetId);
                     // ho boy we're in
 
                 }

@@ -239,6 +239,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                         await projectRef.current.state.updateGraph!([{
                             nodeId: node._key,
                             i: instruction.instruction,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         }]);
 
                         // Recreate the menu to show the delete button
@@ -266,6 +267,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                             await projectRef.current.state.updateGraph!([{
                                 nodeId: node._key,
                                 i: instruction.instruction,
+                                sheetId: projectRef.current.state.selectedSheetId!
                             }]);
                             projectRef.current.state.getMotor().requestRedraw();
 
@@ -526,11 +528,13 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                         await projectRef.current.state.updateGraph!([
                             {
                                 nodeId: nodeId,
-                                i: instructionRemove.instruction
+                                i: instructionRemove.instruction,
+                                sheetId: projectRef.current.state.selectedSheetId!
                             },
                             {
                                 nodeId: nodeId,
-                                i: instructionAdd.instruction
+                                i: instructionAdd.instruction,
+                                sheetId: projectRef.current.state.selectedSheetId!
                             }
                         ]);
 
@@ -573,7 +577,11 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                 if (isDragging) {
                     const instruction = new InstructionBuilder();
                     instruction.key("handles").key(handleInfo.side).key("point").index(handleInfo.index).key("offset").set(handleInfo.offset);
-                    await projectRef.current.state.updateGraph!([{ nodeId, i: instruction.instruction }]);
+                    await projectRef.current.state.updateGraph!([{
+                        nodeId: nodeId,
+                        i: instruction.instruction,
+                        sheetId: projectRef.current.state.selectedSheetId!
+                    }]);
                     projectRef.current.state.getMotor().requestRedraw();
                 }
 

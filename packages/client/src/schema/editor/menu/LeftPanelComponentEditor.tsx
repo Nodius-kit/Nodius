@@ -198,6 +198,7 @@ export const LeftPanelComponentEditor = memo(({
                     await projectRef.current.state.editedHtml!.updateHtmlObject([{
                         i: removeInstruction.instruction,
                         triggerHtmlRender: true,
+                        sheetId: Project.state.selectedSheetId!
                     }]);
 
                     lastInstruction = undefined;
@@ -300,7 +301,8 @@ export const LeftPanelComponentEditor = memo(({
                                 i: removeInstruction.instruction,
                                 targetedIdentifier: object.identifier,
                                 triggerHtmlRender: true,
-                                applyUniqIdentifier: "identifier"
+                                applyUniqIdentifier: "identifier",
+                                sheetId: Project.state.selectedSheetId!
                             }]);
 
                             if (indexOfTemporary < insertAt) {
@@ -326,7 +328,8 @@ export const LeftPanelComponentEditor = memo(({
                     i: instruction.instruction,
                     targetedIdentifier: object.identifier,
                     triggerHtmlRender: true,
-                    applyUniqIdentifier: "identifier"
+                    applyUniqIdentifier: "identifier",
+                    sheetId: Project.state.selectedSheetId!
                 }]);
 
                 lastObjectHover = object;
@@ -357,7 +360,8 @@ export const LeftPanelComponentEditor = memo(({
                 // Send cleanup to server and wait for confirmation
                 await projectRef.current.state.editedHtml!.updateHtmlObject([{
                     i: cleanupInstruction.instruction,
-                    triggerHtmlRender: true
+                    triggerHtmlRender: true,
+                    sheetId: Project.state.selectedSheetId!
                 }]);
                 //lastInstruction = undefined;
             }

@@ -144,6 +144,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             dontApplyToMySelf: true,
                             dontPutBackAction: true,
                             dontTriggerUpdateNode: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         },
                         {
                             i: instructionsY.instruction,
@@ -152,6 +153,7 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                             dontApplyToMySelf: true,
                             dontPutBackAction: true,
                             dontTriggerUpdateNode: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         }
                     );
                 }
@@ -210,12 +212,14 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                                 nodeId: id,
                                 animatePos: true,
                                 dontPutBackAction: true,
+                                sheetId: projectRef.current.state.selectedSheetId!
                             },
                             {
                                 i: instructionsY.instruction,
                                 nodeId: id,
                                 animatePos: true,
                                 dontPutBackAction: true,
+                                sheetId: projectRef.current.state.selectedSheetId!
                             }
                         );
                     }
@@ -339,12 +343,14 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
                                     nodeId: id,
                                     animatePos: true,
                                     dontPutBackAction: true,
+                                    sheetId: projectRef.current.state.selectedSheetId!
                                 },
                                 {
                                     i: instructionsY.instruction,
                                     nodeId: id,
                                     animatePos: true,
                                     dontPutBackAction: true,
+                                    sheetId: projectRef.current.state.selectedSheetId!
                                 }
                             );
                         }

@@ -152,8 +152,8 @@ export interface ProjectContextType {
     enumTypes?:EnumClass[],
     refreshAvailableEnums?:() => Promise<void>,
 
-    batchCreateElements?:(nodes: Node<any>[], edges: Edge[]) => Promise<ActionContext>,
-    batchDeleteElements?:(nodeKeys: string[], edgeKeys: string[]) => Promise<ActionContext>,
+    batchCreateElements?:(nodes: Node<any>[], edges: Edge[], sheetId:string) => Promise<ActionContext>,
+    batchDeleteElements?:(nodeKeys: string[], edgeKeys: string[], sheetId:string) => Promise<ActionContext>,
 
     currentEntryDataType?:DataTypeClass,
     refreshCurrentEntryDataType?:() => void,

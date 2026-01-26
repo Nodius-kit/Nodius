@@ -129,6 +129,7 @@ export const App = () => {
                                     i: instruction.instruction,
                                     triggerHtmlRender: true,
                                     applyUniqIdentifier: "identifier",
+                                    sheetId: Project.state.selectedSheetId,
                                 }]);
 
                             } else if(selectedObject.type === "list"){
@@ -138,6 +139,7 @@ export const App = () => {
                                     i: instruction.instruction,
                                     triggerHtmlRender: true,
                                     applyUniqIdentifier: "identifier",
+                                    sheetId: Project.state.selectedSheetId
                                 }]);
 
                             }
@@ -208,7 +210,7 @@ export const App = () => {
                             edge.target = nodeIdMap.get(edge.target)!;
                         }
 
-                        await Project.state.batchCreateElements!(copiedObject.node, copiedObject.edge);
+                        await Project.state.batchCreateElements!(copiedObject.node, copiedObject.edge, Project.state.selectedSheetId);
                     }
                 }
             } else if (key === "delete") {
@@ -252,7 +254,8 @@ export const App = () => {
                                         instructionsGraph.push({
                                             nodeId: node._key!,
                                             i: instruction,
-                                            targetedIdentifier: point.id
+                                            targetedIdentifier: point.id,
+                                            sheetId: Project.state.selectedSheetId
                                         });
                                     }
                                 }
@@ -264,6 +267,7 @@ export const App = () => {
                             i: i,
                             triggerHtmlRender: true,
                             applyUniqIdentifier: "identifier",
+                            sheetId: Project.state.selectedSheetId!
                         })));
                     }
                     if(instructionsGraph.length > 0) {
@@ -284,7 +288,7 @@ export const App = () => {
                     let nodeId: string[] = saved_node.map((n) => n._key);
                     let edgeId: string[] = saved_edge.map((e) => e._key);
 
-                    await Project.state.batchDeleteElements!(nodeId,edgeId);
+                    await Project.state.batchDeleteElements!(nodeId,edgeId,baseSheetId);
 
                 } else if(Project.state.editedNodeHandle) {
                     const nodeId = Project.state.editedNodeHandle.nodeId;
@@ -314,7 +318,8 @@ export const App = () => {
                     await Project.state.updateGraph!([{
                         nodeId,
                         i: deleteInstruction,
-                        targetedIdentifier: pointId
+                        targetedIdentifier: pointId,
+                        sheetId: Project.state.selectedSheetId
                     }]);
 
                     // On sort du mode édition du handle

@@ -18,7 +18,7 @@
 import {memo, useContext, useEffect, useMemo, useRef, useState} from "react";
 import { ProjectContext } from "../../../hooks/contexts/ProjectContext";
 import { ThemeContext } from "../../../hooks/contexts/ThemeContext";
-import { InstructionBuilder } from "@nodius/utils";
+import { InstructionBuilder, GraphInstructions } from "@nodius/utils";
 import { useDynamicClass } from "../../../hooks/useDynamicClass";
 import { Settings, Trash2, Circle } from "lucide-react";
 import {Node} from "@nodius/utils";
@@ -227,7 +227,8 @@ export const RightPanelHandleConfig = memo(() => {
 
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
-            i: instruction.instruction
+            i: instruction.instruction,
+            sheetId: Project.state.selectedSheetId!
         }]);
         retrieveNode();
 
@@ -241,14 +242,15 @@ export const RightPanelHandleConfig = memo(() => {
         const handleInfo = getHandleInfo(node, editedHandle.pointId);
         if(!handleInfo) return;
 
-        const instructions = [];
+        const instructions: GraphInstructions[] = [];
 
         // Update position mode
         const modeInstruction = new InstructionBuilder();
         modeInstruction.key("handles").key(editedHandle.side).key("position").set(mode);
         instructions.push({
             nodeId: editedHandle.nodeId,
-            i: modeInstruction.instruction
+            i: modeInstruction.instruction,
+            sheetId: Project.state.selectedSheetId!
         });
 
 
@@ -264,7 +266,8 @@ export const RightPanelHandleConfig = memo(() => {
                 .remove();
             instructions.push({
                 nodeId: editedHandle.nodeId,
-                i: offsetInstruction.instruction
+                i: offsetInstruction.instruction,
+                sheetId: Project.state.selectedSheetId!
             });
         } else {
             // Set default offset when switching to fixed
@@ -293,7 +296,8 @@ export const RightPanelHandleConfig = memo(() => {
                 .set(defaultOffset);
             instructions.push({
                 nodeId: editedHandle.nodeId,
-                i: offsetInstruction.instruction
+                i: offsetInstruction.instruction,
+                sheetId: Project.state.selectedSheetId!
             });
         }
 
@@ -318,7 +322,8 @@ export const RightPanelHandleConfig = memo(() => {
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
             i: instruction.instruction,
-            targetedIdentifier: handleInfo.point.id
+            targetedIdentifier: handleInfo.point.id,
+            sheetId: Project.state.selectedSheetId!
         }]);
         retrieveNode();
 
@@ -334,7 +339,8 @@ export const RightPanelHandleConfig = memo(() => {
 
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
-            i: instruction.instruction
+            i: instruction.instruction,
+            sheetId: Project.state.selectedSheetId!
         }]);
         retrieveNode();
 
@@ -364,7 +370,8 @@ export const RightPanelHandleConfig = memo(() => {
 
         await Project.state.updateGraph([{
             nodeId: editedHandle.nodeId,
-            i: instruction.instruction
+            i: instruction.instruction,
+            sheetId: Project.state.selectedSheetId!
         }]);
         retrieveNode();
 

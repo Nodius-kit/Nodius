@@ -276,7 +276,17 @@ export const LeftPanelEntryTypeSelect = memo((
     const removeEntryType = async () => {
         let nodeType = retrieveNodeType();
         if(nodeType) {
-            await Project.state.batchDeleteElements!([nodeType._key], []);
+            let sheetOfRoot:string|undefined = undefined;
+            for(const [id, sheet] of Object.entries(Project.state.graph!.sheets)) {
+                if(sheet.nodeMap.has("root")) {
+                    sheetOfRoot = id;
+                    break;
+                }
+            }
+            if(!sheetOfRoot) {
+                return;
+            }
+            await Project.state.batchDeleteElements!([nodeType._key], [], sheetOfRoot);
         }
     }
 
@@ -295,7 +305,8 @@ export const LeftPanelEntryTypeSelect = memo((
 
             const instructions:Array<GraphInstructions> = [{
                 nodeId: nodeType._key,
-                i: instruction.instruction
+                i: instruction.instruction,
+                sheetId: Project.state.selectedSheetId!
             }];
             const output = await Project.state.updateGraph!(instructions);
 
@@ -330,7 +341,18 @@ export const LeftPanelEntryTypeSelect = memo((
                 targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
             }
 
-            const output = await Project.state.batchCreateElements!([nodeType], [edge]);
+
+            let sheetOfRoot:string|undefined = undefined;
+            for(const [id, sheet] of Object.entries(Project.state.graph!.sheets)) {
+                if(sheet.nodeMap.has("root")) {
+                    sheetOfRoot = id;
+                    break;
+                }
+            }
+            if(!sheetOfRoot) {
+                return;
+            }
+            const output = await Project.state.batchCreateElements!([nodeType], [edge], sheetOfRoot);
 
         }
     }
@@ -435,6 +457,7 @@ export const LeftPanelEntryTypeSelect = memo((
         const instructions:Array<GraphInstructions> = [{
             nodeId: nodeType._key,
             i: instruction.instruction,
+            sheetId: Project.state.selectedSheetId!
         }];
         const output = await Project.state.updateGraph!(instructions);
 

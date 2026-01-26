@@ -724,7 +724,7 @@ export const useSocketSync = () => {
     }, [openNodeConfig]);
 
     const handleIntructionToGraph = useCallback(async (instructions:GraphInstructions[], beforeApply?: BeforeApplyInstructionWithContext):Promise<{status:boolean, error?:string, shouldUpdateNode:boolean}> => {
-        if(!projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) return {
+        if(!projectRef.current.state.graph) return {
             status: false,
             error: "Graph not initialized",
             shouldUpdateNode: false
@@ -734,7 +734,7 @@ export const useSocketSync = () => {
 
         for(const instruction of instructions) {
             if(instruction.nodeId) {
-                const node = projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(instruction.nodeId);
+                const node = projectRef.current.state.graph!.sheets[instruction.sheetId].nodeMap.get(instruction.nodeId);
                 if(!node) {
                     return {
                         status: false,
@@ -762,7 +762,7 @@ export const useSocketSync = () => {
 
                 const newNode = applyInstruction(node, instruction.i, beforeApply ? ((objectBeingApplied) => beforeApply(instruction, objectBeingApplied)) : undefined);
                 if(newNode.success) {
-                    projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.set(instruction.nodeId, newNode.value);
+                    projectRef.current.state.graph!.sheets[instruction.sheetId].nodeMap.set(instruction.nodeId, newNode.value);
                 } else {
                     return {
                         status: false,
@@ -771,7 +771,7 @@ export const useSocketSync = () => {
                     };
                 }
             } else if(instruction.edgeId) {
-                const oldNEdge = findEdgeByKey(projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].edgeMap, instruction.edgeId);
+                const oldNEdge = findEdgeByKey(projectRef.current.state.graph!.sheets[instruction.sheetId].edgeMap, instruction.edgeId);
                 if(!oldNEdge) {
                     return {
                         status: false,
@@ -786,30 +786,30 @@ export const useSocketSync = () => {
                     //remove old
                     if(edges[0].target) {
                         const targetKey = `target-${edges[0].target}`;
-                        let edgeListTarget = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.get(targetKey) ?? [];
+                        let edgeListTarget = projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.get(targetKey) ?? [];
                         edgeListTarget = edgeListTarget.filter((e) => e._key !== edges[0]._key);
                         if(edgeListTarget.length > 0) {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.set(targetKey, edgeListTarget);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.set(targetKey, edgeListTarget);
                         } else {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.delete(targetKey);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.delete(targetKey);
                         }
                     }
 
                     if(edges[0].source) {
                         const sourceKey = `source-${edges[0].source}`;
-                        let edgeListSource = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.get(sourceKey) ?? [];
+                        let edgeListSource = projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.get(sourceKey) ?? [];
                         edgeListSource = edgeListSource.filter((e) => e._key !== edges[0]._key);
                         if(edgeListSource.length > 0) {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.set(sourceKey, edgeListSource);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.set(sourceKey, edgeListSource);
                         } else {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.delete(sourceKey);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.delete(sourceKey);
                         }
                     }
 
                     // add new
                     if(edges[1].target) {
                         const targetKey = `target-${edges[1].target}`;
-                        let edgeListTarget = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.get(targetKey) ?? [];
+                        let edgeListTarget = projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.get(targetKey) ?? [];
                         let some = false;
                         edgeListTarget = edgeListTarget.map((e) => {
                             if(e._key === edges[1]._key) {
@@ -821,15 +821,15 @@ export const useSocketSync = () => {
                         });
                         if(!some) edgeListTarget.push(edges[1]);
                         if(edgeListTarget.length > 0) {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.set(targetKey, edgeListTarget);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.set(targetKey, edgeListTarget);
                         } else {
-                            projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.delete(targetKey);
+                            projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.delete(targetKey);
                         }
                     }
 
                     if(edges[1].source) {
                         const sourceKey = `source-${edges[1].source}`;
-                        let edgeListSource = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.get(sourceKey) ?? [];
+                        let edgeListSource = projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.get(sourceKey) ?? [];
                         let some = false;
                         edgeListSource = edgeListSource.map((e) => {
                             if(e._key === edges[1]._key) {
@@ -840,7 +840,7 @@ export const useSocketSync = () => {
                             }
                         });
                         if(!some) edgeListSource.push(edges[1]);
-                        projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId].edgeMap.set(sourceKey, edgeListSource);
+                        projectRef.current.state.graph.sheets[instruction.sheetId].edgeMap.set(sourceKey, edgeListSource);
                     }
                 } else {
                     console.error(newEdge, instruction.i, oldNEdge);
@@ -868,9 +868,9 @@ export const useSocketSync = () => {
         const savedObject: (Node<any> | Edge)[] = [];
         for(const instruction of instructions) {
             if(instruction.nodeId) {
-                savedObject.push(projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].nodeMap.get(instruction.nodeId)!);
+                savedObject.push(projectRef.current.state.graph!.sheets[instruction.sheetId].nodeMap.get(instruction.nodeId)!);
             } else if(instruction.edgeId) {
-                savedObject.push(findEdgeByKey(projectRef.current.state.graph!.sheets[projectRef.current.state.selectedSheetId!].edgeMap, instruction.edgeId) as Edge);
+                savedObject.push(findEdgeByKey(projectRef.current.state.graph!.sheets[instruction.sheetId].edgeMap, instruction.edgeId) as Edge);
             }
         }
         const actions:ActionStorage = {
@@ -1300,13 +1300,13 @@ export const useSocketSync = () => {
         }
     }, [Project.state.activeAppMenuId]);
 
-    const applyBatchCreate = useCallback(async (nodes: Node<any>[], edges: Edge[]): Promise<{status: boolean, error?: string}> => {
-        if(!projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) return {
+    const applyBatchCreate = useCallback(async (nodes: Node<any>[], edges: Edge[], sheetId:string): Promise<{status: boolean, error?: string}> => {
+        if(!projectRef.current.state.graph) return {
             status: false,
             error: "Graph not initialized"
         };
 
-        const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
+        const sheet = projectRef.current.state.graph.sheets[sheetId];
 
         // Add nodes to the graph
         for(const node of nodes) {
@@ -1415,20 +1415,12 @@ export const useSocketSync = () => {
         };
     }, []);
 
-    const batchCreateElements = useCallback(async (nodes: Node<any>[], edges: Edge[]): Promise<ActionContext> => {
+    const batchCreateElements = useCallback(async (nodes: Node<any>[], edges: Edge[], sheetId:string): Promise<ActionContext> => {
         const start = Date.now();
-
-        if(!projectRef.current.state.selectedSheetId) {
-            return {
-                timeTaken: Date.now() - start,
-                reason: "No sheet selected",
-                status: false,
-            };
-        }
 
         const message: WSMessage<WSBatchCreateElements> = {
             type: "batchCreateElements",
-            sheetId: projectRef.current.state.selectedSheetId,
+            sheetId: sheetId,
             nodes: nodes,
             edges: edges
         };
@@ -1437,7 +1429,7 @@ export const useSocketSync = () => {
 
         if(response && response._response) {
             if(response._response.status) {
-                const output = await applyBatchCreate(response.nodes, response.edges);
+                const output = await applyBatchCreate(response.nodes, response.edges, sheetId);
                 if(!output.status) {
                     return {
                         reason: output.error || "Unknown error applying batch create",
@@ -1475,13 +1467,13 @@ export const useSocketSync = () => {
         });
     }, [batchCreateElements]);
 
-    const applyBatchDelete = useCallback(async (nodeKeys: string[], edgeKeys: string[]): Promise<{status: boolean, error?: string}> => {
-        if(!projectRef.current.state.graph || !projectRef.current.state.selectedSheetId) return {
+    const applyBatchDelete = useCallback(async (nodeKeys: string[], edgeKeys: string[], sheetId:string): Promise<{status: boolean, error?: string}> => {
+        if(!projectRef.current.state.graph) return {
             status: false,
             error: "Graph not initialized"
         };
 
-        const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
+        const sheet = projectRef.current.state.graph.sheets[sheetId];
 
         const deletedNode:Node<any>[] = [];
         const deletedEdges:Edge[] = [];
@@ -1622,16 +1614,9 @@ export const useSocketSync = () => {
         };
     }, []);
 
-    const batchDeleteElements = useCallback(async (nodeKeys: string[], edgeKeys: string[]): Promise<ActionContext> => {
+    const batchDeleteElements = useCallback(async (nodeKeys: string[], edgeKeys: string[], sheetId:string): Promise<ActionContext> => {
         const start = Date.now();
 
-        if(!projectRef.current.state.selectedSheetId) {
-            return {
-                timeTaken: Date.now() - start,
-                reason: "No sheet selected",
-                status: false,
-            };
-        }
 
         if(!projectRef.current.state.graph) {
             return {
@@ -1641,7 +1626,7 @@ export const useSocketSync = () => {
             };
         }
 
-        const sheet = projectRef.current.state.graph.sheets[projectRef.current.state.selectedSheetId];
+        const sheet = projectRef.current.state.graph.sheets[sheetId];
 
         // Create a set of edge keys for faster lookup
         const edgeKeysSet = new Set(edgeKeys);
@@ -1687,7 +1672,7 @@ export const useSocketSync = () => {
 
         const message: WSMessage<WSBatchDeleteElements> = {
             type: "batchDeleteElements",
-            sheetId: projectRef.current.state.selectedSheetId,
+            sheetId: sheetId,
             nodeKeys: nodeKeys,
             edgeKeys: finalEdgeKeys
         };
@@ -1696,7 +1681,7 @@ export const useSocketSync = () => {
 
         if(response && response._response) {
             if(response._response.status) {
-                const output = await applyBatchDelete(response.nodeKeys, response.edgeKeys);
+                const output = await applyBatchDelete(response.nodeKeys, response.edgeKeys, sheetId);
                 if(!output.status) {
                     return {
                         reason: output.error || "Unknown error applying batch delete",
@@ -1746,10 +1731,10 @@ export const useSocketSync = () => {
             )), true);
         } else if(packet.type === "batchCreateElements") {
             const message = packet as WSMessage<WSBatchCreateElements>;
-            await applyBatchCreate(message.nodes, message.edges);
+            await applyBatchCreate(message.nodes, message.edges, message.sheetId);
         } else if(packet.type === "batchDeleteElements") {
             const message = packet as WSMessage<WSBatchDeleteElements>;
-            await applyBatchDelete(message.nodeKeys, message.edgeKeys);
+            await applyBatchDelete(message.nodeKeys, message.edgeKeys, message.sheetId);
         } else if(packet.type === "applyInstructionToNodeConfig") {
             const message = packet as WSMessage<WSApplyInstructionToNodeConfig>;
             await applyNodeConfigInstructions(message.instructions.map((inst) => (

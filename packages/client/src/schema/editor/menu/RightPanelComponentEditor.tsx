@@ -193,11 +193,13 @@ export const RightPanelComponentEditor = memo(({
                 i: i,
                 applyUniqIdentifier: "identifier",
                 triggerHtmlRender: true,
+                sheetId: Project.state.selectedSheetId!
             })) : [
                 {
                     i: contentInstruction,
                     applyUniqIdentifier: "identifier",
                     triggerHtmlRender: true,
+                    sheetId: Project.state.selectedSheetId!
                 }
             ]
 

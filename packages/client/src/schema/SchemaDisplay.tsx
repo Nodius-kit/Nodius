@@ -657,7 +657,7 @@ export const SchemaDisplay = memo(() => {
                 if(!edgeMap) return false;
                 const edge = edgeMap.get(( point.type === "out" ? "source-" : "target-")+nodeId);
                 if(edge) {
-                    const output = await projectRef.current.state.batchDeleteElements!([], edge.map((e) => e._key));
+                    const output = await projectRef.current.state.batchDeleteElements!([], edge.map((e) => e._key), Project.state.selectedSheetId!);
                     if(!output.status) {
                         return false;
                     }
@@ -665,6 +665,7 @@ export const SchemaDisplay = memo(() => {
                 const output = await projectRef.current.state.updateGraph!([{
                     i: intruction.instruction,
                     nodeId: nodeId,
+                    sheetId: Project.state.selectedSheetId!
                 }]);
                 return output.status;
             }
@@ -694,6 +695,7 @@ export const SchemaDisplay = memo(() => {
                         {
                             i: d,
                             nodeId: node._key,
+                            sheetId: Project.state.selectedSheetId!
                         }
                     )));
                     return output.status;
@@ -962,7 +964,7 @@ export const SchemaDisplay = memo(() => {
             align-items: center;
             justify-content: center;
             pointer-events: all;
-            z-index: 2;
+            z-index: 12;
         }
 
         &:hover {
@@ -985,7 +987,7 @@ export const SchemaDisplay = memo(() => {
             bottom:0;
             overflow:hidden;
             pointer-events: all;
-            z-index: 1;
+            z-index: 11;
             gap: 10px;
         }
 

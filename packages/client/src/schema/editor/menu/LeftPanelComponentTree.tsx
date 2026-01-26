@@ -162,6 +162,7 @@ export const LeftPaneComponentTree = memo(({
                     i: instruction.instruction,
                     triggerHtmlRender: true,
                     applyUniqIdentifier: "identifier",
+                    sheetId: Project.state.selectedSheetId!
                 }]);
             } else {
                 if (object.type === "block") {
@@ -170,6 +171,7 @@ export const LeftPaneComponentTree = memo(({
                         i: instruction.instruction,
                         triggerHtmlRender: true,
                         applyUniqIdentifier: "identifier",
+                        sheetId: Project.state.selectedSheetId!
                     }])
                 } else if (object.type === "list") {
                     instruction.key("content").arrayAdd(deepCopy(component.object));
@@ -177,6 +179,7 @@ export const LeftPaneComponentTree = memo(({
                         i: instruction.instruction,
                         triggerHtmlRender: true,
                         applyUniqIdentifier: "identifier",
+                        sheetId: Project.state.selectedSheetId!
                     }])
                 }
             }
@@ -188,7 +191,7 @@ export const LeftPaneComponentTree = memo(({
         }
         closeLinkedCard();
         return false;
-    }, [Project.state.editedHtml, closeLinkedCard, showComponentCard]);
+    }, [Project.state.editedHtml, closeLinkedCard, showComponentCard, Project.state.selectedSheetId]);
 
     const flatNodes = useMemo(() => {
         const nodes: FlatNode[] = [];
@@ -504,6 +507,7 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                             i: instructionFrom.instruction,
                             triggerHtmlRender: true,
                             applyUniqIdentifier: "identifier",
+                            sheetId: Project.state.selectedSheetId!
                         }]);
                     } else if(objectTo.type === "list") {
                         instructionFrom.objectInsert(instructionTo.key("content").instruction.p!);
@@ -511,6 +515,7 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
                             i: instructionFrom.instruction,
                             triggerHtmlRender: true,
                             applyUniqIdentifier: "identifier",
+                            sheetId: Project.state.selectedSheetId!
                         }]);
                     }
                     Project.state.editedHtml.htmlRenderContext.htmlRender.clearBuildingOverlay();
@@ -527,7 +532,7 @@ const TreeNode = memo(({ object, depth, ...props }: TreeNodeProps) => {
         window.addEventListener("mousemove", onMouseMove);
         window.addEventListener("mouseup", onMouseUp);
         window.addEventListener("mouseleave", onMouseUp);
-    }, [Project.state.editedHtml, object.identifier]); // Add dependencies
+    }, [Project.state.editedHtml, object.identifier, Project.state.selectedSheetId]); // Add dependencies
 
     const toggleHide = useCallback((evt: React.MouseEvent) => {
         evt.stopPropagation();

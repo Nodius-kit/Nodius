@@ -49,6 +49,7 @@ export interface WSApplyInstructionToNodeConfig {
 
 export interface GraphInstructions {
     i:Instruction,
+    sheetId: string,
     nodeId?: string,
     edgeId?: string,
 

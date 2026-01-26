@@ -123,6 +123,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         animateSize: true,
                         dontApplyToMySelf: true,
                         dontPutBackAction: true,
+                        sheetId: projectRef.current.state.selectedSheetId!
                     },
                     {
                         i: instructionsHeight.instruction,
@@ -130,6 +131,7 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                         animateSize: true,
                         dontApplyToMySelf: true,
                         dontPutBackAction: true,
+                        sheetId: projectRef.current.state.selectedSheetId!
                     }
                 );
 
@@ -172,12 +174,14 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                             nodeId: currentNode._key,
                             animateSize: true,
                             dontPutBackAction: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         },
                         {
                             i: instructionsHeight.instruction,
                             nodeId: currentNode._key,
                             animateSize: true,
                             dontPutBackAction: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         }
                     );
                     const output = await projectRef.current.state.updateGraph!(insts);
@@ -271,12 +275,14 @@ export function useNodeResize(options: UseNodeResizeOptions) {
                             nodeId: currentNode._key,
                             animateSize: true,
                             dontPutBackAction: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         },
                         {
                             i: instructionsHeight.instruction,
                             nodeId: currentNode._key,
                             animateSize: true,
                             dontPutBackAction: true,
+                            sheetId: projectRef.current.state.selectedSheetId!
                         }
                     );
                     const output = await projectRef.current.state.updateGraph!(insts);

@@ -244,7 +244,7 @@ export const useEdgeHandler = () => {
             }
 
             if(previousFound) {
-                const output = await P.state.batchCreateElements([], [temporaryEdge as Edge]);
+                const output = await P.state.batchCreateElements([], [temporaryEdge as Edge], projectRef.current.state.selectedSheetId!);
             }
 
             gpuMotor.requestRedraw();

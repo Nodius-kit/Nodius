@@ -124,7 +124,8 @@ export const LeftPanelMenu = memo((
                                                 const instructionToGraph: Array<GraphInstructions> = instructions.map((i) => (
                                                     {
                                                         nodeId: "0",
-                                                        i: i
+                                                        i: i,
+                                                        sheetId: Project.state.selectedSheetId!
                                                     }
                                                 ));
                                                 const output = await projectRef.current.state.updateGraph!(instructionToGraph);
@@ -134,7 +135,8 @@ export const LeftPanelMenu = memo((
                                                 const output = await projectRef.current.state.updateGraph!([
                                                     {
                                                         i: instructions,
-                                                        nodeId: "0"
+                                                        nodeId: "0",
+                                                        sheetId: Project.state.selectedSheetId!
                                                     }
                                                 ]);
                                                 return output.status;
@@ -219,7 +221,7 @@ export const LeftPanelMenu = memo((
                 }
             ]
         }
-    ], [setEditingPanel, editingPanel, iconSize,  Project.state.selectedNode, Project.state.editedCode, Project.state.editedNodeConfig, Project.state.editedHtml]);
+    ], [setEditingPanel, editingPanel, iconSize,  Project.state.selectedNode, Project.state.editedCode, Project.state.editedNodeConfig, Project.state.editedHtml, Project.state.selectedSheetId]);
 
     return (
         <div style={{height:"100%", width:(iconSize+ (iconPadding*2))+"px", borderRight:border, display:"flex", flexDirection:"column", boxShadow: "var(--nodius-shadow-1)"}}>

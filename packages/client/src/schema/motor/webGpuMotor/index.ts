@@ -40,13 +40,12 @@ import {
     MotorEventMap,
     GraphicalMotor
 } from "../graphicalMotor";
-import { Edge, Node } from "../../../../utils/graph/graphType";
+import { Edge, Node, deepCopy, Point } from "@nodius/utils";
 import { NodeRenderer } from "./nodeRenderer";
 import { EdgeRenderer } from "./edgeRenderer";
 import { BackgroundRenderer } from "./backgroundRenderer";
 import { InputHandler } from "./inputHandler";
 import { CameraAnimator } from "./cameraAnimator";
-import {deepCopy, Point} from "../../../../utils/objectUtils";
 
 /**
  * WebGPU-based graph rendering motor with modular architecture

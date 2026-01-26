@@ -210,7 +210,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
             const edge = Project.state.graph.sheets[Project.state.selectedSheetId].edgeMap.get("source-"+node._key) ?? [];
             const toRemoveEdgeId = edge.filter((e) => e.sourceHandle === handlePointId).map((e) => e._key);
             if(toRemoveEdgeId.length > 0) {
-                const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId);
+                const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId, Project.state.selectedSheetId);
                 if(!output.status) {
                     return;
                 }
@@ -303,6 +303,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
         const output = await Project.state.updateGraph([{
             nodeId: nodeId,
             i: instructionHandle.instruction,
+            sheetId: Project.state.selectedSheetId!
         }]);
         if(output.status) {
 
@@ -351,7 +352,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
         const edge = Project.state.graph.sheets[Project.state.selectedSheetId].edgeMap.get("source-"+node._key) ?? [];
         const toRemoveEdgeId = edge.filter((e) => e.sourceHandle === handlePointId).map((e) => e._key);
         if(toRemoveEdgeId.length > 0) {
-            const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId);
+            const output = await Project.state.batchDeleteElements!([], toRemoveEdgeId, Project.state.selectedSheetId);
             if(!output.status) {
                 return;
             }
@@ -363,6 +364,7 @@ export const EventEditor = memo(({ event, index, baseInstruction, onUpdate, obje
         const output = await Project.state.updateGraph([{
             nodeId: nodeId,
             i: instructionHandle.instruction,
+            sheetId: Project.state.selectedSheetId!
         }]);
 
 

@@ -756,7 +756,7 @@ export class WebSocketManager {
                 }
 
             } else if(jsonData.type === "applyInstructionToGraph") {
-                if(!graphUser || !sheet || !graphKey) {
+                if(!graphUser || !graphKey) {
                     ws.close();
                     return;
                 }
@@ -768,9 +768,22 @@ export class WebSocketManager {
                 // Create maps to track unique nodes and edges being modified
                 const modifiedNodes = new Map<string, Node<any>>();
                 const modifiedEdges = new Map<string, [Edge, Edge]>(); // [oldEdge, newEdge]
+                // Track which sheet each node/edge belongs to
+                const nodeSheetMap = new Map<string, string>(); // nodeId -> sheetId
+                const edgeSheetMap = new Map<string, string>(); // edgeId -> sheetId
+                // Track which sheets are modified
+                const modifiedSheets = new Set<string>();
 
                 // validate first and collect unique objects
                 for(const instruction of message.instructions) {
+                    const targetSheet = this.managedGraph[graphKey][instruction.sheetId];
+                    if(!targetSheet) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: {status: false, message: "Sheet with id "+instruction.sheetId+" not found"}
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
                     if(!instruction.nodeId && !instruction.edgeId) {
                         if (messageId) return this.sendMessage(ws, {
                             _id: messageId,
@@ -781,7 +794,7 @@ export class WebSocketManager {
                     if(instruction.nodeId) {
                         // Get node from either our modified map or the sheet
                         if(!modifiedNodes.has(instruction.nodeId)) {
-                            const node = sheet.nodeMap.get(instruction.nodeId);
+                            const node = targetSheet.nodeMap.get(instruction.nodeId);
                             if(!node) {
                                 if (messageId) return this.sendMessage(ws, {
                                     _id: messageId,
@@ -790,11 +803,13 @@ export class WebSocketManager {
                                 return;
                             }
                             modifiedNodes.set(instruction.nodeId, node);
+                            nodeSheetMap.set(instruction.nodeId, instruction.sheetId);
                         }
+                        modifiedSheets.add(instruction.sheetId);
                     }else if(instruction.edgeId) {
                         // Get edge from either our modified map or the sheet
                         if(!modifiedEdges.has(instruction.edgeId)) {
-                            const edge = findEdgeByKey(sheet.edgeMap, instruction.edgeId);
+                            const edge = findEdgeByKey(targetSheet.edgeMap, instruction.edgeId);
                             if(!edge) {
                                 if (messageId) return this.sendMessage(ws, {
                                     _id: messageId,
@@ -804,7 +819,9 @@ export class WebSocketManager {
                             }
                             // Store [oldEdge, currentEdge] - both start as the same
                             modifiedEdges.set(instruction.edgeId, [edge, edge]);
+                            edgeSheetMap.set(instruction.edgeId, instruction.sheetId);
                         }
+                        modifiedSheets.add(instruction.sheetId);
                     }
                     const validateResult = validateInstruction(instruction.i);
                     if (!validateResult.success) {
@@ -900,47 +917,54 @@ export class WebSocketManager {
                         }
                     }
                 }
-                // Mark sheet as having unsaved changes
-                sheet.hasUnsavedChanges = true;
+                // Mark all affected sheets as having unsaved changes
+                for(const sheetId of modifiedSheets) {
+                    const targetSheet = this.managedGraph[graphKey][sheetId];
+                    targetSheet.hasUnsavedChanges = true;
+                }
 
                 // Broadcast save status to all users
                 this.broadcastSaveStatus(graphKey);
 
-                // Update all modified nodes in the sheet
+                // Update all modified nodes in their respective sheets
                 for(const [nodeId, node] of modifiedNodes) {
-                    sheet.nodeMap.set(nodeId, node);
+                    const sheetId = nodeSheetMap.get(nodeId)!;
+                    const targetSheet = this.managedGraph[graphKey][sheetId];
+                    targetSheet.nodeMap.set(nodeId, node);
                 }
 
-                // Update all modified edges in the sheet
+                // Update all modified edges in their respective sheets
                 for(const [edgeId, edges] of modifiedEdges) {
+                        const sheetId = edgeSheetMap.get(edgeId)!;
+                        const targetSheet = this.managedGraph[graphKey][sheetId];
 
                         //remove old
                         if(edges[0].target) {
                             const targetKey = `target-${edges[0].target}`;
-                            let edgeListTarget = sheet.edgeMap.get(targetKey) ?? [];
+                            let edgeListTarget = targetSheet.edgeMap.get(targetKey) ?? [];
                             edgeListTarget = edgeListTarget.filter((e) => e._key !== edges[0]._key);
                             if(edgeListTarget.length > 0) {
-                                sheet.edgeMap.set(targetKey, edgeListTarget);
+                                targetSheet.edgeMap.set(targetKey, edgeListTarget);
                             } else {
-                                sheet.edgeMap.delete(targetKey);
+                                targetSheet.edgeMap.delete(targetKey);
                             }
                         }
 
                         if(edges[0].source) {
                             const sourceKey = `source-${edges[0].source}`;
-                            let edgeListSource = sheet.edgeMap.get(sourceKey) ?? [];
+                            let edgeListSource = targetSheet.edgeMap.get(sourceKey) ?? [];
                             edgeListSource = edgeListSource.filter((e) => e._key !== edges[0]._key);
                             if(edgeListSource.length > 0) {
-                                sheet.edgeMap.set(sourceKey, edgeListSource);
+                                targetSheet.edgeMap.set(sourceKey, edgeListSource);
                             } else {
-                                sheet.edgeMap.delete(sourceKey);
+                                targetSheet.edgeMap.delete(sourceKey);
                             }
                         }
 
                         // add new
                         if(edges[1].target) {
                             const targetKey = `target-${edges[1].target}`;
-                            let edgeListTarget = sheet.edgeMap.get(targetKey) ?? [];
+                            let edgeListTarget = targetSheet.edgeMap.get(targetKey) ?? [];
                             let some = false;
                             edgeListTarget = edgeListTarget.map((e) => {
                                 if(e._key === edges[1]._key) {
@@ -952,15 +976,15 @@ export class WebSocketManager {
                             });
                             if(!some) edgeListTarget.push(edges[1]);
                             if(edgeListTarget.length > 0) {
-                                sheet.edgeMap.set(targetKey, edgeListTarget);
+                                targetSheet.edgeMap.set(targetKey, edgeListTarget);
                             } else {
-                                sheet.edgeMap.delete(targetKey);
+                                targetSheet.edgeMap.delete(targetKey);
                             }
                         }
 
                         if(edges[1].source) {
                             const sourceKey = `source-${edges[1].source}`;
-                            let edgeListSource = sheet.edgeMap.get(sourceKey) ?? [];
+                            let edgeListSource = targetSheet.edgeMap.get(sourceKey) ?? [];
                             let some = false;
                             edgeListSource = edgeListSource.map((e) => {
                                 if(e._key === edges[1]._key) {
@@ -971,15 +995,19 @@ export class WebSocketManager {
                                 }
                             });
                             if(!some) edgeListSource.push(edges[1]);
-                            sheet.edgeMap.set(sourceKey, edgeListSource);
+                            targetSheet.edgeMap.set(sourceKey, edgeListSource);
                         }
                 }
 
-                // Add to instruction history
-                sheet.instructionHistory.push({
+                // Add to instruction history for all affected sheets
+                const historyEntry = {
                     message: message,
                     time: Date.now()
-                });
+                };
+                for(const sheetId of modifiedSheets) {
+                    const targetSheet = this.managedGraph[graphKey][sheetId];
+                    targetSheet.instructionHistory.push(historyEntry);
+                }
 
                 if(message.instructions.filter((i) => i.nodeId != undefined).length > 0) {
                     this.addGraphHistory(graphKey, "WF", {
@@ -1004,12 +1032,19 @@ export class WebSocketManager {
                     _response: {status: true}
                 } as WSMessage<WSResponseMessage<WSApplyInstructionToGraph>>);
 
-                for(const otherUser of sheet.user) {
-                    if(otherUser.id !== graphUser.id || messageId == undefined) {
-                        this.sendMessage(otherUser.ws, {
-                            ...message,
-                            _id: undefined
-                        } as WSMessage<WSApplyInstructionToGraph>);
+                // Broadcast to users of all affected sheets
+                const notifiedUsers = new Set<string>();
+                for(const sheetId of modifiedSheets) {
+                    const targetSheet = this.managedGraph[graphKey][sheetId];
+                    for(const otherUser of targetSheet.user) {
+                        // Avoid notifying the same user multiple times and skip the sender if they already got a response
+                        if(!notifiedUsers.has(otherUser.id) && (otherUser.id !== graphUser.id || messageId == undefined)) {
+                            notifiedUsers.add(otherUser.id);
+                            this.sendMessage(otherUser.ws, {
+                                ...message,
+                                _id: undefined
+                            } as WSMessage<WSApplyInstructionToGraph>);
+                        }
                     }
                 }
             } else if(jsonData.type === "generateUniqueId") {

@@ -15,3 +15,4 @@ packages/.claude/settings.local.json
 packages/process/.claude/settings.local.json
 packages/client/.env
 packages/client/.env
+dist
