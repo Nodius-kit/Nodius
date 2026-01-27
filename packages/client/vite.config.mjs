@@ -45,6 +45,14 @@ export default defineConfig(({ mode }) => {
         server: {
             host: process.env.VITE_HOST || "localhost",
             https: httpsConfig,
+            watch: {
+                // Watch utils and process source files for HMR
+                ignored: ['!**/node_modules/@nodius/**'],
+            },
+        },
+        optimizeDeps: {
+            // Exclude workspace packages from pre-bundling so changes trigger HMR
+            exclude: ['@nodius/utils', '@nodius/process'],
         }
     };
 });
