@@ -23,7 +23,7 @@ import {createContext, Dispatch, JSX, MemoExoticComponent, useCallback} from "re
 import {ActionType} from "../useCreateReducer";
 import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
 import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
-import {GraphInstructions, nodeConfigInstructions, WSMessage} from "@nodius/utils";
+import {GraphInstructions, nodeConfigInstructions, NodeTypeStarterConfig, WSMessage} from "@nodius/utils";
 import {HtmlClass, HtmlObject} from "@nodius/utils";
 import {
     Edge,
@@ -192,7 +192,8 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     appMenu:[],
     nodeTypeConfig: {
         "html": NodeTypeHtmlConfig,
-        "entryType": NodeTypeEntryTypeConfig
+        "entryType": NodeTypeEntryTypeConfig,
+        "starter": NodeTypeStarterConfig
     },
 
     aheadAction: undefined!,

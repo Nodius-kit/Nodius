@@ -63,7 +63,8 @@ import {
     NodeTypeEntryTypeConfig, NodeTypeHtmlConfig,
     HtmlClass,
     deepCopy,
-    createNodeFromConfig
+    createNodeFromConfig,
+    NodeTypeStarterConfig
 } from "@nodius/utils";
 
 import {aql} from "arangojs";
@@ -366,7 +367,8 @@ export class RequestWorkFlow {
                     workspace: body.htmlClass.workspace,
                     createdTime: Date.now(),
                     lastUpdatedTime: Date.now(),
-                    sheetsList: {"0": "main"}
+                    sheetsList: {"0": "main"},
+                    metadata: body.graphMetaData
                 }
                 await graph_collection.save(graph);
 
@@ -390,6 +392,32 @@ export class RequestWorkFlow {
                     version: 0
                 }
                 await class_collection.save(classHtml);
+
+                res.status(200).end();
+            } else if(body.graph) {
+                const token_graph = await createUniqueToken(graph_collection);
+
+                const graph: Omit<GraphWF, "sheets" | "_sheets" | "htmlKeyLinked"> = {
+                    _key: token_graph,
+                    name: body.graph.name,
+                    category: "default",
+                    version: 0,
+                    permission: 0,
+                    workspace: body.graph.workspace,
+                    createdTime: Date.now(),
+                    lastUpdatedTime: Date.now(),
+                    sheetsList: {"0": "main"},
+                    metadata: body.graphMetaData
+                }
+                await graph_collection.save(graph);
+
+                const nodeRoot = createNodeFromConfig<any>(
+                    NodeTypeStarterConfig,
+                    token_graph+"-root",
+                    token_graph,
+                    "0"
+                );
+                await node_collection.save(nodeRoot);
 
                 res.status(200).end();
             } else {

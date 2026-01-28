@@ -100,6 +100,11 @@ export function cleanNode<T>(obj: any): Node<T> {
     ]);
 }
 
+export interface graphMetaData {
+    invisible:boolean;
+    noMultipleSheet:boolean;
+}
+
 export interface Graph {
     _key: string,
 
@@ -128,6 +133,8 @@ export interface Graph {
     }>,
     createdTime: number,
     lastUpdatedTime: number,
+
+    metadata?: Partial<graphMetaData>
 }
 
 
@@ -222,6 +229,142 @@ export type GraphHistory =
         userId: string
     }
 
+export const NodeTypeStarterConfig:NodeTypeConfig = {
+    _key: "root",
+    version: 1,
+    workspace: "root",
+    category: "",
+    content: {
+        type: "list",
+        identifier: "roou",
+        domEvents: [],
+        tag: "div",
+        name: "Column",
+        css: [
+            {
+                selector: "&",
+                rules: [
+                    [
+                        "display",
+                        "flex"
+                    ],
+                    [
+                        "flex-direction",
+                        "column"
+                    ],
+                    [
+                        "padding",
+                        "5px"
+                    ],
+                    [
+                        "gap",
+                        "0px"
+                    ],
+                    [
+                        "min-height",
+                        "50px"
+                    ],
+                    [
+                        "height",
+                        "100%"
+                    ],
+                    [
+                        "justify-content",
+                        "center"
+                    ],
+                    [
+                        "align-items",
+                        "center"
+                    ]
+                ]
+            }
+        ],
+        content: [
+            {
+                type: "icon",
+                identifier: "roov",
+                tag: "span",
+                domEvents: [],
+                name: "Icon",
+                css: [
+                    {
+                        selector: "&amp;",
+                        rules: [
+                            [
+                                "width",
+                                "40px"
+                            ],
+                            [
+                                "height",
+                                "40px"
+                            ],
+                            [
+                                "stroke-width",
+                                "1.5px"
+                            ],
+                            [
+                                "color",
+                                "var(--nodius-primary-main)"
+                            ]
+                        ]
+                    }
+                ],
+                content: "Play"
+            }
+        ]
+    },
+    displayName: "Starter",
+    description: "",
+    alwaysRendered: true,
+    node: {
+        type: "starter",
+        posY: 0,
+        posX: 0,
+        process: ``,
+        handles: {
+            0: {
+                position: "fix",
+                point: [
+                    {
+                        id: "1",
+                        type: "in",
+                        accept: "entryType"
+                    }
+                ]
+            },
+            "R": {
+                position: "separate",
+                point: [
+                    {
+                        id: "0",
+                        type: "out",
+                        accept: "any"
+                    }
+                ]
+            }
+        },
+        size: {
+            width: 300,
+            height: 300,
+            dynamic: true,
+        },
+        data: undefined
+    },
+
+    border: {
+        radius:0,
+        width:1,
+        type: "solid",
+        normal: {
+            color: "var(--nodius-primary-dark)",
+        },
+        hover: {
+            color: "var(--nodius-primary-light)",
+        }
+    },
+    lastUpdatedTime: Date.now(),
+    createdTime: Date.now(),
+}
 
 export const NodeTypeHtmlConfig:NodeTypeConfig = {
     _key: "html",

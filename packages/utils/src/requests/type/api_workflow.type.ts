@@ -17,7 +17,7 @@
  */
 
 import {HtmlClass, HtmlObject} from "../../html/htmlType";
-import {Graph} from "../../graph/graphType";
+import {graphMetaData} from "../../graph/graphType";
 
 export interface api_category_list {
     workspace: string;
@@ -44,7 +44,9 @@ export interface api_category_rename {
 
 type api_graph_create_exclude = "graphKeyLinked" | "createdTime" | "lastUpdatedTime" | "_key" | "version" | "htmlNodeKey"
 export interface api_graph_create {
-    htmlClass:Omit<HtmlClass, api_graph_create_exclude>,
+    htmlClass?:Omit<HtmlClass, api_graph_create_exclude>,
+    graph?:{name:string, workspace:string},
+    graphMetaData?:Partial<graphMetaData>;
 }
 
 export interface api_graph_delete {

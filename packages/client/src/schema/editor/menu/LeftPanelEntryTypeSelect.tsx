@@ -331,6 +331,17 @@ export const LeftPanelEntryTypeSelect = memo((
             nodeType.posY = (nodeRoot.size.height/2)-(height/2);
             nodeType.data!._key = dataType._key
 
+
+            let targetHandle:string|undefined = undefined;
+            for(const handle of Object.values(nodeRoot.handles)) {
+                for(const point of handle.point) {
+                    if(point.type === "in" && point.accept === "entryType") {
+                        targetHandle = point.id;
+                    }
+                }
+            }
+            if(!targetHandle) return;
+
             const edge:Edge = {
                 _key: edgeKey,
                 source: nodeKey,
@@ -338,7 +349,7 @@ export const LeftPanelEntryTypeSelect = memo((
                 sheet: nodeType.sheet,
                 graphKey: Project.state.graph._key,
                 sourceHandle: "0",
-                targetHandle: nodeRoot.handles["0"]!.point[0].id, // we target the center point of the root node
+                targetHandle: targetHandle, // we target the center point of the root node
             }
 
 
