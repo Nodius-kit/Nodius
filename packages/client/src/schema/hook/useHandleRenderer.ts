@@ -606,6 +606,10 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
         if(!node) return;
         const nodeId = node._key;
 
+        if(activeOverlays.current.has(nodeId) && !activeOverlays.current.get(nodeId)!.container.isConnected) {
+            cleanupHandleOverlay(nodeId);
+        }
+
         if(!activeOverlays.current.has(nodeId)) {
 
             const handleContainer = document.createElement("div");
@@ -622,6 +626,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
             activeOverlays.current.set(nodeId, handleOverlay);
         }
 
+        console.log(activeOverlays.current.get(nodeId));
 
         const overlay = activeOverlays.current.get(nodeId)!;
 

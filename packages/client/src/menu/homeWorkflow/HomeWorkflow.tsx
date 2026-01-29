@@ -8,6 +8,7 @@ import {api_category_list} from "@nodius/utils";
 import toast from "react-hot-toast";
 import {HomeHtmlWorkflow} from "./HomeHtmlWorkflow";
 import {HomeNodeConfigurations} from "./HomeNodeConfigurations";
+import {HomeGraphWorkflow} from "./HomeGraphWorkflow";
 
 export interface HtmlClassWithGraph {
     html: HtmlClass;
@@ -19,13 +20,16 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
 
     const Theme = useContext(ThemeContext);
 
-    // Separate category state for HTML workflows and node configurations
+    // Separate category state for HTML workflows, graph workflows, and node configurations
     const [categoriesHtml, setCategoriesHtml] = useState<CategoryData[]>([]);
+    const [categoriesGraph, setCategoriesGraph] = useState<CategoryData[]>([]);
     const [categoriesNodeConfig, setCategoriesNodeConfig] = useState<CategoryData[]>([]);
     const [selectedCategoryHtml, setSelectedCategoryHtml] = useState<string | null>(null);
+    const [selectedCategoryGraph, setSelectedCategoryGraph] = useState<string | null>(null);
     const [selectedCategoryNodeConfig, setSelectedCategoryNodeConfig] = useState<string | null>(null);
 
     const [htmlClasses, setHtmlClasses] = useState<HtmlClassWithGraph[]>([]);
+    const [graphs, setGraphs] = useState<Graph[]>([]);
     const [nodeConfigs, setNodeConfigs] = useState<NodeTypeConfig[]>([]);
 
     const [loading, setLoading] = useState<boolean>(true);
@@ -33,8 +37,10 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
     // Abort controllers for cancelling in-flight requests on unmount
     const abortControllers = useRef<{
         categoriesHtml?: AbortController;
+        categoriesGraph?: AbortController;
         categoriesNodeConfig?: AbortController;
         htmlClasses?: AbortController;
+        graphs?: AbortController;
         nodeConfigs?: AbortController;
     }>({});
 
@@ -92,6 +98,40 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
             if (error instanceof Error && error.name !== 'AbortError') {
                 console.error("Error fetching HTML categories:", error);
                 toast.error("Error fetching HTML categories");
+            }
+        }
+    }, []);
+
+    /**
+     * Fetches categories for graph workflows from the API
+     */
+    const fetchCategoriesGraph = useCallback(async () => {
+        if (abortControllers.current.categoriesGraph) {
+            abortControllers.current.categoriesGraph.abort();
+        }
+        abortControllers.current.categoriesGraph = new AbortController();
+
+        try {
+            const response = await fetch('/api/category/list', {
+                method: "POST",
+                signal: abortControllers.current.categoriesGraph.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    type: "graph"
+                } as api_category_list)
+            });
+
+            if (response.status === 200) {
+                const json = await response.json() as CategoryData[];
+                setCategoriesGraph(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching graph categories:", error);
+                toast.error("Error fetching graph categories");
             }
         }
     }, []);
@@ -170,6 +210,44 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
     }, []);
 
     /**
+     * Fetches all standalone graph workflows from the API
+     */
+    const fetchGraphs = useCallback(async () => {
+        if (abortControllers.current.graphs) {
+            abortControllers.current.graphs.abort();
+        }
+        abortControllers.current.graphs = new AbortController();
+
+        try {
+            const response = await fetch('/api/graph/get', {
+                method: "POST",
+                signal: abortControllers.current.graphs.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    retrieveGraph: {
+                        buildGraph: false,
+                        length: 100,
+                        offset: 0
+                    }
+                }),
+            });
+
+            if (response.status === 200) {
+                const json = await response.json() as Graph[];
+                setGraphs(json);
+            }
+        } catch (error) {
+            if (error instanceof Error && error.name !== 'AbortError') {
+                console.error("Error fetching graphs:", error);
+                toast.error("Error fetching graph workflows");
+            }
+        }
+    }, []);
+
+    /**
      * Fetches all node configurations from the API
      */
     const fetchNodeConfigs = useCallback(async () => {
@@ -209,12 +287,14 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
         setLoading(true);
         await Promise.all([
             fetchCategoriesHtml(),
+            fetchCategoriesGraph(),
             fetchCategoriesNodeConfig(),
             fetchHtmlClasses(),
+            fetchGraphs(),
             fetchNodeConfigs()
         ]);
         setLoading(false);
-    }, [fetchCategoriesHtml, fetchCategoriesNodeConfig, fetchHtmlClasses, fetchNodeConfigs]);
+    }, [fetchCategoriesHtml, fetchCategoriesGraph, fetchCategoriesNodeConfig, fetchHtmlClasses, fetchGraphs, fetchNodeConfigs]);
 
     /**
      * Refreshes HTML workflows and their categories
@@ -224,6 +304,15 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
         await fetchHtmlClasses();
         await fetchCategoriesHtml();
     }, [fetchHtmlClasses, fetchCategoriesHtml]);
+
+    /**
+     * Refreshes graph workflows and their categories
+     * Called after create/delete operations
+     */
+    const refreshGraphs = useCallback(async () => {
+        await fetchGraphs();
+        await fetchCategoriesGraph();
+    }, [fetchGraphs, fetchCategoriesGraph]);
 
     /**
      * Refreshes node configurations and their categories
@@ -261,6 +350,15 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
     return (
         <div className={containerClass}>
             <div className={mainColumnClass}>
+                {/* Graph Workflows Section */}
+                <HomeGraphWorkflow
+                    graphs={graphs}
+                    selectedCategory={selectedCategoryGraph}
+                    categories={categoriesGraph}
+                    onRefresh={refreshGraphs}
+                    onCategoryChange={setSelectedCategoryGraph}
+                />
+
                 {/* HTML Workflows Section */}
                 <HomeHtmlWorkflow
                     htmlClasses={htmlClasses}

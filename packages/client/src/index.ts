@@ -32,6 +32,7 @@ export * from './hooks/useStableProjectRef';
 export * from './hooks/useWebSocket';
 export * from './main';
 export * from './menu/homeWorkflow/CategoryManager';
+export * from './menu/homeWorkflow/HomeGraphWorkflow';
 export * from './menu/homeWorkflow/HomeHtmlWorkflow';
 export * from './menu/homeWorkflow/HomeNodeConfigurations';
 export * from './menu/homeWorkflow/HomeWorkflow';

@@ -1,7 +1,7 @@
 import {memo, useCallback, useContext, useEffect, useRef, useState} from "react";
 import {EditedNodeHandle, htmlRenderContext, ProjectContext} from "../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
-import {Edge, Node, NodeTypeEntryType} from "@nodius/utils";
+import {Edge, Node, NodeTypeConfig, NodeTypeEntryType} from "@nodius/utils";
 import {MotorScene} from "./motor/graphicalMotor";
 import {edgeArrayToMap, findFirstNodeWithId, findNodeConnected, nodeArrayToMap} from "@nodius/utils";
 import {useDynamicClass} from "../hooks/useDynamicClass";
@@ -23,7 +23,8 @@ import toast from "react-hot-toast";
 export interface SchemaNodeInfo {
     node: Node<any>;
     element: HTMLElement;
-    htmlRenderContext: htmlRenderContext
+    htmlRenderContext: htmlRenderContext,
+    status?: "loading" | "error"
 }
 
 export interface triggerNodeUpdateOption {
@@ -44,6 +45,8 @@ export const SchemaDisplay = memo(() => {
     const visibleEdges = useRef<Edge[]>([]);
 
     const currentEntryDataTypeFixed = useRef<DataTypeClass|undefined>(undefined);
+
+    const erroredConfigRetriever = useRef<Set<string>>(new Set()); // <config id, storage> map
 
 
     const getWorkflowCallback = ():WorkflowCallbacks => ({
@@ -280,14 +283,20 @@ export const SchemaDisplay = memo(() => {
         for (const [id, node] of graph.nodeMap.entries()) {
             const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
 
+
             // If nodeConfig is missing, fetch it and skip this node for now
             if (!nodeConfig) {
-                console.warn(`Node type "${node.type}" config not present, fetching...`);
-                projectRef.current.state.fetchMissingNodeConfig?.(node.type, projectRef.current.state.graph?.workspace ?? "root");
-                continue;
+                if(!erroredConfigRetriever.current.has(nodeConfig)) {
+                    console.warn(`Node type "${node.type}" config not present, fetching...`);
+                    projectRef.current.state.fetchMissingNodeConfig?.(node.type, projectRef.current.state.graph?.workspace ?? "root").then((result) => {
+                        if(!result && !erroredConfigRetriever.current.has(nodeConfig)) {
+                            erroredConfigRetriever.current.add(nodeConfig);
+                        }
+                    });
+                }
             }
 
-            if(nodeConfig.alwaysRendered) {
+            if(nodeConfig?.alwaysRendered) {
                 visibleNodes.current.add(node);
                 visibleNodesId.add(id);
                 continue;
@@ -529,11 +538,13 @@ export const SchemaDisplay = memo(() => {
     }
 
     const onNodeEnter = (node:Node<any>) => {
-        const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
-        if (!nodeConfig) {
+        // if no nodeConfig, render loading node
+        const nodeConfig:NodeTypeConfig = projectRef.current.state.nodeTypeConfig[node.type]
+        
+        /*if (!nodeConfig) {
             console.warn("Node type", node.type, "config not present, can't proceed");
             return;
-        }
+        }*/
 
         if (inSchemaNode.current.has(node._key)) return;
 

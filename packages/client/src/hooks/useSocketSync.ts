@@ -98,10 +98,11 @@ export const useSocketSync = () => {
     /* ---------------------------- MISSING NODE CONFIG QUEUE SYSTEM ------------------------- */
     const fetchingNodeConfigs = useRef<Set<string>>(new Set());
     const fetchNodeConfigAbortControllers = useRef<Map<string, AbortController>>(new Map());
+    const fetchErroredConfigs = useRef<Set<string>>(new Set());
 
     const fetchMissingNodeConfig = useCallback(async (nodeType: string, workspace: string): Promise<NodeTypeConfig | undefined> => {
         // Check if already fetching
-        if (fetchingNodeConfigs.current.has(nodeType)) {
+        if (fetchingNodeConfigs.current.has(nodeType) || fetchErroredConfigs.current.has(nodeType)) {
             return undefined;
         }
 
@@ -153,10 +154,12 @@ export const useSocketSync = () => {
                 }
             } else {
                 console.warn(`Failed to fetch node config for type "${nodeType}": HTTP ${response.status}`);
+                fetchErroredConfigs.current.add(nodeType);
             }
         } catch (error) {
             if ((error as Error).name !== 'AbortError') {
                 console.error(`Error fetching node config for type "${nodeType}":`, error);
+                fetchErroredConfigs.current.add(nodeType);
             }
         } finally {
             // Remove from fetching set
@@ -386,7 +389,7 @@ export const useSocketSync = () => {
         }
 
         const serverInfo = await retrieveServerInfo({
-            instanceId: "graph-"+htmlGraph._key
+            instanceId: "html-"+htmlGraph._key
         });
         if(!serverInfo) {
             return {
@@ -503,6 +506,185 @@ export const useSocketSync = () => {
             value: openHtmlClass
         })
     }, [openHtmlClass]);
+
+    /*
+        Open a standalone graph (no HTML class linked)
+     */
+    const openGraphAbortController = useRef<AbortController>(undefined);
+    const openGraph = useCallback(async (graph:Graph):Promise<ActionContext> => {
+        const start = Date.now();
+
+        if(connectionState !== "disconnected") {
+            disconnect();
+        }
+
+        let fullGraph = graph;
+
+        if(!fullGraph.sheets) {
+            if(openGraphAbortController.current) {
+                openGraphAbortController.current.abort();
+            }
+            openGraphAbortController.current = new AbortController();
+            const response = await fetch('/api/graph/get', {
+                method: "POST",
+                signal: openGraphAbortController.current.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    workspace: "root",
+                    retrieveGraph: {
+                        buildGraph: true,
+                        token: graph._key,
+                        onlyFirstSheet: false
+                    }
+                } as api_graph_html),
+            });
+            if(response.status === 200) {
+                const json = await response.json() as Omit<Graph, "sheets">;
+                if(!json) {
+                    return {
+                        timeTaken: Date.now() - start,
+                        reason: "Can't retrieve graph with key "+graph._key,
+                        status: false,
+                    }
+                }
+
+                fullGraph = {
+                    ...json,
+                    sheets: Object.fromEntries(
+                        Object.entries(json._sheets).map(([sheet, data]) => [
+                            sheet,
+                            {
+                                nodeMap: nodeArrayToMap(data.nodes),
+                                edgeMap: edgeArrayToMap(data.edges)
+                            },
+                        ])
+                    ),
+                };
+                delete (fullGraph as any)["_sheets"];
+            } else {
+                return {
+                    timeTaken: Date.now() - start,
+                    reason: "Can't retrieve graph with key, error on HTTP request("+response.status+") "+graph._key,
+                    status: false,
+                }
+            }
+        }
+
+        if(!projectRef.current.state.getMotor()) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't start the synchronization, the GPU display is not working",
+                status: false,
+            }
+        }
+
+        const serverInfo = await retrieveServerInfo({
+            instanceId: "graph-"+fullGraph._key
+        });
+        if(!serverInfo) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't find a server to start a sync",
+                status: false,
+            }
+        } else {
+            console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
+            setServerInfo(serverInfo);
+        }
+
+        const wsProtocol = serverInfo.secure ? 'wss' : 'ws';
+        const wsPath = serverInfo.path || '';
+        const wsUrl = `${wsProtocol}://${serverInfo.host}:${serverInfo.port}${wsPath}`;
+
+        const connected = await connect(wsUrl);
+        if(!connected) {
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Can't connect to server",
+                status: false,
+            }
+        }
+
+        const selectedSheetId = Object.keys(fullGraph.sheets)[0];
+
+        const registerUser:WSMessage<WSRegisterUserOnGraph> = {
+            type: "registerUserOnGraph",
+            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
+            name: "User",
+            sheetId: selectedSheetId,
+            graphKey: fullGraph._key,
+            fromTimestamp: fullGraph.lastUpdatedTime
+        }
+        const response = await sendMessage<{
+            missingMessages: WSMessage<any>[]
+        }>(registerUser);
+        if(!response || !response._response.status) {
+            disconnect();
+            return {
+                timeTaken: Date.now() - start,
+                reason: "Server didn't accept our registration"+(response?._response.message ? ": "+response?._response.message : ""),
+                status: false,
+            }
+        }
+
+        if(response.missingMessages.length > 0) {
+            response.missingMessages.forEach((m) => {
+                if(m.instructions) {
+                    for (const i of m.instructions) {
+                        if(i.dontApplyToMySelf) {
+                            delete i.dontApplyToMySelf;
+                        }
+                        if (i.animatePos) {
+                            delete i.animatePos;
+                        }
+                        if (i.animateSize) {
+                            delete i.animateSize;
+                        }
+                    }
+                }
+            })
+            Project.dispatch({
+                field:"caughtUpMessage",
+                value: response.missingMessages
+            });
+        }
+
+        projectRef.current.dispatch({
+            field: "selectedSheetId",
+            value: selectedSheetId,
+        });
+        projectRef.current.dispatch({
+            field: "graph",
+            value: fullGraph,
+        });
+
+        Project.dispatch({
+            field: "disabledNodeInteraction",
+            value: {}
+        });
+
+        projectRef.current.state.getMotor().removeCameraAreaLock();
+        projectRef.current.state.getMotor().resetViewport();
+
+        projectRef.current.dispatch({
+            field: "activeAppMenuId",
+            value: "schemaEditor"
+        });
+
+        return {
+            timeTaken: Date.now() - start,
+            status: true,
+        }
+    }, [connect, disconnect, connectionState, User.user?.userId]);
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "openGraph",
+            value: openGraph
+        })
+    }, [openGraph]);
 
     /*
          open a node editor => empty graph with only the node

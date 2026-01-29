@@ -27,7 +27,7 @@ import {Button} from "../../component/form/Button";
 import {CategoryData} from "@nodius/utils";
 
 interface CategoryManagerProps {
-    type: "workflow" | "nodeconfig";
+    type: "workflow" | "nodeconfig" | "graph";
     categories: CategoryData[];
     selectedCategory: string | null;
     itemCounts: { [key: string]: number };
@@ -241,7 +241,7 @@ export const CategoryManager = memo(({
 
         // Show different confirmation message based on whether category has items
         if (itemCount > 0) {
-            const itemType = type === "workflow" ? "HTML workflow(s)" : "node configuration(s)";
+            const itemType = type === "workflow" ? "HTML workflow(s)" : type === "graph" ? "graph workflow(s)" : "node configuration(s)";
             if (!confirm(`This category contains ${itemCount} ${itemType}. Are you sure you want to delete it? The items will remain but will need to be recategorized.`)) {
                 return;
             }
@@ -377,7 +377,7 @@ export const CategoryManager = memo(({
                         </div>
                     ) : (
                         <div style={{textAlign: "center", padding: "20px", opacity: 0.6, fontSize: "13px"}}>
-                            No categories yet. Create your first category to organize {type === "workflow" ? "workflows" : "node configurations"}.
+                            No categories yet. Create your first category to organize {type === "workflow" ? "workflows" : type === "graph" ? "graph workflows" : "node configurations"}.
                         </div>
                     )}
                 </div>

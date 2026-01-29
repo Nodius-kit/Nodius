@@ -21,13 +21,13 @@ import {graphMetaData} from "../../graph/graphType";
 
 export interface api_category_list {
     workspace: string;
-    type: "workflow" | "nodeconfig"
+    type: "workflow" | "nodeconfig" | "graph"
 }
 
 export interface api_category_create {
     workspace: string;
     category: string;
-    type: "workflow" | "nodeconfig"
+    type: "workflow" | "nodeconfig" | "graph"
 }
 
 export interface api_category_delete {

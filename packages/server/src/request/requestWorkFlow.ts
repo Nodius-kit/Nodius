@@ -85,50 +85,86 @@ export class RequestWorkFlow {
 
         app.post("/api/graph/rename", async (req: Request, res: Response) => {
             try {
-                const body = req.body as { htmlToken: string; newName: string };
+                const body = req.body as { htmlToken?: string; graphToken?: string; newName: string };
 
-                if (!body.htmlToken || !body.newName) {
-                    return res.status(400).json({ error: "Missing htmlToken or newName" });
+                if (!body.newName || (!body.htmlToken && !body.graphToken)) {
+                    return res.status(400).json({ error: "Missing token or newName" });
                 }
 
-                // Get the HTML class to rename
-                const query = aql`
-                    FOR doc IN nodius_html_class
-                    FILTER doc._key == ${escapeHTML(body.htmlToken)}
-                    RETURN doc
-                `;
-                const cursor = await db.query(query);
-                const html: HtmlClass = (await cursor.all())[0];
+                if (body.htmlToken) {
+                    // Rename HTML class
+                    const query = aql`
+                        FOR doc IN nodius_html_class
+                        FILTER doc._key == ${escapeHTML(body.htmlToken)}
+                        RETURN doc
+                    `;
+                    const cursor = await db.query(query);
+                    const html: HtmlClass = (await cursor.all())[0];
 
-                if (!html) {
-                    return res.status(404).json({ error: "HTML class not found" });
+                    if (!html) {
+                        return res.status(404).json({ error: "HTML class not found" });
+                    }
+
+                    const conflictQuery = aql`
+                        FOR doc IN nodius_html_class
+                        FILTER doc.workspace == ${escapeHTML(html.workspace)}
+                            AND doc.name == ${escapeHTML(body.newName)}
+                            AND doc._key != ${escapeHTML(body.htmlToken)}
+                        LIMIT 1
+                        RETURN doc
+                    `;
+                    const conflictCursor = await db.query(conflictQuery);
+                    const conflict = await conflictCursor.next();
+
+                    if (conflict) {
+                        return res.status(409).json({ error: "HTML class with this name already exists in workspace" });
+                    }
+
+                    await class_collection.update(body.htmlToken, {
+                        name: escapeHTML(body.newName),
+                        lastUpdatedTime: Date.now()
+                    });
+
+                    return res.status(200).json({ success: true });
+                } else if (body.graphToken) {
+                    // Rename standalone graph
+                    const query = aql`
+                        FOR doc IN nodius_graphs
+                        FILTER doc._key == ${escapeHTML(body.graphToken)}
+                        RETURN doc
+                    `;
+                    const cursor = await db.query(query);
+                    const graph = (await cursor.all())[0];
+
+                    if (!graph) {
+                        return res.status(404).json({ error: "Graph not found" });
+                    }
+
+                    const conflictQuery = aql`
+                        FOR doc IN nodius_graphs
+                        FILTER doc.workspace == ${escapeHTML(graph.workspace)}
+                            AND doc.name == ${escapeHTML(body.newName)}
+                            AND doc._key != ${escapeHTML(body.graphToken)}
+                            AND doc.htmlKeyLinked == null
+                        LIMIT 1
+                        RETURN doc
+                    `;
+                    const conflictCursor = await db.query(conflictQuery);
+                    const conflict = await conflictCursor.next();
+
+                    if (conflict) {
+                        return res.status(409).json({ error: "Graph with this name already exists in workspace" });
+                    }
+
+                    await graph_collection.update(body.graphToken, {
+                        name: escapeHTML(body.newName),
+                        lastUpdatedTime: Date.now()
+                    });
+
+                    return res.status(200).json({ success: true });
                 }
-
-                // Check if new name already exists in the same workspace
-                const conflictQuery = aql`
-                    FOR doc IN nodius_html_class
-                    FILTER doc.workspace == ${escapeHTML(html.workspace)}
-                        AND doc.name == ${escapeHTML(body.newName)}
-                        AND doc._key != ${escapeHTML(body.htmlToken)}
-                    LIMIT 1
-                    RETURN doc
-                `;
-                const conflictCursor = await db.query(conflictQuery);
-                const conflict = await conflictCursor.next();
-
-                if (conflict) {
-                    return res.status(409).json({ error: "HTML class with this name already exists in workspace" });
-                }
-
-                // Update the HTML class name
-                await class_collection.update(body.htmlToken, {
-                    name: escapeHTML(body.newName),
-                    lastUpdatedTime: Date.now()
-                });
-
-                return res.status(200).json({ success: true });
             } catch (err) {
-                console.error("Error renaming HTML class:", err);
+                console.error("Error renaming:", err);
                 return res.status(500).json({ error: "Internal Server Error" });
             }
         });
@@ -393,7 +429,7 @@ export class RequestWorkFlow {
                 }
                 await class_collection.save(classHtml);
 
-                res.status(200).end();
+                res.status(200).json(graph);
             } else if(body.graph) {
                 const token_graph = await createUniqueToken(graph_collection);
 
@@ -419,7 +455,7 @@ export class RequestWorkFlow {
                 );
                 await node_collection.save(nodeRoot);
 
-                res.status(200).end();
+                res.status(200).json(graph);
             } else {
                 res.status(500).end();
             }

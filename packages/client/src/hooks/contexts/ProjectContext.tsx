@@ -132,6 +132,7 @@ export interface ProjectContextType {
     closeHtmlEditor?: () => Promise<void>,
 
     openHtmlClass?:(html:HtmlClass, graph?:Graph) => Promise<ActionContext>,
+    openGraph?:(graph:Graph) => Promise<ActionContext>,
     openNodeConfig?:(config:NodeTypeConfig) => Promise<ActionContext>,
 
     selectedSheetId?:string,

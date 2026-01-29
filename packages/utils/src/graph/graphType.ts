@@ -103,6 +103,10 @@ export function cleanNode<T>(obj: any): Node<T> {
 export interface graphMetaData {
     invisible:boolean;
     noMultipleSheet:boolean;
+    limitWorkingArea: {
+        width: number;
+        height: number;
+    }
 }
 
 export interface Graph {
