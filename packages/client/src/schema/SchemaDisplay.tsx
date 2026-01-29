@@ -695,7 +695,7 @@ export const SchemaDisplay = memo(() => {
                         {
                             i: d,
                             nodeId: node._key,
-                            sheetId: Project.state.selectedSheetId!
+                            sheetId: projectRef.current.state.selectedSheetId!
                         }
                     )));
                     return output.status;
