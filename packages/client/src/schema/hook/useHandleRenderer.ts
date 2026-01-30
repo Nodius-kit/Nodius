@@ -626,7 +626,6 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
             activeOverlays.current.set(nodeId, handleOverlay);
         }
 
-        console.log(activeOverlays.current.get(nodeId));
 
         const overlay = activeOverlays.current.get(nodeId)!;
 

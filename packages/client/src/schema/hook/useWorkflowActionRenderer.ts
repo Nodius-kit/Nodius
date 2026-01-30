@@ -2,6 +2,7 @@ import {useContext, useEffect, useRef} from "react";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
 import {useStableProjectRef} from "../../hooks/useStableProjectRef";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
+import {Node} from "@nodius/utils";
 
 interface domEventSwitch {
     applyClass: HTMLElement[];
@@ -197,19 +198,19 @@ export const useWorkflowActionRenderer = ({
     }
 
 
-    const renderWorkflowAction = (nodeKey:string, nodeContainer:HTMLElement) => {
+    const renderWorkflowAction = (node:Node<any>, nodeContainer:HTMLElement) => {
         const container = document.createElement('div');
         container.className = actionClass;
 
         let domEventSwitch:domEventSwitch|undefined = undefined;
 
-        if(projectRef.current.state.editedNodeConfig && nodeKey === "0") {
+        if(projectRef.current.state.editedNodeConfig && node._key === "0") {
 
             const switchLabel = document.createElement("label");
             switchLabel.className = "switchLabel";
 
             const checkbox = document.createElement("input");
-            checkbox.id = "workflow-checkbox-" + nodeKey;
+            checkbox.id = "workflow-checkbox-" + node._key;
 
             const slider = document.createElement("span");
             slider.className = "slider";
@@ -237,7 +238,8 @@ export const useWorkflowActionRenderer = ({
 
 
         let wfButton: HTMLButtonElement|undefined = undefined;
-        if(nodeKey === "root") {
+        if(node._key === "root") {
+            console.log(node);
             wfButton = document.createElement("button");
             container.appendChild(wfButton);
 
@@ -249,7 +251,7 @@ export const useWorkflowActionRenderer = ({
                 container: container,
                 wfButton: wfButton,
                 domEventSwitch: domEventSwitch,
-                nodeId: nodeKey,
+                nodeId: node._key,
             });
         }
         updateWorkFlowButton();

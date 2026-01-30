@@ -46,8 +46,8 @@ export function useNodeDragDrop(options: UseNodeDragDropOptions) {
 
             if(evt.button !== 0) return;
 
-
             const elements = document.elementsFromPoint(evt.clientX, evt.clientY);
+
             if(elements.length > 0 && (
                 elements[0].tagName.toLowerCase() === "input" ||
                 elements[0].tagName.toLowerCase() === "button" ||

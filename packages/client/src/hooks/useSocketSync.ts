@@ -389,7 +389,7 @@ export const useSocketSync = () => {
         }
 
         const serverInfo = await retrieveServerInfo({
-            instanceId: "html-"+htmlGraph._key
+            instanceId: "graph-"+htmlGraph._key
         });
         if(!serverInfo) {
             return {

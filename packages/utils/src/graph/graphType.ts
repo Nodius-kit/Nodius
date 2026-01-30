@@ -234,7 +234,7 @@ export type GraphHistory =
     }
 
 export const NodeTypeStarterConfig:NodeTypeConfig = {
-    _key: "root",
+    _key: "starter",
     version: 1,
     workspace: "root",
     category: "",
@@ -348,15 +348,15 @@ export const NodeTypeStarterConfig:NodeTypeConfig = {
             }
         },
         size: {
-            width: 300,
-            height: 300,
+            width: 150,
+            height: 150,
             dynamic: true,
         },
         data: undefined
     },
 
     border: {
-        radius:0,
+        radius:15,
         width:1,
         type: "solid",
         normal: {

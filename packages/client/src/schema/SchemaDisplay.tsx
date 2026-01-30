@@ -31,6 +31,10 @@ export interface triggerNodeUpdateOption {
     reRenderNodeConfig?:boolean
 }
 
+export interface configRetrieverContext {
+    found: boolean;
+    working: boolean;
+}
 
 export const SchemaDisplay = memo(() => {
 
@@ -46,7 +50,7 @@ export const SchemaDisplay = memo(() => {
 
     const currentEntryDataTypeFixed = useRef<DataTypeClass|undefined>(undefined);
 
-    const erroredConfigRetriever = useRef<Set<string>>(new Set()); // <config id, storage> map
+    const configRetriever = useRef<Map<string, configRetrieverContext>>(new Map()); // <config id, storage> map
 
 
     const getWorkflowCallback = ():WorkflowCallbacks => ({
@@ -286,14 +290,32 @@ export const SchemaDisplay = memo(() => {
 
             // If nodeConfig is missing, fetch it and skip this node for now
             if (!nodeConfig) {
-                if(!erroredConfigRetriever.current.has(nodeConfig)) {
+                if(!configRetriever.current.has(node.type)) {
+                    const context:configRetrieverContext = {
+                        found: false,
+                        working: true,
+                    };
+                    configRetriever.current.set(node.type, context);
                     console.warn(`Node type "${node.type}" config not present, fetching...`);
                     projectRef.current.state.fetchMissingNodeConfig?.(node.type, projectRef.current.state.graph?.workspace ?? "root").then((result) => {
-                        if(!result && !erroredConfigRetriever.current.has(nodeConfig)) {
-                            erroredConfigRetriever.current.add(nodeConfig);
+
+                        if(!result) {
+                            context.found = false;
+                            context.working = false;
+                        } else {
+                            context.found = true;
+                            context.working = false;
                         }
+                        for(const _node of visibleNodes.current) {
+                            if(_node.type === node.type) {
+                                onNodeLeave(_node);
+                                onNodeEnter(_node, result);
+                            }
+                        }
+
                     });
                 }
+
             }
 
             if(nodeConfig?.alwaysRendered) {
@@ -537,14 +559,8 @@ export const SchemaDisplay = memo(() => {
         }
     }
 
-    const onNodeEnter = (node:Node<any>) => {
-        // if no nodeConfig, render loading node
-        const nodeConfig:NodeTypeConfig = projectRef.current.state.nodeTypeConfig[node.type]
-        
-        /*if (!nodeConfig) {
-            console.warn("Node type", node.type, "config not present, can't proceed");
-            return;
-        }*/
+    const onNodeEnter = (node:Node<any>, forceNodeConfig?:NodeTypeConfig) => {
+        const nodeConfig:NodeTypeConfig|undefined = forceNodeConfig ?? projectRef.current.state.nodeTypeConfig[node.type]
 
         if (inSchemaNode.current.has(node._key)) return;
 
@@ -553,13 +569,89 @@ export const SchemaDisplay = memo(() => {
         nodeHTML.style.position = 'absolute';
         nodeHTML.style.pointerEvents = 'all';
         nodeHTML.style.backgroundColor = 'var(--nodius-background-paper)';
-        nodeHTML.style.borderRadius = nodeConfig.border.radius + "px";
-        nodeHTML.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
         nodeHTML.style.setProperty(
             "transition",
             "box-shadow 0.2s ease-in-out, scale 0.2s ease-in-out",
             "important"
         );
+
+        // Placeholder: no nodeConfig available or errored
+        if (!nodeConfig) {
+            const isErrored = configRetriever.current.has(node.type) && !configRetriever.current.get(node.type)!.working && !configRetriever.current.get(node.type)!.found;
+            nodeHTML.style.borderRadius = "8px";
+            nodeHTML.style.outline = `1px dashed ${isErrored ? 'var(--nodius-error, #ef4444)' : 'var(--nodius-grey-500)'}`;
+            nodeHTML.style.display = 'flex';
+            nodeHTML.style.alignItems = 'center';
+            nodeHTML.style.justifyContent = 'center';
+            nodeHTML.style.flexDirection = 'column';
+            nodeHTML.style.gap = '8px';
+            nodeHTML.style.opacity = '0.7';
+
+            const icon = document.createElement('span');
+            if(!isErrored) {
+                icon.style.animation = "spin 1s linear infinite";
+            }
+            icon.innerHTML = isErrored ? `
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cloud-alert-icon lucide-cloud-alert"><path d="M12 12v4"/><path d="M12 20h.01"/><path d="M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708"/></svg>
+            ` : `
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-loader-circle-icon lucide-loader-circle"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+            `;
+            nodeHTML.appendChild(icon);
+
+            const label = document.createElement('span');
+            label.style.fontSize = '12px';
+            label.style.opacity = '0.7';
+            label.style.textAlign = 'center';
+            label.style.padding = '0 8px';
+
+            label.textContent = isErrored
+                ? `Failed to load node`
+                : `Loading ...`;
+            nodeHTML.appendChild(label);
+
+            if (isErrored) {
+                nodeHTML.style.backgroundColor = 'var(--nodius-background-paper)';
+                icon.style.color = 'var(--nodius-error, #ef4444)';
+                label.style.color = 'var(--nodius-error, #ef4444)';
+            }
+
+            nodeHTML.addEventListener("click", (evt) => {
+                if(evt.ctrlKey) {
+                    projectRef.current.dispatch({
+                        field: "selectedNode",
+                        value: [...projectRef.current.state.selectedNode.filter((sn) => sn != node._key),node._key]
+                    });
+                } else {
+                    projectRef.current.dispatch({
+                        field: "selectedNode",
+                        value: [node._key]
+                    });
+                }
+            });
+
+            if(projectRef.current.state.selectedNode.includes(node._key)) {
+                nodeHTML.classList.add(selectedNodeClass);
+            }
+
+            const dragHandler = createDragHandler(node._key, nodeHTML);
+            nodeHTML.addEventListener("mousedown", dragHandler);
+
+            inSchemaNode.current.set(node._key, {
+                node: node,
+                element: nodeHTML,
+                htmlRenderContext: undefined!,
+                status: isErrored ? "error" : "loading"
+            });
+
+            nodeDisplayContainer.current!.appendChild(nodeHTML);
+            forwardMouseEvents(nodeHTML, projectRef.current.state.getMotor().getContainerDraw());
+            updateHandleOverlay(node, nodeHTML);
+            updateNodePosition(node._key);
+            return;
+        }
+
+        nodeHTML.style.borderRadius = nodeConfig.border.radius + "px";
+        nodeHTML.style.outline = `${nodeConfig.border.width}px ${nodeConfig.border.type} ${nodeConfig.border.normal.color}`;
 
         // Mouse enter/leave for border color
         const mouseEnter = () => {
@@ -584,7 +676,6 @@ export const SchemaDisplay = memo(() => {
                     value: [node._key]
                 });
             }
-            //internalNodeUpdate(node._key);
         });
 
         if(projectRef.current.state.selectedNode.includes(node._key)) {
@@ -605,7 +696,7 @@ export const SchemaDisplay = memo(() => {
 
 
         // add workflow interactive
-        renderWorkflowAction(node._key, nodeHTML);
+        renderWorkflowAction(node, nodeHTML);
 
 
         const htmlRender = new HtmlRender(nodeHTML, {
@@ -736,6 +827,7 @@ export const SchemaDisplay = memo(() => {
             const motor = projectRef.current.state.getMotor();
             const transform = motor.getTransform();
             const rect = motor.getNodeScreenRect(nodeId)!;
+            if(!rect) return;
 
             schema.element.style.zoom = transform.scale + "";
             schema.element.style.left = `${rect.x / transform.scale}px`;
@@ -805,10 +897,6 @@ export const SchemaDisplay = memo(() => {
 
         const schema = inSchemaNode.current.get(nodeId);
         if(!schema) return;
-
-
-        const nodeConfig = projectRef.current.state.nodeTypeConfig[node.type];
-        if(!nodeConfig) return;
 
 
         if(options?.reRenderNodeConfig) {
@@ -888,16 +976,16 @@ export const SchemaDisplay = memo(() => {
         }
     }, [Project.state.selectedNode]);
 
-    useEffect(() => {
+    /*useEffect(() => {
         for(const nodeSchema of inSchemaNode.current.values()) {
             // re render handle
             cleanupHandleOverlay(nodeSchema.node._key);
             updateHandleOverlay(getNode(nodeSchema.node._key)!, nodeSchema.element);
 
             disposeWorkflowAction(nodeSchema.node._key);
-            renderWorkflowAction(nodeSchema.node._key, nodeSchema.element);
+            renderWorkflowAction(nodeSchema.node, nodeSchema.element);
         }
-    }, [Project.state.editedNodeConfig]);
+    }, [Project.state.editedNodeConfig]);*/
 
 
     const previousEditedNodeHandle = useRef<EditedNodeHandle>(undefined);
