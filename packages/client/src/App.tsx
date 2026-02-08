@@ -6,16 +6,17 @@ import {GraphicalMotor} from "./schema/motor/graphicalMotor";
 import {ThemeContextParser} from "./hooks/contexts/ThemeContextParser";
 import {MultiFade} from "./component/animate/MultiFade";
 import {useSocketSync} from "./hooks/useSocketSync";
-import {HomeWorkflow} from "./menu/homeWorkflow/HomeWorkflow";
+import {HomeWorkflow, HtmlClassWithGraph} from "./menu/homeWorkflow/HomeWorkflow";
 import {SchemaDisplay} from "./schema/SchemaDisplay";
 import {SchemaEditor} from "./schema/editor/SchemaEditor";
-import {deepCopy, documentHaveActiveElement} from "@nodius/utils";
+import {api_graph_html, api_node_config_get, deepCopy, documentHaveActiveElement, Graph, HtmlClass, NodeTypeConfig, waitUntil} from "@nodius/utils";
 import {Instruction, InstructionBuilder} from "@nodius/utils";
 import {searchElementWithIdentifier} from "@nodius/utils";
 import {GraphInstructions} from "@nodius/utils";
 import {getHandleInfo} from "@nodius/utils";
 import {Edge, Node} from "@nodius/utils";
 import {useStableProjectRef} from "./hooks/useStableProjectRef";
+import {getSearchParam} from "./utils/urlHelper";
 
 
 export const App = () => {
@@ -336,6 +337,103 @@ export const App = () => {
         }
     }, [Project.state.editedHtml, Project.state.selectedNode, Project.state.batchDeleteElements, Project.state.graph, Project.state.selectedSheetId, Project.state.updateGraph, Project.state.editedNodeHandle]);
 
+
+    const firstRender = useRef<boolean>(true);
+
+    useEffect(() => {
+        if(firstRender.current && Project.state.openGraph && Project.state.openHtmlClass && Project.state.openNodeConfig) {
+            firstRender.current = false;
+            let vKey = getSearchParam("graph");
+            if(vKey) { // open graph
+                fetch('/api/graph/get', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        workspace: "root",
+                        retrieveGraph: {
+                            token: vKey,
+                            buildGraph: true,
+                            onlyFirstSheet: false
+                        }
+                    } as api_graph_html),
+                }).then((response) => response.json()).then((json) => {
+                    waitUntil(
+                        () => projectRef.current?.state?.getMotor(),
+                        5000
+                    ).then(() => {
+                        Project.state.openGraph!(json as Graph).then((status) => {
+                            if(!status.status) {
+                                console.error(status);
+                            }
+                        });
+                    })
+                });
+                return;
+            }
+
+            vKey = getSearchParam("html");
+            console.log("html",vKey);
+            if(vKey) { // open html graph
+                fetch('/api/graph/get', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        workspace: "root",
+                        retrieveHtml: {
+                            token: vKey,
+                            buildGraph: true,
+                            onlyFirstSheet: false
+                        }
+                    }),
+                }).then((response) => response.json()).then((json) => {
+                    waitUntil(
+                        () => projectRef.current?.state?.getMotor(),
+                        5000
+                    ).then(() => {
+                        console.log(json);
+                        Project.state.openHtmlClass!(json.html as HtmlClass, json.graph as Graph).then((status) => {
+                            if (!status.status) {
+                                console.error(status);
+                            }
+                        });
+                    });
+                });
+                return;
+            }
+
+            vKey = getSearchParam("nodeConfig");
+            console.log("nodeConfig",vKey);
+            if(vKey) { // open nodeConfig
+                fetch('/api/nodeconfig/get', {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        workspace: "root",
+                        _key: vKey
+
+                    } as api_node_config_get),
+                }).then((response) => response.json()).then((json) => {
+                    waitUntil(
+                        () => projectRef.current?.state?.getMotor(),
+                        5000
+                    ).then(() => {
+                        Project.state.openNodeConfig!(json as NodeTypeConfig).then((status) => {
+                            if (!status.status) {
+                                console.error(status);
+                            }
+                        });
+                    });
+                });
+                return;
+            }
+        }
+    }, [Project.state.openGraph, Project.state.openHtmlClass, Project.state.openNodeConfig]);
 
     return (
         <div style={{width: "100vw", height: "100vh", position:"relative"}} ref={containerRef}>

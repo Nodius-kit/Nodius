@@ -46,7 +46,8 @@ import {
     validateInstruction,
     HtmlObject,
     travelHtmlObject,
-    deepCopy, travelObject
+    deepCopy, travelObject,
+    Graph
 } from "@nodius/utils";
 
 import {clusterManager, db} from "../server";
@@ -224,24 +225,55 @@ export class WebSocketManager {
         return undefined;
     }
 
-    private deleteUserOnGraph = (userId:string) => {
-        for(const graphId in this.managedGraph) {
-            // each graph
-            for(const sheetId in this.managedGraph[graphId]) {
-                // each sheet
-                const sheet = this.managedGraph[graphId][sheetId];
-                if(sheet.user.some((user:ManageUser) => user.id === userId)) {
-                    sheet.user = sheet.user.filter(user => user.id !== userId);
+    private deleteUserOnGraph = (userId: string, options?: Partial<{ advertUser: boolean }>) => {
+        // Iterate directly over graph entries to get ID and Data simultaneously
+        for (const [graphId, sheets] of Object.entries(this.managedGraph)) {
+
+            // Iterate over the sheets within the graph
+            for (const sheet of Object.values(sheets)) {
+                // OPTIMIZATION: findIndex does the job of 'some' and 'find' in one go
+                const userIndex = sheet.user.findIndex((u: ManageUser) => u.id === userId);
+
+                if (userIndex !== -1) {
+                    const user = sheet.user[userIndex];
+
+                    if(options?.advertUser) {
+                        const message: WSMessage<WSDisconnedUserOnGraph> = {
+                            type: "disconnedUserOnGraph",
+                            graphKey: graphId,
+                            userId: userId
+                        };
+
+                        this.sendMessage(user.ws, message);
+                    }
+
+                    // Remove in-place
+                    sheet.user.splice(userIndex, 1);
                 }
             }
         }
     }
 
-    private deleteUserOnNodeConfig = (userId:string) => {
-        for(const nodeConfigId in this.managedNodeConfig) {
-            const nodeConfig = this.managedNodeConfig[nodeConfigId];
-            if(nodeConfig.user.some((user:ManageUser) => user.id === userId)) {
-                nodeConfig.user = nodeConfig.user.filter(user => user.id !== userId);
+    private deleteUserOnNodeConfig = (userId: string, options?: Partial<{ advertUser: boolean }>) => {
+        for (const [nodeConfigId, nodeConfig] of Object.entries(this.managedNodeConfig)) {
+            // OPTIMIZATION: Same logic here. Check index once.
+            const userIndex = nodeConfig.user.findIndex((u: ManageUser) => u.id === userId);
+
+            if (userIndex !== -1) {
+                const user = nodeConfig.user[userIndex];
+
+                if(options?.advertUser) {
+                    const message: WSMessage<WSDisconnectUserOnNodeConfig> = {
+                        type: "disconnectUserOnNodeConfig",
+                        nodeConfigKey: nodeConfigId,
+                        userId: userId
+                    };
+
+                    this.sendMessage(user.ws, message);
+                }
+
+                // Remove in-place
+                nodeConfig.user.splice(userIndex, 1);
             }
         }
     }
@@ -553,7 +585,7 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "registerUserOnGraph") {
                 const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
-                this.deleteUserOnGraph(message.userId);
+                this.deleteUserOnGraph(message.userId, { advertUser: true });
 
                 const peer = clusterManager.getInstancehPeerId("graph-"+message.graphKey);
                 if(!peer || peer != "self") {
@@ -586,7 +618,7 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "registerUserOnNodeConfig") {
                 const message:WSMessage<WSRegisterUserOnNodeConfig> = jsonData;
-                this.deleteUserOnNodeConfig(message.userId);
+                this.deleteUserOnNodeConfig(message.userId, { advertUser: true });
 
                 const peer = clusterManager.getInstancehPeerId("nodeConfig-"+message.nodeConfigKey);
                 if(!peer || peer != "self") {
@@ -1429,7 +1461,11 @@ export class WebSocketManager {
                 // Save to ArangoDB
                 try {
                     const graph_collection = db.collection("nodius_graphs");
-                    const graphDoc = await graph_collection.document(graphKey);
+                    const graphDoc = await graph_collection.document(graphKey) as Graph;
+
+                    if(graphDoc.metadata?.noMultipleSheet) {
+                        return;
+                    }
 
                     // Update sheetsList in the graph document
                     if (!graphDoc.sheetsList) {

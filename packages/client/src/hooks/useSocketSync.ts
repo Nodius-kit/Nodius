@@ -45,18 +45,25 @@ import {deepCopy} from "@nodius/utils";
 import {triggerNodeUpdateOption} from "../schema/SchemaDisplay";
 import {modalManager} from "@nodius/process";
 import {UserContext} from "./contexts/UserContext";
+import {getSearchParam, setSearchParam} from "../utils/urlHelper";
 
 export const useSocketSync = () => {
     const Project = useContext(ProjectContext);
     const projectRef = useStableProjectRef();
     const User = useContext(UserContext);
-    const [serverInfo, setServerInfo] = useState<api_sync_info>();
 
     const { connect, sendMessage, setMessageHandler, connectionState, stats, disconnect } = useWebSocket(
         true,  // autoReconnect
         1000,  // reconnectInterval (ms)
         3      // maxReconnectAttempts
     );
+
+    useEffect(() => {
+        Project.dispatch({
+            field: "connectionState",
+            value: connectionState,
+        })
+    }, [connectionState]);
 
 
     /* ---------------------------- REQUEST A SERVER CONNECTION BASED ON GRAPH UNIQUE KEY ------------------------- */
@@ -392,6 +399,10 @@ export const useSocketSync = () => {
             instanceId: "graph-"+htmlGraph._key
         });
         if(!serverInfo) {
+            Project.dispatch({
+                field: "serverInfo",
+                value: undefined,
+            });
             return {
                 timeTaken: Date.now() - start,
                 reason: "Can't find a server to start a sync",
@@ -399,7 +410,10 @@ export const useSocketSync = () => {
             }
         } else {
             console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
-            setServerInfo(serverInfo);
+            Project.dispatch({
+                field: "serverInfo",
+                value: serverInfo,
+            });
         }
 
         // Build WebSocket URL based on server info
@@ -474,20 +488,35 @@ export const useSocketSync = () => {
             value: {}
         });
 
+        setSearchParam("html", html._key);
+        setSearchParam("graph", null);
+        setSearchParam("nodeConfig", null);
 
-        const rootNode = findFirstNodeWithId(htmlGraph, "root");
         projectRef.current.state.getMotor().removeCameraAreaLock();
-        if(rootNode) {
-            projectRef.current.state.getMotor().smoothFitToArea({
-                minX: rootNode.posX,
-                maxX: rootNode.posX+rootNode.size.width,
-                minY: rootNode.posY,
-                maxY: rootNode.posY+rootNode.size.height
-            }, {
-                padding: 100
-            })
+
+        const paramX = getSearchParam("x");
+        const paramY = getSearchParam("y");
+        const paramZ = getSearchParam("z");
+        if(paramX !== null && paramY !== null) {
+            projectRef.current.state.getMotor().setTransform({
+                scale: parseFloat(paramZ ?? "1"),
+                translateX: parseFloat(paramX),
+                translateY: parseFloat(paramY),
+            });
         } else {
-            projectRef.current.state.getMotor().resetViewport();
+            const rootNode = findFirstNodeWithId(htmlGraph, "root");
+            if (rootNode) {
+                projectRef.current.state.getMotor().smoothFitToArea({
+                    minX: rootNode.posX,
+                    maxX: rootNode.posX + rootNode.size.width,
+                    minY: rootNode.posY,
+                    maxY: rootNode.posY + rootNode.size.height
+                }, {
+                    padding: 100
+                })
+            } else {
+                projectRef.current.state.getMotor().resetViewport();
+            }
         }
         projectRef.current.dispatch({
             field: "activeAppMenuId",
@@ -584,6 +613,10 @@ export const useSocketSync = () => {
             instanceId: "graph-"+fullGraph._key
         });
         if(!serverInfo) {
+            Project.dispatch({
+                field: "serverInfo",
+                value: undefined,
+            });
             return {
                 timeTaken: Date.now() - start,
                 reason: "Can't find a server to start a sync",
@@ -591,7 +624,10 @@ export const useSocketSync = () => {
             }
         } else {
             console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
-            setServerInfo(serverInfo);
+            Project.dispatch({
+                field: "serverInfo",
+                value: serverInfo,
+            });
         }
 
         const wsProtocol = serverInfo.secure ? 'wss' : 'ws';
@@ -666,12 +702,28 @@ export const useSocketSync = () => {
         });
 
         projectRef.current.state.getMotor().removeCameraAreaLock();
-        projectRef.current.state.getMotor().resetViewport();
 
         projectRef.current.dispatch({
             field: "activeAppMenuId",
             value: "schemaEditor"
         });
+
+        setSearchParam("graph", graph._key);
+        setSearchParam("html", null);
+        setSearchParam("nodeConfig", null);
+
+        const paramX = getSearchParam("x");
+        const paramY = getSearchParam("y");
+        const paramZ = getSearchParam("z");
+        if(paramX !== null && paramY !== null) {
+            projectRef.current.state.getMotor().setTransform({
+                scale: parseFloat(paramZ ?? "1"),
+                translateX: parseFloat(paramX),
+                translateY: parseFloat(paramY),
+            });
+        } else {
+            projectRef.current.state.getMotor().resetViewport();
+        }
 
         return {
             timeTaken: Date.now() - start,
@@ -749,6 +801,10 @@ export const useSocketSync = () => {
             instanceId: "nodeConfig-"+nodeConfig._key,
         });
         if(!serverInfo) {
+            Project.dispatch({
+                field: "serverInfo",
+                value: undefined,
+            });
             return {
                 timeTaken: Date.now() - start,
                 reason: "Can't find a server to start a sync",
@@ -756,7 +812,10 @@ export const useSocketSync = () => {
             }
         } else {
             console.log("Pairing with serveur: "+serverInfo.host+":"+serverInfo.port);
-            setServerInfo(serverInfo);
+            Project.dispatch({
+                field: "serverInfo",
+                value: serverInfo,
+            });
         }
 
         // generate fake graph
@@ -861,6 +920,9 @@ export const useSocketSync = () => {
         });
 
 
+        setSearchParam("nodeConfig", nodeConfig._key);
+        setSearchParam("html", null);
+        setSearchParam("graph", null);
 
         const disabled:DisabledNodeInteractionType = {};
         disabled[baseNode._key] = {};
@@ -871,6 +933,9 @@ export const useSocketSync = () => {
             value: disabled
         });
 
+        const paramX = getSearchParam("x");
+        const paramY = getSearchParam("y");
+        const paramZ = getSearchParam("z");
 
         const padding = 500;
         projectRef.current.state.getMotor().lockCameraToArea({
@@ -879,14 +944,23 @@ export const useSocketSync = () => {
             maxX: baseNode.posX + baseNode.size.width + padding,
             maxY: baseNode.posY + baseNode.size.height + padding,
         });
-        projectRef.current.state.getMotor().smoothFitToArea({
-            minX: baseNode.posX,
-            minY: baseNode.posY,
-            maxX: baseNode.posX + baseNode.size.width,
-            maxY: baseNode.posY + baseNode.size.height,
-        }, {
-            padding: padding
-        })
+
+        if(paramX !== null && paramY !== null) {
+            projectRef.current.state.getMotor().setTransform({
+                scale: parseFloat(paramZ ?? "1"),
+                translateX: parseFloat(paramX),
+                translateY: parseFloat(paramY),
+            });
+        } else {
+            projectRef.current.state.getMotor().smoothFitToArea({
+                minX: baseNode.posX,
+                minY: baseNode.posY,
+                maxX: baseNode.posX + baseNode.size.width,
+                maxY: baseNode.posY + baseNode.size.height,
+            }, {
+                padding: padding
+            })
+        }
 
         projectRef.current.dispatch({
             field: "activeAppMenuId",
@@ -1464,10 +1538,13 @@ export const useSocketSync = () => {
                 field: "selectedNode",
                 value: []
             });
+            Project.dispatch({
+                field: "serverInfo",
+                value: undefined
+            });
 
             actionIndex.current = -1;
             actionsStorage.current = [];
-
 
             if(Project.state.editedHtml) {
                 Project.state.closeHtmlEditor!();
@@ -1964,8 +2041,10 @@ export const useSocketSync = () => {
                     autoSaveEnabled: message.autoSaveEnabled
                 }
             });
+        } else if(packet.type === "disconnedUserOnGraph" || packet.type === "disconnectUserOnNodeConfig") {
+            disconnect();
         }
-    }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions]);
+    }, [applyGraphInstructions, applyBatchCreate, applyBatchDelete, applyNodeConfigInstructions, disconnect]);
 
     useEffect(() => {
         setMessageHandler(handleIncomingMessage);

@@ -3,6 +3,9 @@ import { ProjectContext } from "../hooks/contexts/ProjectContext";
 import { useDynamicClass } from "../hooks/useDynamicClass";
 import { Plus, X, Edit2, Maximize } from "lucide-react";
 import toast from "react-hot-toast";
+import {Fade} from "../component/animate/Fade";
+import {Button} from "../component/form/Button";
+import {Card} from "../component/form/Card";
 
 export interface SchemaDisplayOverlayProps {
     centerOnRootNode: () => void;
@@ -38,6 +41,37 @@ export const SchemaDisplayOverlay = memo(({ centerOnRootNode }: SchemaDisplayOve
             transform: scale(0.95);
         }
     `);
+
+    if (Project.state.editedNodeConfig) {
+        return null;
+    }
+
+    const showCenterOnRootNode = Project.state.editedNodeConfig == undefined;
+    const showSheetListing = Project.state.graph && !Project.state.graph.metadata?.noMultipleSheet
+
+    return (
+        <>
+            {showCenterOnRootNode && (
+                <div
+                    className={centerButtonClass}
+                    onClick={centerOnRootNode}
+                    title="Center on root node"
+                >
+                    <Maximize size={20} />
+                </div>
+            )}
+            {showSheetListing && (
+                <SheetListing />
+            )}
+        </>
+    );
+});
+
+interface SheetListingProps {
+}
+
+const SheetListing = memo(({ }: SheetListingProps) => {
+    const Project = useContext(ProjectContext);
 
     const sheetListClass = useDynamicClass(`
         & {
@@ -111,33 +145,9 @@ export const SchemaDisplayOverlay = memo(({ centerOnRootNode }: SchemaDisplayOve
         & .sheet-name {
             user-select: none;
         }
+       
 
     `);
-
-    if (Project.state.editedNodeConfig) {
-        return null;
-    }
-
-    return (
-        <>
-            <div
-                className={centerButtonClass}
-                onClick={centerOnRootNode}
-                title="Center on root node"
-            >
-                <Maximize size={20} />
-            </div>
-            <SheetListing sheetListClass={sheetListClass} />
-        </>
-    );
-});
-
-interface SheetListingProps {
-    sheetListClass: string;
-}
-
-const SheetListing = memo(({ sheetListClass }: SheetListingProps) => {
-    const Project = useContext(ProjectContext);
 
     const handleSheetClick = useCallback((sheetKey: string, e: React.MouseEvent) => {
         // Only change sheet if not clicking on action buttons
@@ -188,44 +198,78 @@ const SheetListing = memo(({ sheetListClass }: SheetListingProps) => {
     }, [Project]);
 
     return (
-        <div className={sheetListClass}>
-            {
-                Object.keys(Project.state.graph?.sheetsList ?? {}).map((sheetKey, i) => (
-                    <div
-                        key={i}
-                        className={`sheet-tab ${sheetKey === Project.state.selectedSheetId ? "selected" : ""}`}
-                        onClick={(e) => handleSheetClick(sheetKey, e)}
-                    >
-                        <span className="sheet-name">{Project.state.graph!.sheetsList[sheetKey]}</span>
-                        <div className="sheet-actions">
-                            <div
-                                className="sheet-action-btn rename"
-                                onClick={(e) => handleRenameSheet(sheetKey, e)}
-                                title="Rename sheet"
-                            >
-                                <Edit2 size={14} />
-                            </div>
-                            {sheetKey !== "0" && (
+        <>
+            <div className={sheetListClass}>
+                {
+                    Object.keys(Project.state.graph?.sheetsList ?? {}).map((sheetKey, i) => (
+                        <div
+                            key={i}
+                            className={`sheet-tab ${sheetKey === Project.state.selectedSheetId ? "selected" : ""}`}
+                            onClick={(e) => handleSheetClick(sheetKey, e)}
+                        >
+                            <span className="sheet-name">{Project.state.graph!.sheetsList[sheetKey]}</span>
+                            <div className="sheet-actions">
                                 <div
-                                    className="sheet-action-btn delete"
-                                    onClick={(e) => handleDeleteSheet(sheetKey, e)}
-                                    title="Delete sheet"
+                                    className="sheet-action-btn rename"
+                                    onClick={(e) => handleRenameSheet(sheetKey, e)}
+                                    title="Rename sheet"
                                 >
-                                    <X size={14} />
+                                    <Edit2 size={14} />
                                 </div>
-                            )}
+                                {sheetKey !== "0" && (
+                                    <div
+                                        className="sheet-action-btn delete"
+                                        onClick={(e) => handleDeleteSheet(sheetKey, e)}
+                                        title="Delete sheet"
+                                    >
+                                        <X size={14} />
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                ))
-            }
-            <div
-                className="sheet-tab selected"
-                style={{ color: "var(--nodius-primary-main)" }}
-                onClick={handleCreateSheet}
-            >
-                <Plus />
+                    ))
+                }
+                <div
+                    className="sheet-tab selected"
+                    style={{ color: "var(--nodius-primary-main)" }}
+                    onClick={handleCreateSheet}
+                >
+                    <Plus />
+                </div>
             </div>
-        </div>
+            {
+                Project.state.connectionState === "disconnected" && (
+                    <div style={{
+                        position:"absolute",
+                        inset:"0",
+                        backgroundColor: "var(--nodius-background-default)",
+                        zIndex: 99999999,
+                        display:"flex",
+                        justifyContent:"center",
+                        alignItems:"center",
+                        pointerEvents:"all"
+                    }}>
+                        <Card>
+                            <div style={{display:"flex", flexDirection:"column", gap:"15px"}}>
+                                <h4>Nodius is open in another window. Click on "Use here" to use Nodius in that window.</h4>
+                                <div style={{display:"flex", flexDirection:"row", justifyContent:"end", gap:"10px"}}>
+                                    <Button onClick={() => {
+                                        window.close();
+                                    }} size={"small"} variant={"outlined"}>
+                                        Fermer
+                                    </Button>
+                                    <Button onClick={() => {
+                                        window.location.reload();
+                                    }} size={"small"}>
+                                        Use here
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+                    </div>
+                )
+            }
+        </>
     );
 });
 

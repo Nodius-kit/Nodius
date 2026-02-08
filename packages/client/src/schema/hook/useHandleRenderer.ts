@@ -747,23 +747,23 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                     // Position text centered on handle point but offset based on side
                     if (handleInfo.side === "T") {
                         // Top side: text above the handle
-                        point.textElement.style.left = `${pos.x}px`;
+                        point.textElement.style.left = `${pos.x + textOffset}px`;
                         point.textElement.style.top = `${pos.y - textOffset}px`;
                         point.textElement.style.transform = "translate(-50%, -100%)";
                     } else if (handleInfo.side === "D") {
                         // Bottom side: text below the handle
-                        point.textElement.style.left = `${pos.x}px`;
+                        point.textElement.style.left = `${pos.x + textOffset}px`;
                         point.textElement.style.top = `${pos.y + textOffset}px`;
                         point.textElement.style.transform = "translate(-50%, 0%)";
                     } else if (handleInfo.side === "L") {
                         // Left side: text to the left of the handle
                         point.textElement.style.left = `${pos.x - textOffset}px`;
-                        point.textElement.style.top = `${pos.y}px`;
+                        point.textElement.style.top = `${pos.y - textOffset}px`;
                         point.textElement.style.transform = "translate(-100%, -50%)";
                     } else if (handleInfo.side === "R") {
                         // Right side: text to the right of the handle
                         point.textElement.style.left = `${pos.x + textOffset}px`;
-                        point.textElement.style.top = `${pos.y}px`;
+                        point.textElement.style.top = `${pos.y - textOffset}px`;
                         point.textElement.style.transform = "translate(0%, -50%)";
                     }
                 }

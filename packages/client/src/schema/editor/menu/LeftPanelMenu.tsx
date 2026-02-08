@@ -27,6 +27,7 @@ import {EditedCodeContext, ProjectContext} from "../../../hooks/contexts/Project
 import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
 import {GraphInstructions} from "@nodius/utils";
 import {workflowNodeEditorDefinitions} from "../codeEditorVariableDefinitions";
+import {setSearchParam} from "../../../utils/urlHelper";
 
 interface LeftPaneMenuProps {
     setEditingPanel: (value:editingPanel) => void,
@@ -231,6 +232,14 @@ export const LeftPanelMenu = memo((
                         field: "activeAppMenuId",
                         value: "home"
                     });
+                    setSearchParam("graph", null);
+                    setSearchParam("html", null);
+                    setSearchParam("nodeConfig", null);
+                    setSearchParam("node", null);
+                    setSearchParam("sheet", null);
+                    setSearchParam("x", null);
+                    setSearchParam("y", null);
+                    setSearchParam("z", null);
                 }} />
             </div>
             {

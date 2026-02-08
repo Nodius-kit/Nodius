@@ -86,7 +86,7 @@ export class EdgeRenderer {
 
       @fragment
       fn fs() -> @location(0) vec4<f32> {
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0); // Black for edges
+        return vec4<f32>(0.08, 0.39, 0.75, 1.0); // Black for edges
       }
     `;
         const edgeModule = this.device.createShaderModule({ code: edgeShaderCode });
@@ -107,7 +107,7 @@ export class EdgeRenderer {
                 entryPoint: "fs",
                 targets: [{ format: this.format }],
             },
-            primitive: { topology: "line-list" },
+            primitive: { topology: "triangle-list" },
             multisample: { count: this.sampleCount },
         });
 
@@ -148,7 +148,7 @@ export class EdgeRenderer {
       @fragment
       fn fs(input: VertexOutput) -> @location(0) vec4<f32> {
         // Alpha varies based on distance from center for glow effect
-        return vec4<f32>(0.2, 0.2, 0.2, input.alpha);
+        return vec4<f32>(0.08, 0.39, 0.75, input.alpha);
       }
     `;
         const shadowModule = this.device.createShaderModule({ code: shadowShaderCode });
@@ -283,6 +283,10 @@ export class EdgeRenderer {
         const edgeVertices: number[] = [];
         const selectedEdgeVertices: number[] = [];
         const segments = 20;
+
+        const EDGE_THICKNESS = 2.0;
+        const ARROW_SIZE = 10.0;
+
         for(const edges of edgesMap.values()) {
             for(const edge of edges) {
                 const sourceNode = edge.source !== undefined ? nodesMap.get(edge.source) : undefined;
@@ -317,21 +321,38 @@ export class EdgeRenderer {
                     x: targetPos.x - targetDir.dx * curveStrength,
                     y: targetPos.y - targetDir.dy * curveStrength,
                 };
-                for (let i = 0; i < segments; i++) {
-                    const t1 = i / segments;
-                    const t2 = (i + 1) / segments;
-                    const p1 = this.bezierPoint(t1, sourcePos, control1, control2, targetPos);
-                    const p2 = this.bezierPoint(t2, sourcePos, control1, control2, targetPos);
 
-                    if (isSelected) {
-                        // Create multi-layer glow effect for each segment
-                        this.createGlowLineSegment(p1, p2, 8, 0.15 / 10, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 5, 0.3 / 10, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 3, 0.5 / 10, selectedEdgeVertices);
-                        this.createGlowLineSegment(p1, p2, 1.5, 0.8 / 10, selectedEdgeVertices);
-                    } else {
-                        edgeVertices.push(p1.x, p1.y, p2.x, p2.y);
+                // 1. Collect all points for this edge first
+                const curvePoints: Point[] = [];
+                for (let i = 0; i <= segments; i++) {
+                    const t = i / segments;
+                    curvePoints.push(this.bezierPoint(t, sourcePos, control1, control2, targetPos));
+                }
+
+                if (isSelected) {
+                    // 2. Draw continuous glow layers (No overlap artifacts!)
+                    // Rendu dans le buffer 'selectedEdgeVertices' (effet glow)
+                    this.createContinuousGlow(curvePoints, 8, 0.15, selectedEdgeVertices);
+                    this.createContinuousGlow(curvePoints, 5, 0.3, selectedEdgeVertices);
+                    this.createContinuousGlow(curvePoints, 3, 0.5, selectedEdgeVertices);
+                    this.createContinuousGlow(curvePoints, 1.5, 0.8, selectedEdgeVertices);
+
+                    // 3. Draw Arrow
+                    const lastP = curvePoints[segments];
+                    const prevP = curvePoints[segments-1]; // Direction venant du dernier segment
+                    this.createArrow(lastP, prevP, ARROW_SIZE, edgeVertices);
+
+                } else {
+
+                    // 1. Draw solid line only
+                    for(let i = 0; i < segments; i++) {
+                        this.createThickLine(curvePoints[i], curvePoints[i+1], EDGE_THICKNESS, edgeVertices);
                     }
+
+                    // 2. Draw Arrow
+                    const lastP = curvePoints[segments];
+                    const prevP = curvePoints[segments-1];
+                    this.createArrow(lastP, prevP, ARROW_SIZE, edgeVertices);
                 }
             }
         }
@@ -383,6 +404,125 @@ export class EdgeRenderer {
             passEncoder.setVertexBuffer(0, this.selectedEdgeVertexBuffer);
             passEncoder.draw(this.selectedEdgeVertexCount);
         }
+    }
+
+    /**
+     * Creates a continuous triangle strip for a smooth glow without overlapping joints.
+     */
+    private createContinuousGlow(points: Point[], thickness: number, alpha: number, vertices: number[]): void {
+        if (points.length < 2) return;
+
+        const halfWidth = thickness / 2;
+
+        // Arrays to store calculated vertices (left and right side of the line)
+        const leftVerts: {x:number, y:number}[] = [];
+        const rightVerts: {x:number, y:number}[] = [];
+
+        for (let i = 0; i < points.length; i++) {
+            // Calculate direction vector
+            // For internal points, use average direction of previous and next segment for smooth joints
+            let dx, dy;
+
+            if (i === 0) {
+                // Start point
+                dx = points[1].x - points[0].x;
+                dy = points[1].y - points[0].y;
+            } else if (i === points.length - 1) {
+                // End point
+                dx = points[i].x - points[i-1].x;
+                dy = points[i].y - points[i-1].y;
+            } else {
+                // Middle point: average direction
+                dx = points[i+1].x - points[i-1].x;
+                dy = points[i+1].y - points[i-1].y;
+            }
+
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len < 0.001) continue;
+
+            // Calculate perpendicular vector
+            const perpX = (-dy / len) * halfWidth;
+            const perpY = (dx / len) * halfWidth;
+
+            leftVerts.push({ x: points[i].x + perpX, y: points[i].y + perpY });
+            rightVerts.push({ x: points[i].x - perpX, y: points[i].y - perpY });
+        }
+
+        // Generate triangles connecting the calculated vertices
+        for (let i = 0; i < leftVerts.length - 1; i++) {
+            const l1 = leftVerts[i];
+            const r1 = rightVerts[i];
+            const l2 = leftVerts[i+1];
+            const r2 = rightVerts[i+1];
+
+            // Triangle 1 (First half of the quad segment)
+            vertices.push(l1.x, l1.y, 0, 0, alpha); // The 0,0 are offsets if you use them, otherwise strictly pos & alpha
+            vertices.push(r1.x, r1.y, 0, 0, alpha);
+            vertices.push(l2.x, l2.y, 0, 0, alpha);
+
+            // Triangle 2 (Second half)
+            vertices.push(r1.x, r1.y, 0, 0, alpha);
+            vertices.push(r2.x, r2.y, 0, 0, alpha);
+            vertices.push(l2.x, l2.y, 0, 0, alpha);
+        }
+    }
+
+    /**
+     * Crée un segment de ligne épais (2 triangles)
+     */
+    private createThickLine(p1: Point, p2: Point, thickness: number, vertices: number[]): void {
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.001) return;
+
+        // Vecteur perpendiculaire normalisé * demi-épaisseur
+        const halfWidth = thickness / 2;
+        const perpX = (-dy / len) * halfWidth;
+        const perpY = (dx / len) * halfWidth;
+
+        // Création des 2 triangles (6 sommets) pour former un rectangle
+        // Triangle 1
+        vertices.push(p1.x + perpX, p1.y + perpY); // Top-Left
+        vertices.push(p1.x - perpX, p1.y - perpY); // Bottom-Left
+        vertices.push(p2.x + perpX, p2.y + perpY); // Top-Right
+
+        // Triangle 2
+        vertices.push(p1.x - perpX, p1.y - perpY); // Bottom-Left
+        vertices.push(p2.x - perpX, p2.y - perpY); // Bottom-Right
+        vertices.push(p2.x + perpX, p2.y + perpY); // Top-Right
+    }
+
+    /**
+     * Crée un triangle pour la flèche
+     */
+    private createArrow(tip: Point, dirFrom: Point, size: number, vertices: number[]): void {
+        const dx = tip.x - dirFrom.x;
+        const dy = tip.y - dirFrom.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.001) return;
+
+        // Vecteur direction normalisé
+        const ndx = dx / len;
+        const ndy = dy / len;
+
+        // Vecteur perpendiculaire pour la base de la flèche
+        const perpX = -ndy;
+        const perpY = ndx;
+
+        // Point arrière (base de la flèche)
+        const backX = tip.x - (ndx * size);
+        const backY = tip.y - (ndy * size);
+
+        // Largeur de la flèche à la base
+        const arrowWidth = size * 0.6;
+
+        // Sommet (Pointe)
+        vertices.push(tip.x, tip.y);
+        // Coin gauche base
+        vertices.push(backX + perpX * arrowWidth, backY + perpY * arrowWidth);
+        // Coin droit base
+        vertices.push(backX - perpX * arrowWidth, backY - perpY * arrowWidth);
     }
 
     public setSelectedEdges(edgeKeys: string[]): void {

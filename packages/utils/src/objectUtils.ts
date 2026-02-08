@@ -393,3 +393,18 @@ export interface Point {
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
+
+
+export const waitUntil = <T>(
+    fn: () => T | undefined,
+    timeout = 5000,
+    interval = 50
+) => new Promise<T>((res, rej) => {
+    const t = Date.now();
+    const i = setInterval(() => {
+        const r = fn();
+        if (r !== undefined) return clearInterval(i), res(r);
+        if (Date.now() - t >= timeout)
+            return clearInterval(i), rej(new Error("waitUntil timeout"));
+    }, interval);
+});

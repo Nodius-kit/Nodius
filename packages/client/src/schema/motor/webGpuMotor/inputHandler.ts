@@ -18,6 +18,7 @@
 import { ViewTransform } from "../graphicalMotor";
 import { documentHaveActiveElement } from "@nodius/utils";
 import { KeyState } from "./types";
+import {setSearchParam} from "../../../utils/urlHelper";
 
 /**
  * Manages mouse and keyboard input for camera control
@@ -100,6 +101,8 @@ export class InputHandler {
                 const dy = e.clientY - this.lastMouseY;
                 this.transform.translateX += dx;
                 this.transform.translateY += dy;
+                setSearchParam("x", Math.round(this.transform.translateX * 100) / 100);
+                setSearchParam("y", Math.round(this.transform.translateY * 100) / 100);
                 this.lastMouseX = e.clientX;
                 this.lastMouseY = e.clientY;
                 this.onConstrainTransform?.();
@@ -156,6 +159,11 @@ export class InputHandler {
             this.transform.translateX = mouseX - wx * newScale;
             this.transform.translateY = mouseY - wy * newScale;
             this.transform.scale = newScale;
+
+            setSearchParam("x", Math.round(this.transform.translateX * 100) / 100);
+            setSearchParam("y", Math.round(this.transform.translateY * 100) / 100);
+            setSearchParam("z", Math.round(this.transform.scale * 100) / 100);
+
             this.onConstrainTransform?.();
             this.onUserMove();
             this.onDirty();

@@ -67,9 +67,10 @@ interface WebSocketStats {
     bytesSent: number;
 }
 
+export type WebSocketConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
-interface WebSocketHookReturn {
-    connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+export interface WebSocketHookReturn {
+    connectionState: WebSocketConnectionState;
     stats: WebSocketStats;
     connect: (url: string) => Promise<boolean>;
     disconnect: () => void;

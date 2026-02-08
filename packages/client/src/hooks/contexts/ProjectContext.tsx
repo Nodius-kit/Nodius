@@ -23,7 +23,7 @@ import {createContext, Dispatch, JSX, MemoExoticComponent, useCallback} from "re
 import {ActionType} from "../useCreateReducer";
 import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
 import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
-import {GraphInstructions, nodeConfigInstructions, NodeTypeStarterConfig, WSMessage} from "@nodius/utils";
+import {api_sync_info, GraphInstructions, nodeConfigInstructions, NodeTypeStarterConfig, WSMessage} from "@nodius/utils";
 import {HtmlClass, HtmlObject} from "@nodius/utils";
 import {
     Edge,
@@ -37,6 +37,7 @@ import {
 import {DataTypeClass, EnumClass} from "@nodius/utils";
 import {Instruction} from "@nodius/utils";
 import {HtmlRender} from "@nodius/process";
+import {WebSocketConnectionState} from "../useWebSocket";
 
 export interface ActionContext {
     timeTaken: number;
@@ -119,6 +120,9 @@ export interface ProjectContextType {
     getMotor: () => GraphicalMotor,
     caughtUpMessage?: WSMessage<any>[],
 
+    serverInfo?:api_sync_info,
+    connectionState:WebSocketConnectionState,
+
     editedNodeHandle?: EditedNodeHandle,
 
     initiateNewHtmlRender: (context:htmlRenderContext) => htmlRenderContext|undefined,
@@ -196,6 +200,8 @@ export const ProjectContextDefaultValue: ProjectContextType = {
         "entryType": NodeTypeEntryTypeConfig,
         "starter": NodeTypeStarterConfig
     },
+
+    connectionState: "disconnected",
 
     aheadAction: undefined!,
     backAction: undefined!,

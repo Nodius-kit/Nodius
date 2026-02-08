@@ -897,13 +897,10 @@ export const SchemaDisplay = memo(() => {
         const schema = inSchemaNode.current.get(nodeId);
         if(!schema) return;
 
-
         if(options?.reRenderNodeConfig) {
             schema.htmlRenderContext.htmlRender.setExtraEventVariable(getExtraRenderGraphVariable(node));
             await schema.htmlRenderContext.htmlRender.render(schema.htmlRenderContext.retrieveHtmlObject(node));
         }
-
-
 
         const handleSelectedPointId = projectRef.current.state.editedNodeHandle && projectRef.current.state.editedNodeHandle.nodeId === nodeId ? projectRef.current.state.editedNodeHandle.pointId : undefined;
 
@@ -913,7 +910,6 @@ export const SchemaDisplay = memo(() => {
             (node.size.toWidth !== undefined && node.size.width !== node.size.toWidth) ||
             (node.size.toHeight !== undefined && node.size.height !== node.size.toHeight)
         ) {
-            console.log("update");
             animationManager.current?.startAnimation(
                 nodeId,
                 () => getNode(nodeId) as any,
