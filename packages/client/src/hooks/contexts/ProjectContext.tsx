@@ -23,7 +23,7 @@ import {createContext, Dispatch, JSX, MemoExoticComponent, useCallback} from "re
 import {ActionType} from "../useCreateReducer";
 import {GraphicalMotor} from "../../schema/motor/graphicalMotor";
 import {HomeWorkflow} from "../../menu/homeWorkflow/HomeWorkflow";
-import {api_sync_info, GraphInstructions, nodeConfigInstructions, NodeTypeStarterConfig, WSMessage} from "@nodius/utils";
+import {api_sync_info, GraphInstructions, nodeConfigInstructions, NodeTypeReturnConfig, NodeTypeStarterConfig, WSMessage} from "@nodius/utils";
 import {HtmlClass, HtmlObject} from "@nodius/utils";
 import {
     Edge,
@@ -198,7 +198,8 @@ export const ProjectContextDefaultValue: ProjectContextType = {
     nodeTypeConfig: {
         "html": NodeTypeHtmlConfig,
         "entryType": NodeTypeEntryTypeConfig,
-        "starter": NodeTypeStarterConfig
+        "starter": NodeTypeStarterConfig,
+        "return": NodeTypeReturnConfig,
     },
 
     connectionState: "disconnected",

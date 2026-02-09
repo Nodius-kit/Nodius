@@ -233,6 +233,98 @@ export type GraphHistory =
         userId: string
     }
 
+
+export const NodeTypeReturnConfig:NodeTypeConfig = {
+    _key: "return",
+    version: 1,
+    workspace: "root",
+    category: "",
+    content: {
+        type: "list",
+        identifier: "roou",
+        domEvents: [],
+        tag: "div",
+        name: "Column",
+        css: [
+            {
+                selector: "&",
+                rules: [
+                    ["display","flex"],
+                    ["flex-direction","column"],
+                    ["padding","5px"],
+                    ["gap","0px"],
+                    ["min-height","50px"],
+                    ["height","100%"],
+                    ["justify-content","center"],
+                    ["align-items","center"]
+                ]
+            }
+        ],
+        content: [
+            {
+                type: "icon",
+                identifier: "roov",
+                tag: "span",
+                domEvents: [],
+                name: "Icon",
+                css: [
+                    {
+                        selector: "&amp;",
+                        rules: [
+                            ["width","40px"],
+                            ["height","40px"],
+                            ["stroke-width","1.5px"],
+                            ["color","var(--nodius-primary-main)"]
+                        ]
+                    }
+                ],
+                content: "Forward"
+            }
+        ]
+    },
+    displayName: "Return",
+    description: "",
+    alwaysRendered: true,
+    node: {
+        type: "return",
+        posY: 0,
+        posX: 0,
+        process: ``,
+        handles: {
+            "L": {
+                position: "separate",
+                point: [
+                    {
+                        id: "0",
+                        type: "in",
+                        accept: "any"
+                    }
+                ]
+            }
+        },
+        size: {
+            width: 150,
+            height: 150,
+            dynamic: true,
+        },
+        data: undefined
+    },
+
+    border: {
+        radius:15,
+        width:1,
+        type: "solid",
+        normal: {
+            color: "var(--nodius-primary-dark)",
+        },
+        hover: {
+            color: "var(--nodius-primary-light)",
+        }
+    },
+    lastUpdatedTime: Date.now(),
+    createdTime: Date.now(),
+}
+
 export const NodeTypeStarterConfig:NodeTypeConfig = {
     _key: "starter",
     version: 1,
@@ -248,38 +340,14 @@ export const NodeTypeStarterConfig:NodeTypeConfig = {
             {
                 selector: "&",
                 rules: [
-                    [
-                        "display",
-                        "flex"
-                    ],
-                    [
-                        "flex-direction",
-                        "column"
-                    ],
-                    [
-                        "padding",
-                        "5px"
-                    ],
-                    [
-                        "gap",
-                        "0px"
-                    ],
-                    [
-                        "min-height",
-                        "50px"
-                    ],
-                    [
-                        "height",
-                        "100%"
-                    ],
-                    [
-                        "justify-content",
-                        "center"
-                    ],
-                    [
-                        "align-items",
-                        "center"
-                    ]
+                    ["display","flex"],
+                    ["flex-direction","column"],
+                    ["padding","5px"],
+                    ["gap","0px"],
+                    ["min-height","50px"],
+                    ["height","100%"],
+                    ["justify-content","center"],
+                    ["align-items","center"]
                 ]
             }
         ],
@@ -294,22 +362,10 @@ export const NodeTypeStarterConfig:NodeTypeConfig = {
                     {
                         selector: "&amp;",
                         rules: [
-                            [
-                                "width",
-                                "40px"
-                            ],
-                            [
-                                "height",
-                                "40px"
-                            ],
-                            [
-                                "stroke-width",
-                                "1.5px"
-                            ],
-                            [
-                                "color",
-                                "var(--nodius-primary-main)"
-                            ]
+                            ["width","40px"],
+                            ["height","40px"],
+                            ["stroke-width","1.5px"],
+                            ["color","var(--nodius-primary-main)"]
                         ]
                     }
                 ],
