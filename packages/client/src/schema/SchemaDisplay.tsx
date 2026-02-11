@@ -783,9 +783,9 @@ export const SchemaDisplay = memo(() => {
         const schema = inSchemaNode.current.get(node._key);
         if(!schema) return {};
         return {
-            getNode: (nodeId:string) => {
-                const node = getNode(nodeId);
-                return node ? deepCopy(node) : undefined
+            getNode: (nodeId?:string) => {
+                const _node = getNode((nodeId ?? node!._key) ?? "");
+                return _node ? deepCopy(_node) : undefined
             },
             nodeId: node._key,
             updateNode:async (newNode:Node<any>) => {
@@ -816,7 +816,8 @@ export const SchemaDisplay = memo(() => {
             openHtmlEditor: projectRef.current.state.openHtmlEditor,
             currentEntryDataType: currentEntryDataTypeFixed.current,
             HtmlRender: HtmlRender,
-            container: schema.element
+            container: schema.element,
+            editedNodeConfig:projectRef.current.state.editedNodeConfig,
         }
     }
 
@@ -1044,6 +1045,10 @@ export const SchemaDisplay = memo(() => {
     }, []);
 
 
+    const getVisibleNode = useCallback(() => Array.from(visibleNodes.current), []);
+    const getVisibleEdge = useCallback(() => visibleEdges.current, []);
+    const getContainer = useCallback(() => containerRef.current!, []);
+
     return (
         <div ref={containerRef} style={{height:'100%', width: '100%', position:"absolute", inset:"0", pointerEvents:"none"}} >
             <div
@@ -1057,7 +1062,7 @@ export const SchemaDisplay = memo(() => {
                     overflow:"hidden"
                 }}
             />
-            <SchemaDisplayOverlay centerOnRootNode={centerOnRootNode} />
+            <SchemaDisplayOverlay centerOnRootNode={centerOnRootNode} getVisibleNode={getVisibleNode} getVisibleEdge={getVisibleEdge} getContainer={getContainer} />
         </div>
     )
 })

@@ -64,7 +64,8 @@ import {
     HtmlClass,
     deepCopy,
     createNodeFromConfig,
-    NodeTypeStarterConfig
+    NodeTypeStarterConfig,
+    NodeTypeReturnConfig
 } from "@nodius/utils";
 
 import {aql} from "arangojs";
@@ -352,6 +353,7 @@ export class RequestWorkFlow {
                         FOR doc IN nodius_graphs
                             FILTER doc.htmlKeyLinked == null
                             AND doc.workspace == ${escapeHTML(body.workspace)}
+                            AND doc.metadata.invisible != true
                             SORT doc.lastUpdatedTime DESC
                             LIMIT ${offset}, ${limit}
                             RETURN doc
@@ -397,6 +399,7 @@ export class RequestWorkFlow {
                     _key: token_graph,
                     name: body.htmlClass.name + "-graph",
                     category: "default",
+                    nodeKeyLinked: body.nodeKeyLinked,
                     htmlKeyLinked: token_html,
                     version: 0,
                     permission: 0,
@@ -436,6 +439,7 @@ export class RequestWorkFlow {
                 const graph: Omit<GraphWF, "sheets" | "_sheets" | "htmlKeyLinked"> = {
                     _key: token_graph,
                     name: body.graph.name,
+                    nodeKeyLinked: body.nodeKeyLinked,
                     category: "default",
                     version: 0,
                     permission: 0,
@@ -447,13 +451,24 @@ export class RequestWorkFlow {
                 }
                 await graph_collection.save(graph);
 
-                const nodeRoot = createNodeFromConfig<any>(
+                const nodeStarter = createNodeFromConfig<any>(
                     NodeTypeStarterConfig,
                     token_graph+"-root",
                     token_graph,
                     "0"
                 );
-                await node_collection.save(nodeRoot);
+
+                const nodeReturn = createNodeFromConfig<any>(
+                    NodeTypeReturnConfig,
+                    token_graph+"-return",
+                    token_graph,
+                    "0"
+                );
+
+                nodeReturn.posX += 300;
+
+                await node_collection.save(nodeStarter);
+                await node_collection.save(nodeReturn);
 
                 res.status(200).json(graph);
             } else {

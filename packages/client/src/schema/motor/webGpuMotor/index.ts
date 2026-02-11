@@ -573,6 +573,19 @@ export class WebGpuMotor implements GraphicalMotor {
         return { ...this.transform };
     }
 
+    public setMaxZoom(max:number):void {
+        this.cameraAnimator!.setMaxZoom(max);
+    }
+    public setMinZoom(min:number):void {
+        this.cameraAnimator!.setMinZoom(min);
+    }
+    public getMaxZoom():number {
+        return this.cameraAnimator!.getMaxZoom();
+    }
+    public getMinZoom():number {
+        return this.cameraAnimator!.getMinZoom();
+    }
+
     public on<K extends keyof MotorEventMap>(event: K, cb: MotorEventMap[K]): void {
         if (!this.eventListeners[event]) this.eventListeners[event] = [];
         this.eventListeners[event]!.push(cb);

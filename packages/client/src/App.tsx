@@ -374,7 +374,6 @@ export const App = () => {
             }
 
             vKey = getSearchParam("html");
-            console.log("html",vKey);
             if(vKey) { // open html graph
                 fetch('/api/graph/get', {
                     method: "POST",
@@ -394,7 +393,6 @@ export const App = () => {
                         () => projectRef.current?.state?.getMotor(),
                         5000
                     ).then(() => {
-                        console.log(json);
                         Project.state.openHtmlClass!(json.html as HtmlClass, json.graph as Graph).then((status) => {
                             if (!status.status) {
                                 console.error(status);
@@ -406,7 +404,6 @@ export const App = () => {
             }
 
             vKey = getSearchParam("nodeConfig");
-            console.log("nodeConfig",vKey);
             if(vKey) { // open nodeConfig
                 fetch('/api/nodeconfig/get', {
                     method: "POST",

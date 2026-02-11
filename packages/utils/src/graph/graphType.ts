@@ -116,7 +116,8 @@ export interface Graph {
     version: number;
     description?:string,
 
-    htmlKeyLinked?: string,
+    htmlKeyLinked?:string,
+    nodeKeyLinked?:string,
 
     // aditional info
     category:string,
@@ -166,6 +167,7 @@ export interface NodeTypeConfig {
     border: NodeTypeConfigBorder,
     lastUpdatedTime: number,
     createdTime: number,
+    icon?: string,
 }
 
 export interface GraphHistoryBase {
@@ -238,7 +240,7 @@ export const NodeTypeReturnConfig:NodeTypeConfig = {
     _key: "return",
     version: 1,
     workspace: "root",
-    category: "",
+    category: "default",
     content: {
         type: "list",
         identifier: "roou",

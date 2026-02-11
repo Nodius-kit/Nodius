@@ -79,6 +79,10 @@ export interface GraphicalMotor {
     setSelectedEdges(edges:string[]): void;
     isPointNearEdge(point: Point, edge: Edge): boolean;
     getCursorPosition(): Point,
+    setMaxZoom(max:number):void ;
+    setMinZoom(min:number):void;
+    getMaxZoom():number;
+    getMinZoom():number;
     smoothTransitionTo(options: {
         x: number;
         y: number;

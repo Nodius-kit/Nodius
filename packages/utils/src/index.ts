@@ -1,6 +1,7 @@
 export * from './dataType/dataType';
 export * from './graph/graphType';
 export * from './graph/handleUtils';
+export * from './graph/minimap';
 export * from './graph/nodeUtils';
 export * from './html/htmlCss';
 export * from './html/htmlType';

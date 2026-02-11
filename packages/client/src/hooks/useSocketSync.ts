@@ -1948,6 +1948,28 @@ export const useSocketSync = () => {
                         status: false
                     };
                 } else {
+
+                    // remove selected edge/node
+                    const edgeKeysToRemove = new Set(message.edgeKeys);
+                    const newEdges = projectRef.current.state.selectedEdge.filter((e) => !edgeKeysToRemove.has(e));
+
+                    if (projectRef.current.state.selectedEdge.length !== newEdges.length) {
+                        Project.dispatch({
+                            field: "selectedEdge",
+                            value: newEdges
+                        });
+                    }
+
+                    const nodeKeysToRemove = new Set(message.nodeKeys);
+                    const newNodes = projectRef.current.state.selectedNode.filter((n) => !nodeKeysToRemove.has(n));
+
+                    if (projectRef.current.state.selectedNode.length !== newNodes.length) {
+                        Project.dispatch({
+                            field: "selectedNode", // FIXED: Was "selectedEdge" in original code
+                            value: newNodes
+                        });
+                    }
+
                     return {
                         timeTaken: Date.now() - start,
                         status: true

@@ -54,7 +54,10 @@ export class WorkflowManager {
         entryNodeId: string,
         entryData: Record<string, any>,
         nodeTypeConfig: Record<NodeType, NodeTypeConfig>,
-    ) {
+    ): Promise<any> {
+
+        let output:any = undefined;
+
         console.log('[WorkflowManager] Starting workflow execution', {
             nodeCount: nodes.length,
             edgeCount: edges.length,
@@ -68,17 +71,20 @@ export class WorkflowManager {
 
         this.isExecuting = true;
         try {
-            await workflowExecutor.executeWorkflow(
+            const ret = await workflowExecutor.executeWorkflow(
                 nodes,
                 edges,
                 entryNodeId,
                 entryData,
                 nodeTypeConfig
             );
+            console.log("aaa", ret);
         } catch (error) {
             console.error('[WorkflowManager] Failed to execute workflow:', error);
             this.handleError(error instanceof Error ? error.message : String(error));
         }
+
+        return output;
     }
 
     /**

@@ -54,6 +54,8 @@ import {clusterManager, db} from "../server";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
 
 import {createUniqueToken, ensureCollection} from "../utils/arangoUtils";
+import {aql} from "arangojs";
+import escapeHTML from "escape-html";
 
 interface ManageUser {
     id: string,
@@ -225,10 +227,11 @@ export class WebSocketManager {
         return undefined;
     }
 
-    private deleteUserOnGraph = (userId: string, options?: Partial<{ advertUser: boolean }>) => {
+    private deleteUserOnGraph = (userId: string, options?: Partial<{ graphKey:string, advertUser: boolean }>) => {
         // Iterate directly over graph entries to get ID and Data simultaneously
         for (const [graphId, sheets] of Object.entries(this.managedGraph)) {
 
+            if(options?.graphKey && options?.graphKey !== graphId) continue;
             // Iterate over the sheets within the graph
             for (const sheet of Object.values(sheets)) {
                 // OPTIMIZATION: findIndex does the job of 'some' and 'find' in one go
@@ -254,9 +257,11 @@ export class WebSocketManager {
         }
     }
 
-    private deleteUserOnNodeConfig = (userId: string, options?: Partial<{ advertUser: boolean }>) => {
+    private deleteUserOnNodeConfig = (userId: string, options?: Partial<{ nodeConfigId:string, advertUser: boolean }>) => {
         for (const [nodeConfigId, nodeConfig] of Object.entries(this.managedNodeConfig)) {
-            // OPTIMIZATION: Same logic here. Check index once.
+
+            if(options?.nodeConfigId && options?.nodeConfigId !== nodeConfigId) continue;
+
             const userIndex = nodeConfig.user.findIndex((u: ManageUser) => u.id === userId);
 
             if (userIndex !== -1) {
@@ -585,7 +590,7 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "registerUserOnGraph") {
                 const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
-                this.deleteUserOnGraph(message.userId, { advertUser: true });
+                //this.deleteUserOnGraph(message.userId, { advertUser: true });
 
                 const peer = clusterManager.getInstancehPeerId("graph-"+message.graphKey);
                 if(!peer || peer != "self") {
@@ -614,11 +619,11 @@ export class WebSocketManager {
 
             } else if(jsonData.type === "disconnedUserOnGraph") {
                 const message:WSMessage<WSDisconnedUserOnGraph> = jsonData;
-                this.deleteUserOnGraph(message.userId);
+                this.deleteUserOnGraph(message.userId, {graphKey:message.graphKey});
                 return;
             } else if(jsonData.type === "registerUserOnNodeConfig") {
                 const message:WSMessage<WSRegisterUserOnNodeConfig> = jsonData;
-                this.deleteUserOnNodeConfig(message.userId, { advertUser: true });
+                //this.deleteUserOnNodeConfig(message.userId, { advertUser: true });
 
                 const peer = clusterManager.getInstancehPeerId("nodeConfig-"+message.nodeConfigKey);
                 if(!peer || peer != "self") {
@@ -662,7 +667,9 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "disconnectUserOnNodeConfig") {
                 const message:WSMessage<WSDisconnectUserOnNodeConfig> = jsonData;
-                this.deleteUserOnNodeConfig(message.userId);
+                this.deleteUserOnNodeConfig(message.userId, {
+                    nodeConfigId: message.nodeConfigKey
+                });
                 return;
             } else if(jsonData.type === "applyInstructionToNodeConfig") {
                 if(!nodeConfigUser || !nodeConfig) {
@@ -1406,6 +1413,46 @@ export class WebSocketManager {
                     message: message,
                     time: Date.now()
                 });
+
+                // for each node, delete subflow
+                const targetKeys = message.nodeKeys
+                    .map((n) => targetSheet.nodeMap.get(n)?._key)
+                    .filter((v) => v != undefined); // Ensure type safety
+
+                if (targetKeys.length > 0) {
+                    // 2. Execute everything in a single database round-trip
+                    await db.query(aql`
+                        FOR targetKey IN ${targetKeys}
+                            // Find the graph linked to this node
+                            FOR g IN nodius_graphs
+                                FILTER g.nodeKeyLinked == targetKey
+                                
+                                // Delete HTML Class (Subquery to handle conditional existence)
+                                LET removeHtml = (
+                                    FOR h IN nodius_html_class
+                                        FILTER h._key == g.htmlKeyLinked
+                                        REMOVE h IN nodius_html_class
+                                )
+                
+                                // Delete Child Nodes
+                                LET removeNodes = (
+                                    FOR n IN nodius_nodes
+                                        FILTER n.graphKey == g._key
+                                        REMOVE n IN nodius_nodes
+                                )
+                
+                                // Delete Child Edges
+                                LET removeEdges = (
+                                    FOR e IN nodius_edges
+                                        FILTER e.graphKey == g._key
+                                        REMOVE e IN nodius_edges
+                                )
+                
+                                // Finally, remove the Graph itself
+                                REMOVE g IN nodius_graphs
+                    `);
+                }
+
 
                 // Send success response with filtered edge keys
                 if (messageId) {

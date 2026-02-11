@@ -81,31 +81,6 @@ export const executeWorkflow = async (
 
     return completePromise;
 }
-/*
-const resumeExecution = (nodeKey: string, pointId: string, data: any) => {
-    if (!isExecuting || !nodeMap || !edgeMap || !nodeTypeConfig) {
-        console.warn('[WorkflowWorker] Cannot resume: workflow not initialized or not executing');
-        return;
-    }
-
-    const node = nodeMap.get(nodeKey);
-    if (!node) {
-        console.warn('[WorkflowWorker] Node not found for resume:', nodeKey);
-        return;
-    }
-
-    sendLog(`Resuming execution from node ${nodeKey} at input point ${pointId}`, nodeKey, data);
-
-    const incoming: incomingWorkflowNode = {
-        pointId,
-        data,
-    };
-
-    currentBranchStartTime = Date.now();
-
-    const task = createTask(node, incoming);
-    startTask(task);
-}*/
 
 const resumeExecution = (nodeKey: string, pointId: string, data: any) => {
     if (!isExecuting || !nodeMap || !edgeMap || !nodeTypeConfig) {
@@ -182,6 +157,26 @@ const executeTask = async (task: Task): Promise<any> => {
     }
 
     const { node, incoming } = task;
+
+    if (node.type === "return") {
+        const returnData = incoming?.data;
+        const totalTime = Date.now() - currentBranchStartTime;
+
+        sendLog(`Return node reached: ${node._key}`, node._key, returnData);
+
+        isExecuting = false;
+
+        sendMessage({
+            type: "complete",
+            data: returnData,
+            totalTimeMs: totalTime,
+        });
+
+        completeResolves.forEach(res => res(returnData));
+        completeResolves = [];
+
+        return;
+    }
 
     const config = nodeTypeConfig![node.type];
     if (!config) {

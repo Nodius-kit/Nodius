@@ -22,10 +22,12 @@ import {NodeTypeConfig, CategoryData} from "@nodius/utils";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2} from "lucide-react";
+import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2, Pencil} from "lucide-react";
 import {CategoryManager} from "./CategoryManager";
 import {Input} from "../../component/form/Input";
 import {Button} from "../../component/form/Button";
+import * as Icons from "lucide-static";
+import {openIconParam, openIconPickerModal} from "../../component/form/IconPickerModal";
 
 interface DashboardNodeConfigurationsProps {
     nodeConfigs: NodeTypeConfig[];
@@ -406,6 +408,75 @@ export const HomeNodeConfigurations = memo(({
         }
     }, [onRefresh]);
 
+
+
+    const iconClassParent = useDynamicClass(`
+        & svg {
+            height: 48px;
+            width: 48px;
+            stroke-width:1.5px;
+            color: var(--nodius-primary-main)
+        }
+        & {
+            position: relative;
+        }
+        
+        & div {
+            transition: var(--nodius-transition-default);
+        }
+        
+        &:hover div:first-child {
+            opacity: 0.3;
+        }
+        
+        & div:last-child {
+            position: absolute;
+            inset: 0px;
+            opacity: 0;
+        }
+        & div:last-child svg {
+            color: var(--nodius-text-secondary)
+        }
+        &:hover div:last-child {
+            opacity: 1;
+            cursor: pointer;
+        }
+    `);
+
+    const handleSelectIcon = (nodeConfig:NodeTypeConfig) => {
+        const iconPickerModalParam:openIconParam = {
+            modalNodeId: "",
+            onSelectIcon: async (iconName: string) => {
+                try {
+                    const response = await fetch('/api/nodeconfig/icon', {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            workspace: "root",
+                            _key: nodeConfig._key,
+                            newIcon: iconName
+                        }),
+                    });
+
+                    if (response.status === 200) {
+                        await onRefresh();
+                    } else {
+                        const errorData = await response.json();
+                        alert(`Failed to rename node configuration: ${errorData.error || "Unknown error"}`);
+                    }
+                } catch (error) {
+                    console.error("Error renaming node config:", error);
+                    alert("Failed to rename node configuration. Please try again.");
+                }
+            },
+            getCurrentSelectedIcon: () => nodeConfig.icon,
+            closeOnSelect: true,
+        }
+        openIconPickerModal(iconPickerModalParam);
+    }
+
     return (
         <div style={{marginTop: "40px"}}>
             <div className={sectionHeaderClass}>
@@ -458,62 +529,74 @@ export const HomeNodeConfigurations = memo(({
 
             {filteredNodeConfigs.length > 0 ? (
                 <div className={cardGridClass} style={{marginTop: "16px"}}>
-                    {filteredNodeConfigs.map((nodeConfig, index) => (
-                        <div key={index} className={itemCardClass}>
-                            <div className="card-header">
-                                <div>
-                                    <h6 className="card-title">{nodeConfig.displayName}</h6>
-                                    <div
-                                        className="card-category"
-                                        onClick={() => onCategoryChange(nodeConfig.category)}
-                                        title={`Filter by ${nodeConfig.category}`}
-                                    >
-                                        <Tag height={10} width={10}/>
-                                        {nodeConfig.category}
+                    {filteredNodeConfigs.map((nodeConfig, index) => {
+                        let Icon = Icons[(nodeConfig.icon ?? "CloudAlert") as keyof typeof Icons] as any;
+                        if (!Icon) {
+                            Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+                        }
+                        return (
+                            <div key={index} className={itemCardClass}>
+                                <div className="card-header">
+                                    <div>
+                                        <h6 className="card-title">{nodeConfig.displayName}</h6>
+                                        <div
+                                            className="card-category"
+                                            onClick={() => onCategoryChange(nodeConfig.category)}
+                                            title={`Filter by ${nodeConfig.category}`}
+                                        >
+                                            <Tag height={10} width={10}/>
+                                            {nodeConfig.category}
+                                        </div>
+                                    </div>
+                                    <div className={iconClassParent}>
+                                        <div dangerouslySetInnerHTML={{__html: Icon}}/>
+                                        <div onClick={() => handleSelectIcon(nodeConfig)}>
+                                            <Pencil />
+                                        </div>
                                     </div>
                                 </div>
+                                {nodeConfig.description && nodeConfig.description !== "" && (
+                                    <p style={{
+                                        fontSize: "12px",
+                                        margin: "0",
+                                        opacity: "0.7",
+                                        lineHeight: "1.4"
+                                    }}>
+                                        {nodeConfig.description}
+                                    </p>
+                                )}
+                                <div className="card-actions">
+                                    <Button
+                                        fullWidth
+                                        size={"small"}
+                                        onClick={() => handleOpenNodeConfig(nodeConfig)}
+                                    >
+                                        <Edit3 height={14} width={14}/>
+                                        Edit
+                                    </Button>
+                                    <Button
+                                        fullWidth
+                                        size={"small"}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRenameNodeConfig(nodeConfig._key, nodeConfig.displayName);
+                                        }}
+                                    >
+                                        <Edit2 height={14} width={14}/>
+                                        Rename
+                                    </Button>
+                                    <Button
+                                        fullWidth
+                                        size={"small"}
+                                        onClick={() => handleDeleteNodeConfig(nodeConfig._key)} color={"error"}
+                                    >
+                                        <Trash2 height={14} width={14}/>
+                                        Delete
+                                    </Button>
+                                </div>
                             </div>
-                            {nodeConfig.description && nodeConfig.description !== "" && (
-                                <p style={{
-                                    fontSize: "12px",
-                                    margin: "0",
-                                    opacity: "0.7",
-                                    lineHeight: "1.4"
-                                }}>
-                                    {nodeConfig.description}
-                                </p>
-                            )}
-                            <div className="card-actions">
-                                <Button
-                                    fullWidth
-                                    size={"small"}
-                                    onClick={() => handleOpenNodeConfig(nodeConfig)}
-                                >
-                                    <Edit3 height={14} width={14}/>
-                                    Edit
-                                </Button>
-                                <Button
-                                    fullWidth
-                                    size={"small"}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRenameNodeConfig(nodeConfig._key, nodeConfig.displayName);
-                                    }}
-                                >
-                                    <Edit2 height={14} width={14}/>
-                                    Rename
-                                </Button>
-                                <Button
-                                    fullWidth
-                                    size={"small"}
-                                    onClick={() => handleDeleteNodeConfig(nodeConfig._key)} color={"error"}
-                                >
-                                    <Trash2 height={14} width={14}/>
-                                    Delete
-                                </Button>
-                            </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             ) : (
                 <div className={emptyStateClass}>

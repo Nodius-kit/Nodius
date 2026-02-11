@@ -19,7 +19,7 @@
 
 import React, {Fragment, memo, useContext, useMemo, useState} from "react";
 import {Search, Box, ChevronDown, ChevronUp, CloudAlert} from "lucide-react";
-
+import * as Icons from "lucide-static";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
@@ -109,11 +109,9 @@ export const LeftPanelNodeLibrary = memo(({
         overlayContainer.style.alignItems = "center";
         overlayContainer.style.transition = "box-shadow 300ms ease-in-out";
 
+        // copy style
+        overlayContainer.className = container.className;
 
-        const toCopyStyle = getComputedStyle(container);
-        overlayContainer.style.border = toCopyStyle.border;
-        overlayContainer.style.borderRadius = toCopyStyle.borderRadius;
-        overlayContainer.style.boxShadow = toCopyStyle.boxShadow;
 
         overlayContainer.style.backgroundColor = "var(--nodius-background-default)";
         overlayContainer.innerHTML = container.innerHTML;
@@ -280,7 +278,7 @@ export const LeftPanelNodeLibrary = memo(({
     const classNodeGrid = useDynamicClass(`
         & {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 8px;
             padding: 8px;
         }
@@ -290,6 +288,7 @@ export const LeftPanelNodeLibrary = memo(({
         & {
             display: flex;
             flex-direction: column;
+            gap: 8px;
             padding: 12px;
             background: var(--nodius-background-paper);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -298,12 +297,20 @@ export const LeftPanelNodeLibrary = memo(({
             transition: var(--nodius-transition-default);
             box-shadow: var(--nodius-shadow-1);
             min-height: 80px;
+            justify-content: center;
+            align-items: center;
         }
         &:hover {
             border-color: var(--nodius-primary-main);
             background: rgba(66, 165, 245, 0.05);
             transform: translateY(-2px);
             box-shadow: var(--nodius-shadow-2);
+        }
+        & svg {
+            height: 48px;
+            width: 48px;
+            stroke-width:1.5px;
+            color: var(--nodius-primary-main)
         }
     `);
 
@@ -314,6 +321,7 @@ export const LeftPanelNodeLibrary = memo(({
             color: var(--nodius-text-primary);
             margin-bottom: 4px;
             word-break: break-word;
+            text-align:center;
         }
     `);
 
@@ -409,23 +417,33 @@ export const LeftPanelNodeLibrary = memo(({
                                     </div>
                                     <Collapse in={!isHidden}>
                                         <div className={classNodeGrid}>
-                                            {nodes.map((nodeConfig) => (
-                                                <div
-                                                    key={nodeConfig._key}
-                                                    className={classNodeCard}
-                                                    onMouseDown={(e) => handleMouseDown(e, nodeConfig)}
-                                                    title={nodeConfig.description || nodeConfig.displayName}
-                                                >
-                                                    <div className={classNodeName}>
-                                                        {nodeConfig.displayName}
-                                                    </div>
-                                                    {nodeConfig.description && (
-                                                        <div className={classNodeDescription}>
-                                                            {nodeConfig.description}
+                                            {nodes.map((nodeConfig) => {
+                                                let Icon = Icons[(nodeConfig.icon ?? "CloudAlert") as keyof typeof Icons] as any;
+                                                if (!Icon) {
+                                                    Icon = Icons["CloudAlert" as keyof typeof Icons] as any;
+                                                }
+                                                return (
+                                                    <div
+                                                        key={nodeConfig._key}
+                                                        className={classNodeCard}
+                                                        onMouseDown={(e) => handleMouseDown(e, nodeConfig)}
+                                                        title={nodeConfig.description || nodeConfig.displayName}
+                                                    >
+                                                        <div dangerouslySetInnerHTML={{__html: Icon}} />
+                                                        <div className={classNodeName}>
+                                                            {nodeConfig.displayName}
                                                         </div>
-                                                    )}
-                                                </div>
-                                            ))}
+                                                        {/*<div className={classNodeName}>
+                                                            {nodeConfig.displayName}
+                                                        </div>
+                                                        {nodeConfig.description && (
+                                                            <div className={classNodeDescription}>
+                                                                {nodeConfig.description}
+                                                            </div>
+                                                        )}*/}
+                                                    </div>
+                                                )
+                                            })}
                                         </div>
                                     </Collapse>
                                 </Fragment>

@@ -77,6 +77,19 @@ export class CameraAnimator {
         this.onZoom = callbacks.onZoom;
     }
 
+    public setMaxZoom(max:number):void {
+        this.maxZoom = max;
+    }
+    public setMinZoom(min:number):void {
+        this.minZoom = min;
+    }
+    public getMaxZoom():number {
+        return this.maxZoom;
+    }
+    public getMinZoom():number {
+        return this.minZoom;
+    }
+
     public setInteractiveEnabled(enabled: boolean): void {
         this.interactiveEnabled = enabled;
     }
@@ -241,7 +254,7 @@ export class CameraAnimator {
         };
         this.userHasMovedManually = false;
 
-        const padding = options?.padding ?? 50;
+        const padding = options?.padding ?? 0;
 
         const width = bounds.maxX - bounds.minX;
         const height = bounds.maxY - bounds.minY;
@@ -253,7 +266,7 @@ export class CameraAnimator {
 
         const scaleX = availableWidth / width;
         const scaleY = availableHeight / height;
-        const targetZoom = Math.min(scaleX, scaleY, 2); // Cap at 2x zoom
+        const targetZoom = Math.min(scaleX, scaleY); // Cap at 2x zoom
 
         this.smoothTransitionTo({
             x: centerX,

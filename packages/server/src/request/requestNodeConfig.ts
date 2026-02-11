@@ -52,7 +52,8 @@ import {
     api_node_config_get,
     api_node_config_list,
     api_node_config_update,
-    NodeTypeConfig
+    NodeTypeConfig,
+    NodeTypeReturnConfig
 } from "@nodius/utils";
 import {aql} from "arangojs";
 import {db} from "../server";
@@ -97,6 +98,12 @@ export class RequestNodeConfig {
 
                 const cursor = await db.query(query);
                 const nodeConfigs = await cursor.all() as NodeTypeConfig[];
+
+                // add return node config
+                if(!body.category || body.category === "default") {
+                    nodeConfigs.push(NodeTypeReturnConfig);
+                }
+
                 return res.status(200).json(nodeConfigs);
             } catch (err) {
                 console.error("Error listing node configs:", err);
@@ -253,6 +260,46 @@ export class RequestNodeConfig {
         });
 
         /**
+         * Change a node config icon
+         */
+        app.post("/api/nodeconfig/icon", async (req: Request, res: Response) => {
+            try {
+                const body = req.body as { workspace: string; _key: string; newIcon: string };
+
+                // Basic validation
+                if (!body._key || !body.workspace || !body.newIcon) {
+                    return res.status(400).json({ error: "Missing required fields" });
+                }
+
+                // Check if document exists in workspace
+                const existsQuery = aql`
+                  FOR doc IN nodius_node_config
+                  FILTER doc._key == ${escapeHTML(body._key)}
+                    AND doc.workspace == ${escapeHTML(body.workspace)}
+                  LIMIT 1
+                  RETURN doc
+                `;
+                const existsCursor = await db.query(existsQuery);
+                const existing = await existsCursor.next();
+
+                if (!existing) {
+                    return res.status(404).json({ error: "Node config not found in this workspace" });
+                }
+
+                // Update the icon
+                await nodeConfig_collection.update(body._key, {
+                    icon: escapeHTML(body.newIcon),
+                    //lastUpdatedTime: Date.now()
+                });
+
+                return res.status(200).json({ success: true });
+            } catch (err) {
+                console.error("Error changing node config icon:", err);
+                return res.status(500).json({ error: "Internal Server Error" });
+            }
+        });
+
+        /**
          * Rename a node config (update displayName)
          */
         app.post("/api/nodeconfig/rename", async (req: Request, res: Response) => {
@@ -298,7 +345,7 @@ export class RequestNodeConfig {
                 // Update the displayName
                 await nodeConfig_collection.update(body._key, {
                     displayName: escapeHTML(body.newDisplayName),
-                    lastUpdatedTime: Date.now()
+                    //lastUpdatedTime: Date.now()
                 });
 
                 return res.status(200).json({ success: true });

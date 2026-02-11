@@ -10,6 +10,7 @@ export * from './component/code/editorCompletions';
 export * from './component/form/Button';
 export * from './component/form/Card';
 export * from './component/form/EditableDiv';
+export * from './component/form/IconPickerModal';
 export * from './component/form/Input';
 export * from './component/form/InputTransparent';
 export * from './component/form/LinkedCard';
