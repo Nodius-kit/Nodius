@@ -818,6 +818,7 @@ export const SchemaDisplay = memo(() => {
             HtmlRender: HtmlRender,
             container: schema.element,
             editedNodeConfig:projectRef.current.state.editedNodeConfig,
+            graph: projectRef.current.state.graph
         }
     }
 
@@ -880,7 +881,6 @@ export const SchemaDisplay = memo(() => {
             motor.off("canvasClick", handleCanvasClickEmpty);
         };
     }, [projectRef.current.state.getMotor]);
-
 
 
     const internalNodeUpdate = async  (nodeId:string, options?:triggerNodeUpdateOption) => {

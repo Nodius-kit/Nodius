@@ -65,12 +65,17 @@ import {
     deepCopy,
     createNodeFromConfig,
     NodeTypeStarterConfig,
-    NodeTypeReturnConfig
+    NodeTypeReturnConfig,
+    flatEdgeMap,
+    getGraphBounds,
+    generateGraphSVGString
 } from "@nodius/utils";
 
 import {aql} from "arangojs";
 import {db, webSocketManager} from "../server";
 import escapeHTML from 'escape-html';
+
+import {CloudAlert} from "lucide-static"
 
 export class RequestWorkFlow {
 
@@ -476,12 +481,41 @@ export class RequestWorkFlow {
             }
 
         });
+
+        app.get("/api/graph/minimap/:token", async (req: Request, res: Response) => {
+            const token = req.params?.token as string;
+            const theme = "light"  as "light" | "dark";
+            if(!token) {
+                res.status(500).end();
+            }
+
+            res.setHeader('Content-Type', 'image/svg+xml');
+            res.setHeader('Cache-Control', 'public, max-age=360');
+
+            const graph = await this.buildGraph(
+                token,
+                {
+                    build:  true,
+                    onlyFirstSheet: true
+                }
+            );
+            if(!graph) {
+                res.status(400).send(CloudAlert);
+            }else {
+                const nodes = graph._sheets[Object.keys(graph.sheetsList)[0]].nodes;
+                const edges = graph._sheets[Object.keys(graph.sheetsList)[0]].edges;
+
+                const bounds = getGraphBounds(nodes);
+                const svgString = generateGraphSVGString(nodes, edges, bounds, theme);
+                res.status(200).send(svgString);
+            }
+        });
     }
 
     public static async buildGraph(graphKey:string,options?:{build:boolean, onlyFirstSheet?:boolean, avoidCheckingWebSocket?:boolean}):Promise<GraphWF> {
         const graphQuery = aql`
             FOR g IN nodius_graphs
-            FILTER g._key == ${graphKey}
+            FILTER g._key == ${escapeHTML(graphKey)}
             RETURN g
         `;
         const graphCursor = await db.query(graphQuery);

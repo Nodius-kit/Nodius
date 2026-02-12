@@ -1416,8 +1416,7 @@ export class WebSocketManager {
 
                 // for each node, delete subflow
                 const targetKeys = message.nodeKeys
-                    .map((n) => targetSheet.nodeMap.get(n)?._key)
-                    .filter((v) => v != undefined); // Ensure type safety
+                    .map((n) => graphKey + "-"+ n);
 
                 if (targetKeys.length > 0) {
                     // 2. Execute everything in a single database round-trip

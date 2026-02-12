@@ -50,6 +50,7 @@ export interface api_graph_create {
     graphMetaData?:Partial<graphMetaData>;
 }
 
+
 export interface api_graph_delete {
     htmlToken?: string;
     graphToken?: string;
