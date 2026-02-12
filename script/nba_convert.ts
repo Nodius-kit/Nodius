@@ -3,9 +3,10 @@ import fs from "fs";
 import {randomBytes} from "crypto";
 import {DocumentCollection} from "arangojs/collections";
 import escapeHTML from "escape-html";
-import {Graph, Node, NodeTypeHtmlConfig} from "packages/utils/src/graph/graphType";
+import {Graph, Node, NodeTypeConfig, NodeTypeHtmlConfig} from "packages/utils/src/graph/graphType";
 import { HtmlClass } from "packages/utils/src/html/htmlType";
 import { createNodeFromConfig } from "packages/utils/src/graph/nodeUtils";
+import {NbaGraph} from "./type";
 
 const dbUrl = "http://127.0.0.1:8529";
 const dbUser = "root";
@@ -22,6 +23,14 @@ const db = new Database({
 
 function generateToken(length: number = 64): string {
     return randomBytes(Math.ceil(length / 2)).toString("hex").slice(0, length);
+}
+
+interface nbaGraph {
+    date:number,
+    version:number,
+    sheets: Record<string, {
+        id:string
+    }>
 }
 
 async function createUniqueToken(
@@ -62,7 +71,7 @@ async function ensureCollection(
 const convert = async () => {
 
     const nba_data = await fs.readFileSync("nba.json", "utf8");
-    const nba_json = JSON.parse(nba_data);
+    const nba_json = JSON.parse(nba_data) as NbaGraph;
 
     //create graph key
     const graph_collection = await ensureCollection("nodius_graph");
@@ -87,7 +96,7 @@ const convert = async () => {
 
 
     // create graph
-    const graph:Omit<Graph, "sheets" | "_sheets"> = {
+    const graph:Omit<Graph, "_sheets"> = {
         name: document_name+"-graph",
         _key: graph_key,
         category: "default",
@@ -99,7 +108,6 @@ const convert = async () => {
         createdTime: Date.now(),
         sheetsList: {0: "main"}
     }
-    await graph_collection.save(graph);
 
     const rootNodeKey = graph_key+"-root";
 
@@ -123,7 +131,7 @@ const convert = async () => {
         NodeTypeHtmlConfig,
         rootNodeKey,
         graph_key,
-        "0"
+        Object.keys(nba_json.sheets)[0]
     );
     nodeRoot.data = {
         "domEvents": [
@@ -172,9 +180,45 @@ const convert = async () => {
             "content": `<div>\n  {{result}}\n</div>`
         }
     };
-    await node_collection.save(nodeRoot);
+
+    // retrieve all node Type
+    const query = aql`
+      FOR doc IN nodius_node_config
+      RETURN doc
+    `;
+
+    cursor = await db.query(query);
+    const nodeConfigs = await cursor.all() as NodeTypeConfig[];
+
+    const configPortal = nodeConfigs.find((n) => n._key === "64c31f4e4a65dbab5250f97399992874b8a9dd93d3aacd6bb74d33c86831f07c");
+    const configSentence = nodeConfigs.find((n) => n._key === "2502f926879cb50caa287919b5a6dcf8e5687a46ca8da48d4bdb0b1a225324f8");
+    const configCondition = nodeConfigs.find((n) => n._key === "10683d03c06c60fee0659ec919b21a127989e3facf13b33540dac6b3d07f8ca9");
+    const configSection = nodeConfigs.find((n) => n._key === "e96efd5b74eb5c96cd778db757cc17cd8fa230502e6ed26576e5d7f1cbb732ab");
+    const configMultiplexer = nodeConfigs.find((n) => n._key === "7442312b8ca689ebc9b5a80e5e2b369e13d4fbbd2b73b3db1eee379702ae84d2");
+    const configSubflow = nodeConfigs.find((n) => n._key === "ec278f3a79a6d6380946ed05ad8cb48ed163cc5314957ecc652b4f6a3460e820");
+
+    //await node_collection.save(nodeRoot);
+    for(const [sheetId, sheet] of Object.entries(nba_json.sheets)) {
+        graph.sheetsList[sheetId] = sheet.name;
+        if(sheetId === Object.keys(nba_json.sheets)[0]) {
+            // first sheet, add node root
+            graph.sheets[sheetId].nodeMap.set(nodeRoot._key, nodeRoot);
+
+            for(const [nodeId, node] of Object.entries(sheet.nodes)) {
+                let newNode:Node<any>|undefined;
+                if(node.type === "portalNode") {
+
+                }
+
+                if(newNode) {
+                    graph.sheets[sheetId].nodeMap.set(newNode._key, newNode);
+                }
+            }
+        }
+    }
 
 
+    await graph_collection.save(graph);
 }
 
 convert();
