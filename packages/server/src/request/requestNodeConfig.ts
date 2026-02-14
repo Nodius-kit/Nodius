@@ -144,6 +144,7 @@ export class RequestNodeConfig {
             }
         });
 
+
         /**
          * Create a new empty node config
          */

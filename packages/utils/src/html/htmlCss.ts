@@ -42,7 +42,7 @@ function ensureStyleSheet(): CSSStyleSheet {
 }
 
 function generateClassName(): string {
-    return `css-${classCounter++}`;
+    return `nodius-css-${classCounter++}`;
 }
 
 function normalizeValue(value: string): string {
