@@ -209,10 +209,20 @@ export const RightPanelHandleConfig = memo(() => {
         }
     `);
 
+    // Helper to build a GraphInstructions object for the current handle's node
+    const makeInstruction = (
+        builder: InstructionBuilder,
+        options?: { targetedIdentifier?: string }
+    ): GraphInstructions => ({
+        nodeId: editedHandle!.nodeId,
+        i: builder.instruction,
+        sheetId: Project.state.selectedSheetId!,
+        ...options
+    });
+
     // Handlers
     const handleTypeChange = async (type: "in" | "out") => {
-        if (!editedHandle || !Project.state.updateGraph) return;
-        if(!node) return;
+        if (!editedHandle || !Project.state.updateGraph || !node) return;
 
         const handleInfo = getHandleInfo(node, editedHandle.pointId);
         if(!handleInfo) return;
@@ -225,19 +235,12 @@ export const RightPanelHandleConfig = memo(() => {
             .key("type")
             .set(type);
 
-        await Project.state.updateGraph([{
-            nodeId: editedHandle.nodeId,
-            i: instruction.instruction,
-            sheetId: Project.state.selectedSheetId!
-        }]);
+        await Project.state.updateGraph([makeInstruction(instruction)]);
         retrieveNode();
-
     };
 
     const handlePositionModeChange = async (mode: "separate" | "fix") => {
         if (!editedHandle || !Project.state.updateGraph || !node || !handleConfig) return;
-
-        if(!node) return;
 
         const handleInfo = getHandleInfo(node, editedHandle.pointId);
         if(!handleInfo) return;
@@ -247,12 +250,7 @@ export const RightPanelHandleConfig = memo(() => {
         // Update position mode
         const modeInstruction = new InstructionBuilder();
         modeInstruction.key("handles").key(editedHandle.side).key("position").set(mode);
-        instructions.push({
-            nodeId: editedHandle.nodeId,
-            i: modeInstruction.instruction,
-            sheetId: Project.state.selectedSheetId!
-        });
-
+        instructions.push(makeInstruction(modeInstruction));
 
         // Handle offset based on mode
         if (mode === "separate") {
@@ -264,11 +262,7 @@ export const RightPanelHandleConfig = memo(() => {
                 .index(handleInfo.index)
                 .key("offset")
                 .remove();
-            instructions.push({
-                nodeId: editedHandle.nodeId,
-                i: offsetInstruction.instruction,
-                sheetId: Project.state.selectedSheetId!
-            });
+            instructions.push(makeInstruction(offsetInstruction));
         } else {
             // Set default offset when switching to fixed
             const percentage = (handleInfo.index + 0.5) / handleConfig.point.length;
@@ -294,11 +288,7 @@ export const RightPanelHandleConfig = memo(() => {
                 .index(handleInfo.index)
                 .key("offset")
                 .set(defaultOffset);
-            instructions.push({
-                nodeId: editedHandle.nodeId,
-                i: offsetInstruction.instruction,
-                sheetId: Project.state.selectedSheetId!
-            });
+            instructions.push(makeInstruction(offsetInstruction));
         }
 
         await Project.state.updateGraph(instructions);
@@ -306,9 +296,7 @@ export const RightPanelHandleConfig = memo(() => {
     };
 
     const handleDeletePoint = async () => {
-        if (!editedHandle || !Project.state.updateGraph) return;
-
-        if(!node) return;
+        if (!editedHandle || !Project.state.updateGraph || !node) return;
 
         const handleInfo = getHandleInfo(node, editedHandle.pointId);
         if(!handleInfo) return;
@@ -319,12 +307,7 @@ export const RightPanelHandleConfig = memo(() => {
             .key("point")
             .index(handleInfo.index).remove();
 
-        await Project.state.updateGraph([{
-            nodeId: editedHandle.nodeId,
-            i: instruction.instruction,
-            targetedIdentifier: handleInfo.point.id,
-            sheetId: Project.state.selectedSheetId!
-        }]);
+        await Project.state.updateGraph([makeInstruction(instruction, { targetedIdentifier: handleInfo.point.id })]);
         retrieveNode();
 
         // Close the panel after deletion
@@ -337,11 +320,7 @@ export const RightPanelHandleConfig = memo(() => {
         const instruction = new InstructionBuilder();
         instruction.key("handles").key(editedHandle.side).remove();
 
-        await Project.state.updateGraph([{
-            nodeId: editedHandle.nodeId,
-            i: instruction.instruction,
-            sheetId: Project.state.selectedSheetId!
-        }]);
+        await Project.state.updateGraph([makeInstruction(instruction)]);
         retrieveNode();
 
         // Close the panel after deletion
@@ -349,8 +328,7 @@ export const RightPanelHandleConfig = memo(() => {
     };
 
     const handleSetDisplay = async (value:string) => {
-        if (!editedHandle || !Project.state.updateGraph) return;
-        if(!node) return;
+        if (!editedHandle || !Project.state.updateGraph || !node) return;
 
         const handleInfo = getHandleInfo(node, editedHandle.pointId);
         if(!handleInfo) return;
@@ -368,13 +346,8 @@ export const RightPanelHandleConfig = memo(() => {
             instruction.set(value);
         }
 
-        await Project.state.updateGraph([{
-            nodeId: editedHandle.nodeId,
-            i: instruction.instruction,
-            sheetId: Project.state.selectedSheetId!
-        }]);
+        await Project.state.updateGraph([makeInstruction(instruction)]);
         retrieveNode();
-
     }
 
     // If no handle is selected, show empty state

@@ -239,13 +239,20 @@ export class EdgeRenderer {
         vertices.push(p2.x, p2.y, perpX, perpY, alpha);
     }
 
-    public getEdgePathPoints(scene: MotorScene, edge: Edge, segments: number = 10): Point[] {
-        const sourceNode = edge.source !== undefined ? scene.nodes.get(edge.source) : undefined;
-        const targetNode = edge.target !== undefined ? scene.nodes.get(edge.target) : undefined;
+    /**
+     * Computes the bezier curve points for an edge, resolving handle positions and directions.
+     * Shared by getEdgePathPoints (hit-testing) and buildEdgeBuffer (GPU rendering).
+     */
+    private computeEdgeCurve(
+        edge: Edge,
+        nodesMap: Map<string, Node<any>>,
+        segments: number
+    ): Point[] | null {
+        const sourceNode = edge.source !== undefined ? nodesMap.get(edge.source) : undefined;
+        const targetNode = edge.target !== undefined ? nodesMap.get(edge.target) : undefined;
 
         const isTemporary = edge.source === undefined || edge.target === undefined;
 
-        // if edge.source or edge.target is undefined, the edge is temporary (dragged by user) and missing end uses cursor position
         const sourcePos = !sourceNode && isTemporary
             ? this.screenToWorld(this.cursorPosition)
             : (sourceNode ? getHandlePosition(sourceNode, edge.sourceHandle) : null);
@@ -253,30 +260,33 @@ export class EdgeRenderer {
             ? this.screenToWorld(this.cursorPosition)
             : (targetNode ? getHandlePosition(targetNode, edge.targetHandle) : null);
 
-        if (!sourcePos || !targetPos) return [];
+        if (!sourcePos || !targetPos) return null;
+
+        const sourceInfo = sourceNode ? getHandleInfo(sourceNode, edge.sourceHandle)! : undefined;
+        const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
+        const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
+        const curveStrength = dist * 0.4;
+        const sourceDir = sourceInfo ? getDir(sourceInfo.side, sourceInfo.point.type) : {dx: 0, dy: 0};
+        const targetDir = targetInfo ? getDir(targetInfo.side, targetInfo.point.type) : {dx: 0, dy: 0};
+        const control1 = {
+            x: sourcePos.x + sourceDir.dx * curveStrength,
+            y: sourcePos.y + sourceDir.dy * curveStrength,
+        };
+        const control2 = {
+            x: targetPos.x - targetDir.dx * curveStrength,
+            y: targetPos.y - targetDir.dy * curveStrength,
+        };
 
         const points: Point[] = [];
-
-            const sourceInfo = sourceNode ? getHandleInfo(sourceNode, edge.sourceHandle)! : undefined;
-            const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
-            const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
-            const curveStrength = dist * 0.4;
-            const sourceDir = sourceInfo ? getDir(sourceInfo.side, sourceInfo.point.type) : {dx: 0, dy: 0};
-            const targetDir = targetInfo ? getDir(targetInfo.side, targetInfo.point.type) : {dx: 0, dy: 0};
-            const control1 = {
-                x: sourcePos.x + sourceDir.dx * curveStrength,
-                y: sourcePos.y + sourceDir.dy * curveStrength,
-            };
-            const control2 = {
-                x: targetPos.x - targetDir.dx * curveStrength,
-                y: targetPos.y - targetDir.dy * curveStrength,
-            };
-            for (let i = 0; i <= segments; i++) {
-                const t = i / segments;
-                points.push(this.bezierPoint(t, sourcePos, control1, control2, targetPos));
-            }
-
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            points.push(this.bezierPoint(t, sourcePos, control1, control2, targetPos));
+        }
         return points;
+    }
+
+    public getEdgePathPoints(scene: MotorScene, edge: Edge, segments: number = 10): Point[] {
+        return this.computeEdgeCurve(edge, scene.nodes, segments) ?? [];
     }
 
     public buildEdgeBuffer(edgesMap:Map<string, Edge[]>, nodesMap:Map<string, Node<any>>): void {
@@ -289,45 +299,10 @@ export class EdgeRenderer {
 
         for(const edges of edgesMap.values()) {
             for(const edge of edges) {
-                const sourceNode = edge.source !== undefined ? nodesMap.get(edge.source) : undefined;
-                const targetNode = edge.target !== undefined ? nodesMap.get(edge.target) : undefined;
-
-                const isTemporary = edge.source === undefined || edge.target === undefined;
-
-                // Handle temporary edges (one end is undefined, using cursor position)
-                const sourcePos = !sourceNode && isTemporary
-                    ? this.screenToWorld(this.cursorPosition)
-                    : (sourceNode ? getHandlePosition(sourceNode, edge.sourceHandle) : null);
-                const targetPos = !targetNode && isTemporary
-                    ? this.screenToWorld(this.cursorPosition)
-                    : (targetNode ? getHandlePosition(targetNode, edge.targetHandle) : null);
-
-                if (!sourcePos || !targetPos) continue;
+                const curvePoints = this.computeEdgeCurve(edge, nodesMap, segments);
+                if (!curvePoints) continue;
 
                 const isSelected = this.selectedEdges.has(edge._key);
-
-
-                const sourceInfo = sourceNode ? getHandleInfo(sourceNode, edge.sourceHandle)! : undefined;
-                const targetInfo = targetNode ? getHandleInfo(targetNode, edge.targetHandle)! : undefined;
-                const dist = Math.hypot(targetPos.x - sourcePos.x, targetPos.y - sourcePos.y);
-                const curveStrength = dist * 0.4;
-                const sourceDir = sourceInfo ? getDir(sourceInfo.side, sourceInfo.point.type) : {dx: 0, dy: 0};
-                const targetDir = targetInfo ? getDir(targetInfo.side, targetInfo.point.type) : {dx: 0, dy: 0};
-                const control1 = {
-                    x: sourcePos.x + sourceDir.dx * curveStrength,
-                    y: sourcePos.y + sourceDir.dy * curveStrength,
-                };
-                const control2 = {
-                    x: targetPos.x - targetDir.dx * curveStrength,
-                    y: targetPos.y - targetDir.dy * curveStrength,
-                };
-
-                // 1. Collect all points for this edge first
-                const curvePoints: Point[] = [];
-                for (let i = 0; i <= segments; i++) {
-                    const t = i / segments;
-                    curvePoints.push(this.bezierPoint(t, sourcePos, control1, control2, targetPos));
-                }
 
                 if (isSelected) {
                     // 2. Draw continuous glow layers (No overlap artifacts!)

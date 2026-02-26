@@ -13,7 +13,7 @@
 import { handleSide, Node } from "@nodius/utils";
 import {useCallback, useContext, useEffect, useRef} from "react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import {InstructionBuilder} from "@nodius/utils";
+import {InstructionBuilder, GraphInstructions} from "@nodius/utils";
 import {deepCopy, disableTextSelection, enableTextSelection, Point} from "@nodius/utils";
 
 
@@ -48,6 +48,18 @@ interface sideConfigPane {
 }
 
 /**
+ * Returns the display text for a handle point.
+ * If display is set: "display (accept)" or just "display" if no accept.
+ * Otherwise falls back to accept or empty string.
+ */
+function getHandleDisplayText(point: { display?: string; accept?: string }): string {
+    if (point.display) {
+        return point.display + (point.accept ? " (" + point.accept + ")" : "");
+    }
+    return point.accept || "";
+}
+
+/**
  * Hook for rendering handles in DOM overlay
  */
 export const generateUniqueHandlePointId = (node: Node<any>): string => {
@@ -68,6 +80,13 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
     // Destructure stable references
     const projectRef = useStableProjectRef();
     const Project = useContext(ProjectContext);
+
+    // Helper to build GraphInstructions with consistent sheetId
+    const makeInstruction = (nodeId: string, builder: InstructionBuilder): GraphInstructions => ({
+        nodeId,
+        i: builder.instruction,
+        sheetId: projectRef.current.state.selectedSheetId!
+    });
 
     const {createATemporaryEdge} = useEdgeHandler();
 
@@ -236,11 +255,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                             instruction.key("handles").key(direction!).set(handle);
                         }
 
-                        await projectRef.current.state.updateGraph!([{
-                            nodeId: node._key,
-                            i: instruction.instruction,
-                            sheetId: projectRef.current.state.selectedSheetId!
-                        }]);
+                        await projectRef.current.state.updateGraph!([makeInstruction(node._key, instruction)]);
 
                         // Recreate the menu to show the delete button
                         if (activeSideConfigPanel.current) {
@@ -264,11 +279,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                             const instruction = new InstructionBuilder();
                             instruction.key("handles").key(direction!).remove();
 
-                            await projectRef.current.state.updateGraph!([{
-                                nodeId: node._key,
-                                i: instruction.instruction,
-                                sheetId: projectRef.current.state.selectedSheetId!
-                            }]);
+                            await projectRef.current.state.updateGraph!([makeInstruction(node._key, instruction)]);
                             projectRef.current.state.getMotor().requestRedraw();
 
                         })
@@ -526,16 +537,8 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                             });
                         }
                         await projectRef.current.state.updateGraph!([
-                            {
-                                nodeId: nodeId,
-                                i: instructionRemove.instruction,
-                                sheetId: projectRef.current.state.selectedSheetId!
-                            },
-                            {
-                                nodeId: nodeId,
-                                i: instructionAdd.instruction,
-                                sheetId: projectRef.current.state.selectedSheetId!
-                            }
+                            makeInstruction(nodeId, instructionRemove),
+                            makeInstruction(nodeId, instructionAdd)
                         ]);
 
                         // === CRITICAL FIX: Re-sync drag start after side change ===
@@ -577,11 +580,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                 if (isDragging) {
                     const instruction = new InstructionBuilder();
                     instruction.key("handles").key(handleInfo.side).key("point").index(handleInfo.index).key("offset").set(handleInfo.offset);
-                    await projectRef.current.state.updateGraph!([{
-                        nodeId: nodeId,
-                        i: instruction.instruction,
-                        sheetId: projectRef.current.state.selectedSheetId!
-                    }]);
+                    await projectRef.current.state.updateGraph!([makeInstruction(nodeId, instruction)]);
                     projectRef.current.state.getMotor().requestRedraw();
                 }
 
@@ -673,10 +672,10 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                     handleEl.onmousedown = (e) => createATemporaryEdge(e, nodeId, point.id);
                     const moveableContainer = projectRef.current.state.editedNodeConfig ? createMoveableHandle(nodeId, point.id) : undefined;
 
-                    // Create text element for accept string
+                    // Create text element for display/accept string
                     const textEl = document.createElement("div");
                     textEl.className = handleTextClass;
-                    textEl.textContent = point.accept || "";
+                    textEl.textContent = getHandleDisplayText(point);
 
                     overlay.container.appendChild(handleEl);
                     if(moveableContainer) overlay.container.appendChild(moveableContainer);
@@ -700,7 +699,7 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
 
                 // Update text content if it changed
                 if(point.textElement) {
-                    point.textElement.textContent = handleInfo.point.display ? (handleInfo.point.display+(handleInfo.point.accept ? " ("+handleInfo.point.accept+")":"")) : (handleInfo.point.accept || "");
+                    point.textElement.textContent = getHandleDisplayText(handleInfo.point);
                 }
 
                 point.element.style.transition = "scale 0.3s ease-in-out";
@@ -710,34 +709,32 @@ export function useHandleRenderer({getNode}: useHandleRendererOptions) {
                     point.element.style.scale = "1";
                 }
 
+                const isHorizontal = handleInfo.side === "T" || handleInfo.side === "D";
+                const sideOffsetX = handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0);
+                const sideOffsetY = handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0);
+
                 if (handleInfo.point.type === "out") {
                     point.element.className = classCircleHandleClass;
-                    point.element.style.left = `${pos.x - ( circleWidth / 2) + (handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0))}px`;
-                    point.element.style.top = `${pos.y - ( circleWidth / 2) + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
-                    point.element.style.width = circleWidth+"px";
-                    point.element.style.height = circleWidth+"px";
-
-                    if(point.configElement) {
-                        point.configElement.style.left = point.element.style.left;
-                        point.configElement.style.top = point.element.style.top;
-                        point.configElement.style.width = point.element.style.width;
-                        point.configElement.style.height = point.element.style.height;
-                        point.configElement.style.scale = "2";
-                    }
+                    point.element.style.left = `${pos.x - (circleWidth / 2) + sideOffsetX}px`;
+                    point.element.style.top = `${pos.y - (circleWidth / 2) + sideOffsetY}px`;
+                    point.element.style.width = circleWidth + "px";
+                    point.element.style.height = circleWidth + "px";
                 } else {
                     point.element.className = classRectHandleClass;
-                    point.element.style.left = `${pos.x - ((handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "L" ? -handleOffset : (handleInfo.side === "R" ? handleOffset : 0))}px`;
-                    point.element.style.top = `${pos.y - (!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight) / 2 + (handleInfo.side === "T" ? -handleOffset : (handleInfo.side === "D" ? handleOffset : 0))}px`;
-                    point.element.style.width = `${(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
-                    point.element.style.height = `${!(handleInfo.side === "T" || handleInfo.side === "D") ? rectangleWidth : rectangleHeight}px`;
+                    const w = isHorizontal ? rectangleWidth : rectangleHeight;
+                    const h = isHorizontal ? rectangleHeight : rectangleWidth;
+                    point.element.style.left = `${pos.x - w / 2 + sideOffsetX}px`;
+                    point.element.style.top = `${pos.y - h / 2 + sideOffsetY}px`;
+                    point.element.style.width = `${w}px`;
+                    point.element.style.height = `${h}px`;
+                }
 
-                    if(point.configElement) {
-                        point.configElement.style.left = point.element.style.left;
-                        point.configElement.style.top = point.element.style.top;
-                        point.configElement.style.width = point.element.style.width;
-                        point.configElement.style.height = point.element.style.height;
-                        point.configElement.style.scale = "2";
-                    }
+                if (point.configElement) {
+                    point.configElement.style.left = point.element.style.left;
+                    point.configElement.style.top = point.element.style.top;
+                    point.configElement.style.width = point.element.style.width;
+                    point.configElement.style.height = point.element.style.height;
+                    point.configElement.style.scale = "2";
                 }
 
                 // Position text element based on handle side

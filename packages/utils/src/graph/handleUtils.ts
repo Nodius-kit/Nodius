@@ -10,7 +10,7 @@
  * Handle sides: T (Top), D (Down), L (Left), R (Right), 0 (Center)
  */
 
-import {handleSide, Node} from "./graphType";
+import {handleSide, Node, NodePoint} from "./graphType";
 import {Point} from "../objectUtils";
 
 /**
@@ -20,7 +20,7 @@ import {Point} from "../objectUtils";
 export interface HandleInfo {
     side: handleSide;
     offset: number;
-    point: { id: string; offset?: number; display?: string; type: "in" | "out", accept:string };
+    point: NodePoint;
     position: "fix" | "separate",
     index: number;
 }

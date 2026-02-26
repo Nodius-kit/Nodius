@@ -747,13 +747,13 @@ export const SchemaDisplay = memo(() => {
         const node =  getNode(nodeId);
         if(!node) return false;
 
-        const intruction = new InstructionBuilder();
-        intruction.key("handles");
+        const instruction = new InstructionBuilder();
+        instruction.key("handles");
         for(const [side, handle] of Object.entries(node.handles)) {
             const index = handle.point.findIndex((p) => p.id === pointId);
             if(index !== -1) {
                 const point = handle.point[index];
-                intruction.key(side).arrayRemoveIndex(index);
+                instruction.key(side).arrayRemoveIndex(index);
                 const edgeMap = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId ?? ""]?.edgeMap;
                 if(!edgeMap) return false;
                 const edge = edgeMap.get(( point.type === "out" ? "source-" : "target-")+nodeId);
@@ -764,7 +764,7 @@ export const SchemaDisplay = memo(() => {
                     }
                 }
                 const output = await projectRef.current.state.updateGraph!([{
-                    i: intruction.instruction,
+                    i: instruction.instruction,
                     nodeId: nodeId,
                     sheetId: Project.state.selectedSheetId!
                 }]);
@@ -859,9 +859,7 @@ export const SchemaDisplay = memo(() => {
         };
 
         const handleEdgeClick = (edge: Edge, edgeKey: string, ctrlKey: boolean) => {
-            // If not ctrl, clear node selection when selecting edge
-            console.log("edge click");
-            console.trace();
+
         };
 
         const handleCanvasClickEmpty = () => {
