@@ -22,7 +22,7 @@ import {Graph} from "@nodius/utils";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, GitBranch, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2} from "lucide-react";
+import {Search, GitBranch, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2, Download, Upload} from "lucide-react";
 import {CategoryManager} from "./CategoryManager";
 import {api_graph_create} from "@nodius/utils";
 import {Input} from "../../component/form/Input";
@@ -217,6 +217,62 @@ export const HomeGraphWorkflow = memo(({
 
     `);
 
+    const handleExportGraph = useCallback(async (graph: Graph) => {
+        try {
+            const response = await fetch('/api/export/graph', {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({graphKey: graph._key, workspace: "root"}),
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                alert(`Export failed: ${err.error || "Unknown error"}`);
+                return;
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${graph.name}.ndex`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Export error:", error);
+            alert("Export failed. Please try again.");
+        }
+    }, []);
+
+    const handleImportFile = useCallback(() => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".ndex";
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("workspace", "root");
+            try {
+                const response = await fetch("/api/import", {
+                    method: "POST",
+                    body: formData,
+                });
+                if (response.ok) {
+                    await onRefresh();
+                } else {
+                    const err = await response.json();
+                    alert(`Import failed: ${err.error || "Unknown error"}`);
+                }
+            } catch (error) {
+                console.error("Import error:", error);
+                alert("Import failed. Please try again.");
+            }
+        };
+        input.click();
+    }, [onRefresh]);
+
     /**
      * Creates a new standalone graph workflow
      * Uses /api/graph/create with body.graph (no HTML class)
@@ -350,6 +406,9 @@ export const HomeGraphWorkflow = memo(({
                         <FolderPlus height={16} width={16}/>
                         Categories
                     </Button>
+                    <Button onClick={handleImportFile}>
+                        <Upload height={16} width={16}/> Import
+                    </Button>
                     <Button
                         onClick={handleCreateGraph}
                     >
@@ -418,6 +477,14 @@ export const HomeGraphWorkflow = memo(({
                                 >
                                     <Edit2 height={14} width={14}/>
                                     Rename
+                                </Button>
+                                <Button
+                                    size={"small"}
+                                    onClick={() => handleExportGraph(graph)}
+                                    fullWidth
+                                >
+                                    <Download height={14} width={14}/>
+                                    Export
                                 </Button>
                                 <Button
                                     size={"small"}

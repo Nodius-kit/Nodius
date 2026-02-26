@@ -33,6 +33,7 @@ import {RequestNodeConfig} from "./request/requestNodeConfig";
 import {RequestAuth} from "./request/requestAuth";
 import {RequestHistory} from "./request/requestHistory";
 import {RequestImage} from "./request/requestImage";
+import {RequestExportImport} from "./request/requestExportImport";
 import {AuthManager} from "./auth/AuthManager";
 import {readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
@@ -205,6 +206,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     RequestNodeConfig.init(app);
     RequestHistory.init(app);
     RequestImage.init(app);
+    RequestExportImport.init(app);
 
     // Start server with proper options
     const serverOptions: { port: number; host: string; https?: { key: string; cert: string } } = {
