@@ -22,12 +22,13 @@ import {NodeTypeConfig, CategoryData} from "@nodius/utils";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2, Pencil, Download, Upload} from "lucide-react";
+import {Search, Layers, Plus, Edit3, Trash2, Tag, FolderPlus, MoreVertical, Pencil, Download, Upload} from "lucide-react";
 import {CategoryManager} from "./CategoryManager";
 import {Input} from "../../component/form/Input";
 import {Button} from "../../component/form/Button";
 import * as Icons from "lucide-static";
 import {openIconParam, openIconPickerModal} from "../../component/form/IconPickerModal";
+import {LinkedCard} from "../../component/form/LinkedCard";
 
 interface DashboardNodeConfigurationsProps {
     nodeConfigs: NodeTypeConfig[];
@@ -50,6 +51,7 @@ export const HomeNodeConfigurations = memo(({
     const [searchNodeConfig, setSearchNodeConfig] = useState<string>("");
     const [showCategoryManager, setShowCategoryManager] = useState<boolean>(false);
     const [showCategoryFilter, setShowCategoryFilter] = useState<boolean>(false);
+    const [openMenu, setOpenMenu] = useState<{element: HTMLElement, nodeConfig: NodeTypeConfig} | null>(null);
 
     // Abort controllers for cancelling in-flight requests
     const abortControllers = useRef<{
@@ -172,15 +174,18 @@ export const HomeNodeConfigurations = memo(({
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.15)};
         }
 
-        & .card-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
+    `);
 
-        & .card-actions > * {
-            flex:1;
-        }
+    const menuClass = useDynamicClass(`
+        & { display: flex; flex-direction: column; padding: 8px; }
+        & .menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.15s ease; user-select: none; }
+        & .menu-item:hover { background: rgba(128,128,128,0.1); }
+        & .menu-item.danger { color: var(--nodius-error-main); }
+    `);
+
+    const menuTriggerClass = useDynamicClass(`
+        & { cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; opacity: 0.6; transition: all 0.15s ease; }
+        &:hover { opacity: 1; background: rgba(128,128,128,0.1); }
     `);
 
     const emptyStateClass = useDynamicClass(`
@@ -607,10 +612,15 @@ export const HomeNodeConfigurations = memo(({
                                             {nodeConfig.category}
                                         </div>
                                     </div>
-                                    <div className={iconClassParent}>
-                                        <div dangerouslySetInnerHTML={{__html: Icon}}/>
-                                        <div onClick={() => handleSelectIcon(nodeConfig)}>
-                                            <Pencil />
+                                    <div style={{display: "flex", alignItems: "center", gap: "8px"}}>
+                                        <div className={iconClassParent}>
+                                            <div dangerouslySetInnerHTML={{__html: Icon}}/>
+                                            <div onClick={() => handleSelectIcon(nodeConfig)}>
+                                                <Pencil />
+                                            </div>
+                                        </div>
+                                        <div className={menuTriggerClass} onClick={(e) => setOpenMenu({element: e.currentTarget, nodeConfig})}>
+                                            <MoreVertical height={18} width={18}/>
                                         </div>
                                     </div>
                                 </div>
@@ -624,43 +634,6 @@ export const HomeNodeConfigurations = memo(({
                                         {nodeConfig.description}
                                     </p>
                                 )}
-                                <div className="card-actions">
-                                    <Button
-                                        fullWidth
-                                        size={"small"}
-                                        onClick={() => handleOpenNodeConfig(nodeConfig)}
-                                    >
-                                        <Edit3 height={14} width={14}/>
-                                        Edit
-                                    </Button>
-                                    <Button
-                                        fullWidth
-                                        size={"small"}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRenameNodeConfig(nodeConfig._key, nodeConfig.displayName);
-                                        }}
-                                    >
-                                        <Edit2 height={14} width={14}/>
-                                        Rename
-                                    </Button>
-                                    <Button
-                                        fullWidth
-                                        size={"small"}
-                                        onClick={() => handleExportNodeConfig(nodeConfig)}
-                                    >
-                                        <Download height={14} width={14}/>
-                                        Export
-                                    </Button>
-                                    <Button
-                                        fullWidth
-                                        size={"small"}
-                                        onClick={() => handleDeleteNodeConfig(nodeConfig._key)} color={"error"}
-                                    >
-                                        <Trash2 height={14} width={14}/>
-                                        Delete
-                                    </Button>
-                                </div>
                             </div>
                         )
                     })}
@@ -679,6 +652,35 @@ export const HomeNodeConfigurations = memo(({
                         Create Node Configuration
                     </Button>
                 </div>
+            )}
+
+            {openMenu && (
+                <LinkedCard
+                    element={openMenu.element}
+                    width={180}
+                    height={176}
+                    placement="bottom"
+                    offset={5}
+                    background
+                    closeOnBackgroundClick={true}
+                    onClose={() => setOpenMenu(null)}
+                    zIndex={99999999}
+                >
+                    <div className={menuClass}>
+                        <div className="menu-item" onClick={() => { handleOpenNodeConfig(openMenu.nodeConfig); setOpenMenu(null); }}>
+                            <Edit3 height={14} width={14}/> Edit
+                        </div>
+                        <div className="menu-item" onClick={() => { handleRenameNodeConfig(openMenu.nodeConfig._key, openMenu.nodeConfig.displayName); setOpenMenu(null); }}>
+                            <Edit3 height={14} width={14}/> Rename
+                        </div>
+                        <div className="menu-item" onClick={() => { handleExportNodeConfig(openMenu.nodeConfig); setOpenMenu(null); }}>
+                            <Download height={14} width={14}/> Export
+                        </div>
+                        <div className="menu-item danger" onClick={() => { handleDeleteNodeConfig(openMenu.nodeConfig._key); setOpenMenu(null); }}>
+                            <Trash2 height={14} width={14}/> Delete
+                        </div>
+                    </div>
+                </LinkedCard>
             )}
         </div>
     );

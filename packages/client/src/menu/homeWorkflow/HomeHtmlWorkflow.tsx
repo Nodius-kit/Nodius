@@ -23,13 +23,14 @@ import {Graph} from "@nodius/utils";
 import {ProjectContext} from "../../hooks/contexts/ProjectContext";
 import {ThemeContext} from "../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../hooks/useDynamicClass";
-import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus, Edit2, Download, Upload} from "lucide-react";
+import {Search, FileCode, Plus, Edit3, Trash2, Tag, FolderPlus, MoreVertical, Download, Upload} from "lucide-react";
 import {CategoryManager} from "./CategoryManager";
 import {api_graph_create} from "@nodius/utils";
 import {Input} from "../../component/form/Input";
 import {HtmlClassWithGraph} from "./HomeWorkflow";
 import {Button} from "../../component/form/Button";
 import {CategoryData} from "@nodius/utils";
+import {LinkedCard} from "../../component/form/LinkedCard";
 
 interface HomeHtmlWorkflowProps {
     htmlClasses: HtmlClassWithGraph[];
@@ -52,6 +53,7 @@ export const HomeHtmlWorkflow = memo(({
     const [searchHtml, setSearchHtml] = useState<string>("");
     const [showCategoryManager, setShowCategoryManager] = useState<boolean>(false);
     const [showCategoryFilter, setShowCategoryFilter] = useState<boolean>(false);
+    const [openMenu, setOpenMenu] = useState<{element: HTMLElement, item: HtmlClassWithGraph} | null>(null);
 
     // Abort controllers for cancelling in-flight requests
     const abortControllers = useRef<{
@@ -174,16 +176,18 @@ export const HomeHtmlWorkflow = memo(({
             background-color: ${Theme.state.reverseHexColor(Theme.state.background[Theme.state.theme].default, 0.15)};
         }
 
-        & .card-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        
-        & .card-actions > * {
-            flex:1;
-        }
+    `);
 
+    const menuClass = useDynamicClass(`
+        & { display: flex; flex-direction: column; padding: 8px; }
+        & .menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background 0.15s ease; user-select: none; }
+        & .menu-item:hover { background: rgba(128,128,128,0.1); }
+        & .menu-item.danger { color: var(--nodius-error-main); }
+    `);
+
+    const menuTriggerClass = useDynamicClass(`
+        & { cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center; opacity: 0.6; transition: all 0.15s ease; }
+        &:hover { opacity: 1; background: rgba(128,128,128,0.1); }
     `);
 
     const emptyStateClass = useDynamicClass(`
@@ -481,43 +485,9 @@ export const HomeHtmlWorkflow = memo(({
                                         {item.html.category}
                                     </div>
                                 </div>
-                            </div>
-                            <div className="card-actions">
-                                <Button
-                                    size={"small"}
-                                    onClick={() => handleOpenHtmlClass(item.html, item.graph)}
-                                    fullWidth
-                                >
-                                    <Edit3 height={14} width={14}/>
-                                    Edit
-                                </Button>
-                                <Button
-                                    size={"small"}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRenameHtmlClass(item.html._key, item.html.name);
-                                    }}
-                                    fullWidth
-                                >
-                                    <Edit2 height={14} width={14}/>
-                                    Rename
-                                </Button>
-                                <Button
-                                    size={"small"}
-                                    onClick={() => handleExportHtmlGraph(item)}
-                                    fullWidth
-                                >
-                                    <Download height={14} width={14}/>
-                                    Export
-                                </Button>
-                                <Button
-                                    size={"small"}
-                                    onClick={() => handleDeleteHtmlClass(item.html._key)} color={"error"}
-                                    fullWidth
-                                >
-                                    <Trash2 height={14} width={14}/>
-                                    Delete
-                                </Button>
+                                <div className={menuTriggerClass} onClick={(e) => setOpenMenu({element: e.currentTarget, item})}>
+                                    <MoreVertical height={18} width={18}/>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -536,6 +506,35 @@ export const HomeHtmlWorkflow = memo(({
                         Create HTML Workflow
                     </Button>
                 </div>
+            )}
+
+            {openMenu && (
+                <LinkedCard
+                    element={openMenu.element}
+                    width={180}
+                    height={176}
+                    placement="bottom"
+                    offset={5}
+                    background
+                    closeOnBackgroundClick={true}
+                    onClose={() => setOpenMenu(null)}
+                    zIndex={99999999}
+                >
+                    <div className={menuClass}>
+                        <div className="menu-item" onClick={() => { handleOpenHtmlClass(openMenu.item.html, openMenu.item.graph); setOpenMenu(null); }}>
+                            <Edit3 height={14} width={14}/> Edit
+                        </div>
+                        <div className="menu-item" onClick={() => { handleRenameHtmlClass(openMenu.item.html._key, openMenu.item.html.name); setOpenMenu(null); }}>
+                            <Edit3 height={14} width={14}/> Rename
+                        </div>
+                        <div className="menu-item" onClick={() => { handleExportHtmlGraph(openMenu.item); setOpenMenu(null); }}>
+                            <Download height={14} width={14}/> Export
+                        </div>
+                        <div className="menu-item danger" onClick={() => { handleDeleteHtmlClass(openMenu.item.html._key); setOpenMenu(null); }}>
+                            <Trash2 height={14} width={14}/> Delete
+                        </div>
+                    </div>
+                </LinkedCard>
             )}
         </div>
     );
