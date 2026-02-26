@@ -153,7 +153,7 @@ export function applyCSSBlocks(el: HTMLElement, blocks: CSSBlock[]): void {
 
 export function removeCSSBlocks(el: HTMLElement, blocks: CSSBlock[]): void {
     // Remove all dynamically added classes from the element
-    const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('css-'));
+    const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('nodius-css-'));
     classesToRemove.forEach(cls => el.classList.remove(cls));
 
     // Remove classes added to ancestor elements via :parent
