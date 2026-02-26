@@ -78,7 +78,6 @@ export class WorkflowManager {
                 entryData,
                 nodeTypeConfig
             );
-            console.log("aaa", ret);
         } catch (error) {
             console.error('[WorkflowManager] Failed to execute workflow:', error);
             this.handleError(error instanceof Error ? error.message : String(error));
