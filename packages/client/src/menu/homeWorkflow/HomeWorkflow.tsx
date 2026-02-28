@@ -380,7 +380,7 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
             </div>
 
             {/* AI Chat Floating Button */}
-            <AIChatFloating graphKey="home" />
+            <AIChatFloating />
         </div>
     )
 });

@@ -28,7 +28,6 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
 
     const token = typeof localStorage !== "undefined" ? localStorage.getItem("authToken") : null;
 
-    if(!Project.state.graph) return;
 
     const {
         messages,
@@ -41,7 +40,7 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
         connect,
         disconnect,
     } = useAIChat({
-        graphKey: Project.state.graph!._key,
+        graphKey: Project.state.graph?._key ?? "home",
         serverInfo: Project.state.serverInfo ?? null,
         token,
         autoConnect: false,
