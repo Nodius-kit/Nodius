@@ -52,6 +52,9 @@ import {
 
 import {clusterManager, db} from "../server";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
+import {WsAIController} from "../ai/wsAIController";
+import {createNodeEmbeddingText, hasNodeContentChanged} from "../ai/utils";
+import {detectEmbeddingProvider, type EmbeddingProvider} from "../ai/providers/embeddingProvider";
 
 import {createUniqueToken, ensureCollection} from "../utils/arangoUtils";
 import {aql} from "arangojs";
@@ -127,6 +130,9 @@ export class WebSocketManager {
         autoSaveEnabled: boolean
     }> = {};
 
+    private aiController: WsAIController;
+    private embeddingProvider: EmbeddingProvider | null = null;
+
     /**
      * Constructor to initialize the WebSocket server.
      * @param portOrOptions - Either a port number for standalone mode, or options object
@@ -159,6 +165,15 @@ export class WebSocketManager {
             }
         }
 
+        // Initialize AI controller with memory-aware data source
+        this.aiController = new WsAIController();
+        this.aiController.init(this).catch(err => {
+            console.error("AI controller init error:", err);
+        });
+
+        // Detect embedding provider for write-path (auto-embed nodes on save)
+        this.embeddingProvider = detectEmbeddingProvider();
+
         // Set up connection event listener
         this.wss.on('connection', (ws: WebSocket) => {
             this.clients.add(ws); // Add new client to the set
@@ -172,6 +187,8 @@ export class WebSocketManager {
             // Handle client disconnection
             ws.on('close', () => {
                 this.clients.delete(ws);
+                // Abort any active AI streaming sessions for this client
+                this.aiController.onClientDisconnect(ws);
                 console.log('WS: Client disconnected');
             });
         });
@@ -1710,6 +1727,9 @@ export class WebSocketManager {
                     ws.close();
                     return;
                 }
+            } else if(this.aiController.canHandle(jsonData.type)) {
+                await this.aiController.handle(ws, jsonData, "default");
+                return;
             } else if(jsonData.type === "toggleAutoSave") {
                 // CAS 1: Graph User
                 if(graphUser && sheet && graphKey) {
@@ -2058,6 +2078,25 @@ export class WebSocketManager {
                     edgesUpdated: edgesToUpdate.length,
                     edgesDeleted: edgesToDelete.length
                 });
+
+                // ─── Embedding write-path (fire-and-forget) ──────────
+                // Generate embeddings for new nodes and content-modified nodes.
+                // Runs asynchronously — never blocks or crashes the auto-save.
+                if (this.embeddingProvider) {
+                    const provider = this.embeddingProvider;
+                    // Content-modified updated nodes (skip position/size-only moves)
+                    const contentModifiedNodes = nodesToUpdate.filter(node => {
+                        const original = sheet.originalNodeMap.get(node._key);
+                        return original ? hasNodeContentChanged(original, node) : true;
+                    });
+                    const nodesToEmbed = [...nodesToCreate, ...contentModifiedNodes];
+
+                    if (nodesToEmbed.length > 0) {
+                        this.generateNodeEmbeddings(nodesToEmbed, graphKey, node_collection, provider).catch(err => {
+                            console.warn("AI: Embedding write-path error (non-blocking):", err);
+                        });
+                    }
+                }
             }
 
             // Update the graph's lastUpdatedTime if there were any changes
@@ -2069,6 +2108,32 @@ export class WebSocketManager {
             }
         } catch (error) {
             console.error(`Error saving changes for graph ${graphKey}:`, error);
+        }
+    }
+
+    /**
+     * Generate and persist embeddings for a batch of nodes.
+     * Runs asynchronously after save — errors are logged but never propagated.
+     */
+    private async generateNodeEmbeddings(
+        nodes: Node<any>[],
+        graphKey: string,
+        nodeCollection: ReturnType<typeof db.collection>,
+        provider: EmbeddingProvider,
+    ): Promise<void> {
+        for (const node of nodes) {
+            try {
+                const text = createNodeEmbeddingText(node);
+                if (text.trim().length === 0) continue;
+
+                const embedding = await provider.generateEmbedding(text);
+                const arangoKey = `${graphKey}-${node._key}`;
+
+                await nodeCollection.update(arangoKey, { embedding });
+            } catch (err) {
+                // Log and continue — one failed embedding should not stop others
+                console.warn(`AI: Failed to embed node ${node._key}:`, err);
+            }
         }
     }
 

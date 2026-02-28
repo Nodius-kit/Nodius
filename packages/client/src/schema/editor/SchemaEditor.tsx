@@ -41,6 +41,7 @@ import {LeftPanelEntryTypeSelect} from "./menu/LeftPanelEntryTypeSelect";
 import {LeftPanelNodeLibrary} from "./menu/LeftPanelNodeLibrary";
 import {SaveStatusOverlay} from "./SaveStatusOverlay";
 import {LeftPanelHistory} from "./menu/LeftPanelHistory";
+import {AIChatFloating} from "../../component/ai/AIChatFloating";
 
 
 export type editingPanel = "component" | "hierarchy" | "type" | "enum" | "entryData" | "nodeLibrary" | "history" | ""
@@ -299,7 +300,6 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                 </Fade>
             </div>
             <SaveStatusOverlay right={(Project.state.editedNodeHandle || Project.state.editedHtml ? rightPanelWidth : 0)} />
-
         </div>
     )
 });

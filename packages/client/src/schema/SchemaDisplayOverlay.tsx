@@ -8,6 +8,7 @@ import {Card} from "../component/form/Card";
 import { Edge, Node, getGraphBounds, generateGraphSVGString, flatEdgeMap } from "@nodius/utils";
 import {ThemeContext} from "../hooks/contexts/ThemeContext";
 import {useStableProjectRef} from "../hooks/useStableProjectRef";
+import {AIChatFloating} from "../component/ai/AIChatFloating";
 
 export interface SchemaDisplayOverlayProps {
     centerOnRootNode: () => void;
@@ -212,11 +213,26 @@ export const SchemaDisplayOverlay = memo(({ centerOnRootNode, getVisibleNode, ge
         }
     `);
 
+    const AIBubbleContainerClass = useDynamicClass(`
+        & {
+            pointer-events: all;
+        }
+        & > button {
+            bottom: 164px;
+        }
+    `);
+
     return (
         <>
 
             {showCenterOnRootNode && (
                 <>
+                    {/* AI Chat Floating Button */}
+                    {Project.state.graph && (
+                        <div className={AIBubbleContainerClass}>
+                            <AIChatFloating  />
+                        </div>
+                    )}
                     {minimapSvg && (
                         <div
                             className={minimapContainer}

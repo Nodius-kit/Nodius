@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import {HomeHtmlWorkflow} from "./HomeHtmlWorkflow";
 import {HomeNodeConfigurations} from "./HomeNodeConfigurations";
 import {HomeGraphWorkflow} from "./HomeGraphWorkflow";
+import {AIChatFloating} from "../../component/ai/AIChatFloating";
 
 export interface HtmlClassWithGraph {
     html: HtmlClass;
@@ -377,6 +378,9 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     onCategoryChange={setSelectedCategoryNodeConfig}
                 />
             </div>
+
+            {/* AI Chat Floating Button */}
+            <AIChatFloating graphKey="home" />
         </div>
     )
 });

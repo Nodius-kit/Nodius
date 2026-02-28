@@ -1,5 +1,9 @@
 export * from './App';
 export * from './AuthWrapper';
+export * from './component/ai/AIChatFloating';
+export * from './component/ai/AIChatInput';
+export * from './component/ai/AIChatPanel';
+export * from './component/ai/AIInterruptModal';
 export * from './component/animate/Collapse';
 export * from './component/animate/Fade';
 export * from './component/animate/MultiFade';
@@ -23,6 +27,7 @@ export * from './hooks/contexts/ProjectContext';
 export * from './hooks/contexts/ThemeContext';
 export * from './hooks/contexts/ThemeContextParser';
 export * from './hooks/contexts/UserContext';
+export * from './hooks/useAIChat';
 export * from './hooks/useCreateReducer';
 export * from './hooks/useDynamicClass';
 export * from './hooks/useDynamicCssListing';
