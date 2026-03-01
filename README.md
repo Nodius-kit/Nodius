@@ -213,6 +213,7 @@ The project automatically generates necessary configuration files at startup. Ho
 - `ARANGO_DB`: Database name (default: `nodius`)
 - `ARANGO_USER`: ArangoDB user (default: `root`)
 - `ARANGO_PASS`: ArangoDB password (default: `azerty`)
+- `CORS_ORIGIN`: Allowed CORS origin (default: `*`). Set to your domain in production (e.g., `https://your-domain.com`)
 
 ## Development
 
