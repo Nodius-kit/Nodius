@@ -44,6 +44,7 @@ import {createUniqueToken, ensureCollection, safeArangoObject} from "../utils/ar
 import {aql} from "arangojs";
 import {db} from "../server";
 import {api_enum_delete, api_enum_list, api_type_delete, api_type_list, DataTypeClass, EnumClass} from "@nodius/utils";
+import {getUserWorkspace, verifyWorkspaceAccess} from "../auth/workspaceAccess";
 
 export class RequestDataType {
     public static init = async (app: HttpServer) => {
@@ -51,23 +52,14 @@ export class RequestDataType {
         const enum_collection: DocumentCollection = await ensureCollection("nodius_enum");
 
         app.post("/api/type/list", async (req: Request, res: Response) => {
-            const body: api_type_list = req.body;
+            const { user, workspaces } = getUserWorkspace(req);
 
-            if (!body.workspace) {
-                res.status(500).end();
-                return;
-            }
-
-            let filters = [aql`doc.workspace == ${body.workspace}`];
-
-            let combinedFilter = filters.reduce(
-                (acc, cond) => (acc ? aql`${acc} AND ${cond}` : cond),
-                null as any
-            );
-
-            const query = aql`
+            const query = workspaces.length > 0 ? aql`
               FOR doc IN nodius_data_type
-              FILTER ${combinedFilter} 
+              FILTER doc.workspace IN ${workspaces}
+              RETURN doc
+            ` : aql`
+              FOR doc IN nodius_data_type
               RETURN doc
             `;
 
@@ -84,6 +76,9 @@ export class RequestDataType {
                 if (!body.workspace || !body.types || !body.name || body.description == undefined) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
+                const { user } = getUserWorkspace(req);
+                const access = verifyWorkspaceAccess(user, body.workspace);
+                if (!access.allowed) return res.status(403).json({ error: access.error });
 
                 // check uniqueness within workspace
                 const cursor = await db.query(aql`
@@ -119,22 +114,29 @@ export class RequestDataType {
                 const body: DataTypeClass= req.body;
 
                 // basic validation
-                if (!body.workspace || !body.types || !body.name || body.name.length < 2 || body.description == undefined || !body._key) {
+                if (!body.types || !body.name || body.name.length < 2 || body.description == undefined || !body._key) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
 
-                // Ensure the doc exists
-                const exists = await dataType_collection.documentExists(body._key);
-                if (!exists) {
+                const { user } = getUserWorkspace(req);
+
+                // Fetch the existing doc to verify workspace access
+                const existingDoc = await dataType_collection.document(body._key).catch(() => null);
+                if (!existingDoc) {
                     return res.status(404).json({error: "Document not found"});
                 }
 
+                const typeAccess = verifyWorkspaceAccess(user, existingDoc.workspace);
+                if (!typeAccess.allowed) return res.status(403).json({ error: typeAccess.error });
+
                 // Replace (overwrites all fields except system ones)
+                // Force workspace to match the existing doc (prevent workspace hijack)
                 const meta = await dataType_collection.replace(body._key, {
-                    ...safeArangoObject(body)
+                    ...safeArangoObject(body),
+                    workspace: existingDoc.workspace
                 });
 
-                return res.status(200).json({...body, _key: body._key, _rev: meta._rev});
+                return res.status(200).json({...body, _key: body._key, _rev: meta._rev, workspace: existingDoc.workspace});
             } catch (err) {
                 console.error("Error updating type:", err);
                 return res.status(500).json({error: "Internal Server Error"});
@@ -146,15 +148,20 @@ export class RequestDataType {
                 const body: api_type_delete = req.body;
 
                 // basic validation
-                if (!body.key || !body.workspace) {
+                if (!body.key) {
                     return res.status(400).json({error: "Missing _key field"});
                 }
 
-                // Check if document exists
-                const exists = await dataType_collection.documentExists(body.key);
-                if (!exists) {
+                const { user } = getUserWorkspace(req);
+
+                // Fetch doc to verify workspace access
+                const existingDoc = await dataType_collection.document(body.key).catch(() => null);
+                if (!existingDoc) {
                     return res.status(404).json({error: "Document not found"});
                 }
+
+                const deleteAccess = verifyWorkspaceAccess(user, existingDoc.workspace);
+                if (!deleteAccess.allowed) return res.status(403).json({ error: deleteAccess.error });
 
                 // Delete the document
                 await dataType_collection.remove(body.key);
@@ -171,23 +178,14 @@ export class RequestDataType {
 
 
         app.post("/api/enum/list", async (req: Request, res: Response) => {
-            const body: api_enum_list = req.body;
+            const { user, workspaces } = getUserWorkspace(req);
 
-            if (!body.workspace) {
-                res.status(500).end();
-                return;
-            }
-
-            let filters = [aql`doc.workspace == ${body.workspace}`];
-
-            let combinedFilter = filters.reduce(
-                (acc, cond) => (acc ? aql`${acc} AND ${cond}` : cond),
-                null as any
-            );
-
-            const query = aql`
+            const query = workspaces.length > 0 ? aql`
               FOR doc IN nodius_enum
-              FILTER ${combinedFilter}
+              FILTER doc.workspace IN ${workspaces}
+              RETURN doc
+            ` : aql`
+              FOR doc IN nodius_enum
               RETURN doc
             `;
 
@@ -204,6 +202,9 @@ export class RequestDataType {
                 if (!body.workspace || !body.enum || !body.name || body.description == undefined) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
+                const { user } = getUserWorkspace(req);
+                const access = verifyWorkspaceAccess(user, body.workspace);
+                if (!access.allowed) return res.status(403).json({ error: access.error });
 
                 // check uniqueness within workspace
                 const cursor = await db.query(aql`
@@ -239,22 +240,29 @@ export class RequestDataType {
                 const body: EnumClass= req.body;
 
                 // basic validation
-                if (!body.workspace || !body.enum || !body.name || body.name.length < 2 || body.description == undefined || !body._key) {
+                if (!body.enum || !body.name || body.name.length < 2 || body.description == undefined || !body._key) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
 
-                // Ensure the doc exists
-                const exists = await enum_collection.documentExists(body._key);
-                if (!exists) {
+                const { user } = getUserWorkspace(req);
+
+                // Fetch existing doc to verify workspace access
+                const existingDoc = await enum_collection.document(body._key).catch(() => null);
+                if (!existingDoc) {
                     return res.status(404).json({error: "Document not found"});
                 }
 
+                const enumAccess = verifyWorkspaceAccess(user, existingDoc.workspace);
+                if (!enumAccess.allowed) return res.status(403).json({ error: enumAccess.error });
+
                 // Replace (overwrites all fields except system ones)
+                // Force workspace to match existing doc
                 const meta = await enum_collection.replace(body._key, {
-                    ...safeArangoObject(body)
+                    ...safeArangoObject(body),
+                    workspace: existingDoc.workspace
                 });
 
-                return res.status(200).json({...body, _key: body._key, _rev: meta._rev});
+                return res.status(200).json({...body, _key: body._key, _rev: meta._rev, workspace: existingDoc.workspace});
             } catch (err) {
                 console.error("Error updating enum:", err);
                 return res.status(500).json({error: "Internal Server Error"});
@@ -266,15 +274,20 @@ export class RequestDataType {
                 const body: api_enum_delete = req.body;
 
                 // basic validation
-                if (!body.key || !body.workspace) {
+                if (!body.key) {
                     return res.status(400).json({error: "Missing _key field"});
                 }
 
-                // Check if document exists
-                const exists = await enum_collection.documentExists(body.key);
-                if (!exists) {
+                const { user } = getUserWorkspace(req);
+
+                // Fetch doc to verify workspace access
+                const existingDoc = await enum_collection.document(body.key).catch(() => null);
+                if (!existingDoc) {
                     return res.status(404).json({error: "Document not found"});
                 }
+
+                const deleteAccess = verifyWorkspaceAccess(user, existingDoc.workspace);
+                if (!deleteAccess.allowed) return res.status(403).json({ error: deleteAccess.error });
 
                 // Delete the document
                 await enum_collection.remove(body.key);

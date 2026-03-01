@@ -86,7 +86,6 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     type: "workflow"
                 } as api_category_list)
             });
@@ -120,7 +119,6 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     type: "graph"
                 } as api_category_list)
             });
@@ -154,7 +152,6 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     type: "nodeconfig"
                 } as api_category_list)
             });
@@ -189,7 +186,6 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     retrieveHtml: {
                         buildGraph: false,
                         length: 100,
@@ -227,7 +223,6 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     retrieveGraph: {
                         buildGraph: false,
                         length: 100,
@@ -264,9 +259,7 @@ export const HomeWorkflow = memo(({}:AppMenuProps) => {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    workspace: "root"
-                }),
+                body: JSON.stringify({}),
             });
 
             if (response.status === 200) {

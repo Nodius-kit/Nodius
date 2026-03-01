@@ -26,6 +26,7 @@ export interface UserInfo {
     username: string;
     email?: string;
     roles?: string[];
+    workspaces?: string[];
     [key: string]: any;
 }
 

@@ -27,6 +27,7 @@ import { db } from "../server";
 import escapeHTML from "escape-html";
 import multer from "multer";
 import { randomBytes } from "crypto";
+import { getUserWorkspace, verifyWorkspaceAccess } from "../auth/workspaceAccess";
 
 function generateLocalKey(): string {
     return randomBytes(8).toString("hex");
@@ -100,6 +101,9 @@ export class RequestExportImport {
                 if (!graphKey || !workspace) {
                     return res.status(400).json({ error: "Missing graphKey or workspace" });
                 }
+                const { user } = getUserWorkspace(req);
+                const access = verifyWorkspaceAccess(user, workspace);
+                if (!access.allowed) return res.status(403).json({ error: access.error });
 
                 // Fetch graph
                 const gCursor = await db.query(aql`
@@ -144,6 +148,9 @@ export class RequestExportImport {
                 if (!htmlKey || !workspace) {
                     return res.status(400).json({ error: "Missing htmlKey or workspace" });
                 }
+                const { user } = getUserWorkspace(req);
+                const access = verifyWorkspaceAccess(user, workspace);
+                if (!access.allowed) return res.status(403).json({ error: access.error });
 
                 // Fetch HtmlClass
                 const hCursor = await db.query(aql`
@@ -209,6 +216,9 @@ export class RequestExportImport {
                 if (!nodeConfigKey || !workspace) {
                     return res.status(400).json({ error: "Missing nodeConfigKey or workspace" });
                 }
+                const { user } = getUserWorkspace(req);
+                const access = verifyWorkspaceAccess(user, workspace);
+                if (!access.allowed) return res.status(403).json({ error: access.error });
 
                 const cursor = await db.query(aql`
                     FOR doc IN nodius_node_config
@@ -265,6 +275,9 @@ export class RequestExportImport {
 
                 const workspace = req.body?.workspace as string;
                 if (!workspace) return res.status(400).json({ error: "Missing workspace field" });
+                const { user } = getUserWorkspace(req);
+                const importAccess = verifyWorkspaceAccess(user, workspace);
+                if (!importAccess.allowed) return res.status(403).json({ error: importAccess.error });
 
                 // Decode .ndex
                 let decoded;

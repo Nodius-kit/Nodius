@@ -74,6 +74,8 @@ import {
 import {aql} from "arangojs";
 import {db, webSocketManager} from "../server";
 import escapeHTML from 'escape-html';
+import {getUserWorkspace, verifyWorkspaceAccess} from "../auth/workspaceAccess";
+import type {UserInfo} from "../auth/AuthProvider";
 
 import {CloudAlert} from "lucide-static"
 
@@ -92,6 +94,7 @@ export class RequestWorkFlow {
         app.post("/api/graph/rename", async (req: Request, res: Response) => {
             try {
                 const body = req.body as { htmlToken?: string; graphToken?: string; newName: string };
+                const { user } = getUserWorkspace(req);
 
                 if (!body.newName || (!body.htmlToken && !body.graphToken)) {
                     return res.status(400).json({ error: "Missing token or newName" });
@@ -110,6 +113,9 @@ export class RequestWorkFlow {
                     if (!html) {
                         return res.status(404).json({ error: "HTML class not found" });
                     }
+
+                    const access = verifyWorkspaceAccess(user, html.workspace);
+                    if (!access.allowed) return res.status(403).json({ error: access.error });
 
                     const conflictQuery = aql`
                         FOR doc IN nodius_html_class
@@ -146,6 +152,9 @@ export class RequestWorkFlow {
                         return res.status(404).json({ error: "Graph not found" });
                     }
 
+                    const graphAccess = verifyWorkspaceAccess(user, graph.workspace);
+                    if (!graphAccess.allowed) return res.status(403).json({ error: graphAccess.error });
+
                     const conflictQuery = aql`
                         FOR doc IN nodius_graphs
                         FILTER doc.workspace == ${escapeHTML(graph.workspace)}
@@ -177,6 +186,8 @@ export class RequestWorkFlow {
 
         app.post("/api/graph/delete", async (req: Request, res: Response) => {
             const body = req.body as api_graph_delete;
+            const { user } = getUserWorkspace(req);
+
             if(body.htmlToken) {
                 let query = aql`
                         FOR doc IN nodius_html_class
@@ -189,6 +200,9 @@ export class RequestWorkFlow {
                     res.status(500).end();
                     return;
                 }
+
+                const htmlAccess = verifyWorkspaceAccess(user, html.workspace);
+                if (!htmlAccess.allowed) return res.status(403).json({ error: htmlAccess.error });
 
 
                 // Delete matching html
@@ -227,6 +241,19 @@ export class RequestWorkFlow {
 
 
             if(body.graphToken) {
+                // Fetch graph to verify workspace access before deleting
+                const graphFetchCursor = await db.query(aql`
+                    FOR doc IN nodius_graphs
+                    FILTER doc._key == ${escapeHTML(body.graphToken)}
+                    LIMIT 1
+                    RETURN doc
+                `);
+                const graphDoc = await graphFetchCursor.next();
+                if (graphDoc) {
+                    const graphDeleteAccess = verifyWorkspaceAccess(user, graphDoc.workspace);
+                    if (!graphDeleteAccess.allowed) return res.status(403).json({ error: graphDeleteAccess.error });
+                }
+
                 let cursor = await db.query(aql`
                       FOR doc IN nodius_graphs
                         FILTER doc._key == ${escapeHTML(body.graphToken)}
@@ -251,11 +278,18 @@ export class RequestWorkFlow {
 
         app.post("/api/graph/get", async (req: Request, res: Response) => {
             const body = req.body as api_graph_html;
+            const { user, workspaces } = getUserWorkspace(req);
+
+
             if(body.retrieveHtml) {
                 if(body.retrieveHtml.token) {
-                    let query = aql`
+                    let query = workspaces.length > 0 ? aql`
                         FOR doc IN nodius_html_class
-                        FILTER doc._key == ${escapeHTML(body.retrieveHtml.token)} AND doc.workspace == ${escapeHTML(body.workspace)}
+                        FILTER doc._key == ${escapeHTML(body.retrieveHtml.token)} AND doc.workspace IN ${workspaces}
+                        RETURN doc
+                    ` : aql`
+                        FOR doc IN nodius_html_class
+                        FILTER doc._key == ${escapeHTML(body.retrieveHtml.token)}
                         RETURN doc
                     `;
                     let cursor = await db.query(query);
@@ -293,9 +327,14 @@ export class RequestWorkFlow {
                         res.status(500).end();
                         return;
                     }
-                    let query = aql`
+                    let query = workspaces.length > 0 ? aql`
                         FOR doc IN nodius_html_class
-                        FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                        FILTER doc.workspace IN ${workspaces}
+                        SORT doc.lastUpdatedTime DESC
+                        LIMIT ${parseInt(escapeHTML(body.retrieveHtml.offset+""))}, ${parseInt(escapeHTML(body.retrieveHtml.length+""))}
+                        RETURN doc
+                    ` : aql`
+                        FOR doc IN nodius_html_class
                         SORT doc.lastUpdatedTime DESC
                         LIMIT ${parseInt(escapeHTML(body.retrieveHtml.offset+""))}, ${parseInt(escapeHTML(body.retrieveHtml.length+""))}
                         RETURN doc
@@ -354,10 +393,17 @@ export class RequestWorkFlow {
                         return;
                     }
 
-                    const query = aql`
+                    const query = workspaces.length > 0 ? aql`
                         FOR doc IN nodius_graphs
                             FILTER doc.htmlKeyLinked == null
-                            AND doc.workspace == ${escapeHTML(body.workspace)}
+                            AND doc.workspace IN ${workspaces}
+                            AND doc.metadata.invisible != true
+                            SORT doc.lastUpdatedTime DESC
+                            LIMIT ${offset}, ${limit}
+                            RETURN doc
+                    ` : aql`
+                        FOR doc IN nodius_graphs
+                            FILTER doc.htmlKeyLinked == null
                             AND doc.metadata.invisible != true
                             SORT doc.lastUpdatedTime DESC
                             LIMIT ${offset}, ${limit}
@@ -391,6 +437,11 @@ export class RequestWorkFlow {
 
         app.post("/api/graph/create", async (req: Request, res: Response) => {
             const body = req.body as api_graph_create;
+            const { user } = getUserWorkspace(req);
+            const createWorkspace = body.graph?.workspace ?? body.htmlClass?.workspace;
+            if (!createWorkspace) return res.status(400).json({ error: "Missing workspace" });
+            const access = verifyWorkspaceAccess(user, createWorkspace);
+            if (!access.allowed) return res.status(403).json({ error: access.error });
 
             if(body.htmlClass) {
 
@@ -487,6 +538,21 @@ export class RequestWorkFlow {
             const theme = "light"  as "light" | "dark";
             if(!token) {
                 res.status(500).end();
+                return;
+            }
+
+            // Fetch graph to verify workspace access
+            const { user } = getUserWorkspace(req);
+            const graphCheckCursor = await db.query(aql`
+                FOR doc IN nodius_graphs
+                FILTER doc._key == ${escapeHTML(token)}
+                LIMIT 1
+                RETURN doc
+            `);
+            const graphCheck = await graphCheckCursor.next();
+            if (graphCheck) {
+                const minimapAccess = verifyWorkspaceAccess(user, graphCheck.workspace);
+                if (!minimapAccess.allowed) return res.status(403).json({ error: minimapAccess.error });
             }
 
             res.setHeader('Content-Type', 'image/svg+xml');

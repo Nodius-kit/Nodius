@@ -338,7 +338,6 @@ export const useSocketSync = () => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     retrieveGraph: {
                         buildGraph: true,
                         token: html.graphKeyLinked,
@@ -434,8 +433,7 @@ export const useSocketSync = () => {
 
         const registerUser:WSMessage<WSRegisterUserOnGraph> = {
             type: "registerUserOnGraph",
-            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
-            name: "User",
+            name: User.user?.username ?? "User",
             sheetId: selectedSheetId,
             graphKey: htmlGraph._key,
             fromTimestamp: htmlGraph.lastUpdatedTime
@@ -561,7 +559,6 @@ export const useSocketSync = () => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     retrieveGraph: {
                         buildGraph: true,
                         token: graph._key,
@@ -647,8 +644,7 @@ export const useSocketSync = () => {
 
         const registerUser:WSMessage<WSRegisterUserOnGraph> = {
             type: "registerUserOnGraph",
-            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
-            name: "User",
+            name: User.user?.username ?? "User",
             sheetId: selectedSheetId,
             graphKey: fullGraph._key,
             fromTimestamp: fullGraph.lastUpdatedTime
@@ -858,8 +854,7 @@ export const useSocketSync = () => {
 
         const registerUser:WSMessage<WSRegisterUserOnNodeConfig> = {
             type: "registerUserOnNodeConfig",
-            userId: User.user?.userId ?? Array.from({length: 32}, () => Math.random().toString(36)[2]).join(''),
-            name: "User",
+            name: User.user?.username ?? "User",
             nodeConfigKey: nodeConfig._key,
             fromTimestamp: nodeConfig.lastUpdatedTime
         }
@@ -1447,9 +1442,7 @@ export const useSocketSync = () => {
             method: "POST",
             signal: retrieveDataTypeAbordController.current.signal,
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                workspace: "root"
-            })
+            body: JSON.stringify({})
         });
         if(response.status === 200) {
             const json:DataTypeClass[] = await response.json();
@@ -1475,9 +1468,7 @@ export const useSocketSync = () => {
             method: "POST",
             signal: retrieveEnumAbordController.current.signal,
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                workspace: "root"
-            })
+            body: JSON.stringify({})
         });
         if(response.status === 200) {
             const json:EnumClass[] = await response.json();

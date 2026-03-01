@@ -351,7 +351,6 @@ export const App = () => {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        workspace: "root",
                         retrieveGraph: {
                             token: vKey,
                             buildGraph: true,
@@ -381,7 +380,6 @@ export const App = () => {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        workspace: "root",
                         retrieveHtml: {
                             token: vKey,
                             buildGraph: true,
@@ -411,9 +409,7 @@ export const App = () => {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        workspace: "root",
                         _key: vKey
-
                     } as api_node_config_get),
                 }).then((response) => response.json()).then((json) => {
                     waitUntil(

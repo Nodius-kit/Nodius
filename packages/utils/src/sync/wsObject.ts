@@ -84,7 +84,6 @@ export interface nodeConfigInstructions {
 
 export interface WSRegisterUserOnGraph {
     type: "registerUserOnGraph",
-    userId: string,
     name: string,
     sheetId: string,
     graphKey: string,
@@ -93,13 +92,11 @@ export interface WSRegisterUserOnGraph {
 
 export interface WSDisconnedUserOnGraph {
     type: "disconnedUserOnGraph",
-    userId: string,
     graphKey: string,
 }
 
 export interface WSRegisterUserOnNodeConfig {
     type: "registerUserOnNodeConfig",
-    userId: string,
     name: string,
     nodeConfigKey: string,
     fromTimestamp: number,
@@ -107,7 +104,6 @@ export interface WSRegisterUserOnNodeConfig {
 
 export interface WSDisconnectUserOnNodeConfig {
     type: "disconnectUserOnNodeConfig",
-    userId: string,
     nodeConfigKey: string,
 }
 
@@ -160,4 +156,18 @@ export interface WSForceSave {
 export interface WSToggleAutoSave {
     type: "toggleAutoSave",
     enabled: boolean,
+}
+
+export interface WSAuthenticate {
+    type: "authenticate",
+    token: string,
+}
+
+export interface WSAuthResult {
+    type: "authResult",
+    success: boolean,
+    userId?: string,
+    username?: string,
+    workspaces?: string[],
+    error?: string,
 }

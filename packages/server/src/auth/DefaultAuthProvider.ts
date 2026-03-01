@@ -57,6 +57,8 @@ interface UserDocument {
     password: string; // bcrypt hash
     email?: string;
     roles: string[];
+    workspaces: string[];
+    token?: string; // stored JWT for server-side revocation
     createdAt: number;
     lastLogin?: number;
 }
@@ -68,6 +70,7 @@ interface JWTPayload {
     username: string;
     userId: string;
     roles: string[];
+    workspaces: string[];
     iat?: number;
     exp?: number;
 }
@@ -189,10 +192,14 @@ export class DefaultAuthProvider extends AuthProvider {
                 password: hashedPassword,
                 email: options?.email,
                 roles: options?.roles || ['user'],
+                workspaces: [], // will be populated with [_key] after save
                 createdAt: Date.now()
             };
 
             const result = await this.userCollection.save(userDoc);
+
+            // Default workspace is the user's own key
+            await this.userCollection.update(result._key, { workspaces: [result._key] });
 
             return { success: true, userId: result._key };
         } catch (error) {
@@ -230,25 +237,35 @@ export class DefaultAuthProvider extends AuthProvider {
                 return { success: false, error: 'Invalid username or password' };
             }
 
-            // Update last login timestamp
-            await this.userCollection.update(user._key, { lastLogin: Date.now() });
+            // Migration: if existing user doc lacks workspaces, default to [_key]
+            const workspaces = user.workspaces?.length ? user.workspaces : [user._key];
 
             // Generate JWT token
             const payload: JWTPayload = {
                 username: user.username,
                 userId: user._key,
-                roles: user.roles
+                roles: user.roles,
+                workspaces
             };
 
             const token = jwt.sign(payload, this.jwtSecret, {
                 expiresIn: this.jwtExpiresIn
             });
 
+            // Update last login timestamp and store token for server-side revocation
+            await this.userCollection.update(user._key, {
+                lastLogin: Date.now(),
+                token,
+                // Migrate workspaces if missing
+                ...(!user.workspaces?.length ? { workspaces } : {})
+            });
+
             const userInfo: UserInfo = {
                 userId: user._key,
                 username: user.username,
                 email: user.email,
-                roles: user.roles
+                roles: user.roles,
+                workspaces
             };
 
             return {
@@ -270,7 +287,7 @@ export class DefaultAuthProvider extends AuthProvider {
             // Verify JWT token
             const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
 
-            // Optionally, verify user still exists in database
+            // Verify user still exists in database and token matches stored token
             const cursor = await this.db.query({
                 query: `
                     FOR user IN nodius_users
@@ -287,11 +304,20 @@ export class DefaultAuthProvider extends AuthProvider {
                 return { valid: false, error: 'User not found' };
             }
 
+            // Server-side revocation: token is only valid if it matches the stored token
+            if (!user.token || user.token !== token) {
+                return { valid: false, error: 'Token has been revoked' };
+            }
+
+            // Migration: if existing user doc lacks workspaces, fallback to [_key]
+            const workspaces = user.workspaces?.length ? user.workspaces : [user._key];
+
             const userInfo: UserInfo = {
                 userId: user._key,
                 username: user.username,
                 email: user.email,
-                roles: user.roles
+                roles: user.roles,
+                workspaces
             };
 
             return {
@@ -326,6 +352,15 @@ export class DefaultAuthProvider extends AuthProvider {
                 ignoreExpiration: true
             }) as JWTPayload;
 
+            // Refuse refresh if token was issued more than 7 days ago
+            if (decoded.iat) {
+                const maxAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+                const tokenAgeMs = Date.now() - decoded.iat * 1000;
+                if (tokenAgeMs > maxAgeMs) {
+                    return { success: false, error: 'Token too old for refresh. Please login again.' };
+                }
+            }
+
             // Verify user still exists
             const cursor = await this.db.query({
                 query: `
@@ -343,21 +378,29 @@ export class DefaultAuthProvider extends AuthProvider {
                 return { success: false, error: 'User not found' };
             }
 
+            // Migration: if existing user doc lacks workspaces, fallback to [_key]
+            const workspaces = user.workspaces?.length ? user.workspaces : [user._key];
+
             // Generate new token
             const payload: JWTPayload = {
                 username: user.username,
                 userId: user._key,
-                roles: user.roles
+                roles: user.roles,
+                workspaces
             };
 
             const newToken = jwt.sign(payload, this.jwtSecret, {
                 expiresIn: this.jwtExpiresIn
             });
 
+            // Store new token for server-side revocation
+            await this.userCollection.update(user._key, { token: newToken });
+
             const userInfo: UserInfo = {
                 username: user.username,
                 email: user.email,
-                roles: user.roles
+                roles: user.roles,
+                workspaces
             };
 
             return {
@@ -376,8 +419,16 @@ export class DefaultAuthProvider extends AuthProvider {
      * Could be extended to maintain a blacklist of invalidated tokens
      */
     async logout(token: string): Promise<void> {
-        // JWT is stateless, so logout is handled client-side by removing the token
-        // If you need server-side token invalidation, implement a blacklist here
-        console.log('Logout called for token (JWT is stateless, handled client-side)');
+        try {
+            // Decode token to find user (ignore expiration for logout)
+            const decoded = jwt.verify(token, this.jwtSecret, {
+                ignoreExpiration: true
+            }) as JWTPayload;
+
+            // Clear stored token for server-side revocation
+            await this.userCollection.update(decoded.userId, { token: null });
+        } catch (error) {
+            // Ignore errors during logout (token may already be invalid)
+        }
     }
 }

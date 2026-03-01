@@ -91,8 +91,8 @@ export class RequestAI {
                 }
                 const { graphKey, message, threadId } = parsed.data;
 
-                const workspace = user.workspace ?? user.id ?? "default";
-                const role = user.role === "admin" ? "admin" : user.role === "viewer" ? "viewer" : "editor";
+                const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
+                const role = user.roles?.includes("admin") ? "admin" : user.roles?.includes("viewer") ? "viewer" : "editor";
 
                 // Find, load (thread roaming), or create thread
                 let thread: AIThread | null = null;
@@ -165,8 +165,8 @@ export class RequestAI {
                 }
                 const { threadId, approved, feedback } = parsed.data;
 
-                const workspace = user.workspace ?? user.id ?? "default";
-                const role = user.role === "admin" ? "admin" : user.role === "viewer" ? "viewer" : "editor";
+                const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
+                const role = user.roles?.includes("admin") ? "admin" : user.roles?.includes("viewer") ? "viewer" : "editor";
 
                 // Try cache, then DB (thread roaming)
                 let thread = await threadStore.get(threadId);
@@ -213,7 +213,7 @@ export class RequestAI {
                 }
                 const { graphKey } = parsed.data;
 
-                const workspace = user.workspace ?? user.id ?? "default";
+                const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
 
                 // Use threadStore.listByGraph for combined cache + DB listing
                 const allDocs = await threadStore.listByGraph(graphKey, workspace);
@@ -247,7 +247,7 @@ export class RequestAI {
                     return res.status(400).json({ error: "Missing threadId parameter" });
                 }
 
-                const workspace = user.workspace ?? user.id ?? "default";
+                const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
 
                 // Try cache, then DB (thread may only exist on another server)
                 let thread = await threadStore.get(threadId);

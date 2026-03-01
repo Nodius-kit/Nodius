@@ -29,6 +29,7 @@ import { GraphHistoryBase, generateHistoryDescription, api_history_list_request,
 import { aql } from "arangojs";
 import { db } from "../server";
 import escapeHTML from 'escape-html';
+import { getUserWorkspace, verifyWorkspaceAccess } from "../auth/workspaceAccess";
 
 export class RequestHistory {
     public static init = async (app: HttpServer) => {
@@ -53,12 +54,26 @@ export class RequestHistory {
         app.post("/api/history/list", async (req: Request, res: Response) => {
             try {
                 const body = req.body as api_history_list_request;
+                const { user } = getUserWorkspace(req);
 
                 // Validate required fields
                 if (!body.graphKey || !body.type) {
                     return res.status(400).json({
                         error: "Missing required fields: graphKey and type"
                     });
+                }
+
+                // Fetch graph to verify workspace access
+                const graphCursor = await db.query(aql`
+                    FOR g IN nodius_graphs
+                    FILTER g._key == ${escapeHTML(body.graphKey)}
+                    LIMIT 1
+                    RETURN g
+                `);
+                const graphDoc = await graphCursor.next();
+                if (graphDoc) {
+                    const historyAccess = verifyWorkspaceAccess(user, graphDoc.workspace);
+                    if (!historyAccess.allowed) return res.status(403).json({ error: historyAccess.error });
                 }
 
                 // Validate type

@@ -353,7 +353,6 @@ export const LeftPanelTypeEditor = memo((
 
         const body:api_type_delete = {
             key: editingClass._key,
-            workspace: "root",
         }
 
         const response = await fetch(`/api/type/delete`, {

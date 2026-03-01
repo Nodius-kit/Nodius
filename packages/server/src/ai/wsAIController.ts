@@ -17,7 +17,7 @@ import { getAIConfig } from "./config/aiConfig.js";
 import { threadStore, type AIThread } from "./threadStore.js";
 import type { StreamCallbacks } from "./types.js";
 import type { MemoryGraphProvider } from "./memoryAwareDataSource.js";
-import { AuthManager } from "../auth/AuthManager.js";
+import type { AuthenticatedClient } from "../cluster/webSocketManager.js";
 import { logLLMError, logClientDisconnect, logMalformedJSON, debugAI } from "./aiLogger.js";
 import { classifyLLMError, type ClassifiedError } from "./errorClassifier.js";
 
@@ -29,7 +29,6 @@ const AIChatSchema = z.object({
     graphKey: z.string().min(1),
     message: z.string().min(1),
     threadId: z.string().optional(),
-    token: z.string().optional(),
 }).strict();
 
 const AIResumeSchema = z.object({
@@ -38,14 +37,12 @@ const AIResumeSchema = z.object({
     threadId: z.string().min(1),
     approved: z.boolean(),
     feedback: z.string().optional(),
-    token: z.string().optional(),
 }).strict();
 
 const AIInterruptSchema = z.object({
     type: z.literal("ai:interrupt"),
     _id: z.number(),
     threadId: z.string().min(1),
-    token: z.string().optional(),
 }).strict();
 
 // ─── Controller ──────────────────────────────────────────────────────
@@ -89,7 +86,7 @@ export class WsAIController {
         return type.startsWith("ai:");
     }
 
-    async handle(ws: WebSocket, message: Record<string, unknown>, workspace: string): Promise<void> {
+    async handle(ws: WebSocket, message: Record<string, unknown>, authClient: AuthenticatedClient): Promise<void> {
         // Lazy init if not already done
         if (!this.initialized) await this.init();
 
@@ -97,9 +94,9 @@ export class WsAIController {
 
         switch (type) {
             case "ai:chat":
-                return this.handleChat(ws, message, workspace);
+                return this.handleChat(ws, message, authClient);
             case "ai:resume":
-                return this.handleResume(ws, message, workspace);
+                return this.handleResume(ws, message, authClient);
             case "ai:interrupt":
                 return this.handleInterrupt(ws, message);
             default:
@@ -109,29 +106,28 @@ export class WsAIController {
 
     // ─── Handlers ───────────────────────────────────────────────────
 
-    private async handleChat(ws: WebSocket, raw: Record<string, unknown>, workspace: string): Promise<void> {
+    private async handleChat(ws: WebSocket, raw: Record<string, unknown>, authClient: AuthenticatedClient): Promise<void> {
         const parsed = AIChatSchema.safeParse(raw);
         if (!parsed.success) {
             this.send(ws, { type: "ai:error", _id: (raw._id as number) ?? 0, error: "Invalid ai:chat message", details: parsed.error.issues });
             return;
         }
 
-        const { _id, graphKey, message, threadId, token } = parsed.data;
+        const { _id, graphKey, message, threadId } = parsed.data;
 
         if (!this.llmProvider) {
             this.send(ws, { type: "ai:error", _id, error: "AI is not configured. No LLM API key found." });
             return;
         }
 
-        // Authenticate via JWT token (falls back to provided workspace if no token)
-        let auth: { workspace: string; role: "viewer" | "editor" | "admin"; userId: string };
-        try {
-            auth = await this.authenticateToken(token, workspace);
-        } catch (err) {
-            this.send(ws, { type: "ai:error", _id, error: err instanceof Error ? err.message : "Authentication failed" });
-            return;
-        }
-        console.log(auth);
+        // Derive auth from authenticated WebSocket client
+        const workspace = authClient.workspaces[0] ?? authClient.userId;
+        const role: "viewer" | "editor" | "admin" = authClient.roles.includes("admin")
+            ? "admin"
+            : authClient.roles.includes("viewer")
+                ? "viewer"
+                : "editor";
+        const userId = authClient.userId;
 
         // Find, load (thread roaming), or create thread
         let thread: AIThread | null = null;
@@ -141,10 +137,10 @@ export class WsAIController {
             thread = await threadStore.get(threadId);
             // Try DB fallback (thread roaming from another cluster server)
             if (!thread) {
-                const dataSource = this.createDataSource(auth.workspace);
-                thread = await threadStore.loadThread(threadId, dataSource, this.llmProvider, auth.role, this.embeddingProvider);
+                const dataSource = this.createDataSource(workspace);
+                thread = await threadStore.loadThread(threadId, dataSource, this.llmProvider, role, this.embeddingProvider);
             }
-            if (thread && (thread.graphKey !== graphKey || thread.workspace !== auth.workspace)) {
+            if (thread && (thread.graphKey !== graphKey || thread.workspace !== workspace)) {
                 this.send(ws, { type: "ai:error", _id, error: "Thread does not belong to this graph/workspace" });
                 return;
             }
@@ -152,11 +148,11 @@ export class WsAIController {
 
         if (!thread) {
             const newThreadId = threadId || threadStore.generateThreadId();
-            const dataSource = this.createDataSource(auth.workspace);
+            const dataSource = this.createDataSource(workspace);
             const agent = new AIAgent({
                 graphKey,
                 dataSource,
-                role: auth.role,
+                role,
                 llmProvider: this.llmProvider,
                 embeddingProvider: this.embeddingProvider,
             });
@@ -164,8 +160,8 @@ export class WsAIController {
             thread = {
                 threadId: newThreadId,
                 graphKey,
-                workspace: auth.workspace,
-                userId: auth.userId,
+                workspace,
+                userId,
                 agent,
                 createdTime: Date.now(),
                 lastUpdatedTime: Date.now(),
@@ -197,29 +193,28 @@ export class WsAIController {
         }
     }
 
-    private async handleResume(ws: WebSocket, raw: Record<string, unknown>, workspace: string): Promise<void> {
+    private async handleResume(ws: WebSocket, raw: Record<string, unknown>, authClient: AuthenticatedClient): Promise<void> {
         const parsed = AIResumeSchema.safeParse(raw);
         if (!parsed.success) {
             this.send(ws, { type: "ai:error", _id: (raw._id as number) ?? 0, error: "Invalid ai:resume message", details: parsed.error.issues });
             return;
         }
 
-        const { _id, threadId, approved, feedback, token } = parsed.data;
+        const { _id, threadId, approved, feedback } = parsed.data;
 
-        // Authenticate via JWT token
-        let auth: { workspace: string; role: "viewer" | "editor" | "admin"; userId: string };
-        try {
-            auth = await this.authenticateToken(token, workspace);
-        } catch (err) {
-            this.send(ws, { type: "ai:error", _id, error: err instanceof Error ? err.message : "Authentication failed" });
-            return;
-        }
+        // Derive auth from authenticated WebSocket client
+        const workspace = authClient.workspaces[0] ?? authClient.userId;
+        const role: "viewer" | "editor" | "admin" = authClient.roles.includes("admin")
+            ? "admin"
+            : authClient.roles.includes("viewer")
+                ? "viewer"
+                : "editor";
 
         // Try cache, then DB (thread roaming)
         let thread = await threadStore.get(threadId);
         if (!thread && this.llmProvider) {
-            const dataSource = this.createDataSource(auth.workspace);
-            thread = await threadStore.loadThread(threadId, dataSource, this.llmProvider, auth.role, this.embeddingProvider);
+            const dataSource = this.createDataSource(workspace);
+            thread = await threadStore.loadThread(threadId, dataSource, this.llmProvider, role, this.embeddingProvider);
         }
         if (!thread) {
             this.send(ws, { type: "ai:error", _id, error: "Thread not found" });
@@ -263,45 +258,6 @@ export class WsAIController {
         for (const [sessionId, abort] of this.activeSessions) {
             abort.abort();
             this.activeSessions.delete(sessionId);
-        }
-    }
-
-    // ─── Auth ─────────────────────────────────────────────────────
-
-    /**
-     * Validate a JWT token and extract user information.
-     * Falls back to the provided workspace if no token is given.
-     */
-    private async authenticateToken(
-        token: string | undefined,
-        fallbackWorkspace: string,
-    ): Promise<{ workspace: string; role: "viewer" | "editor" | "admin"; userId: string }> {
-        if (!token) {
-            return { workspace: fallbackWorkspace, role: "editor", userId: "ws-user" };
-        }
-
-        try {
-            const authManager = AuthManager.getInstance();
-            if (!authManager.isInitialized()) {
-                return { workspace: fallbackWorkspace, role: "editor", userId: "ws-user" };
-            }
-
-            const validation = await authManager.getProvider().validateToken(token);
-            if (!validation.valid || !validation.user) {
-                throw new Error(validation.error ?? "Invalid token");
-            }
-
-            const user = validation.user;
-            const workspace = (user as any).workspace ?? user.userId ?? "default";
-            const role = user.roles?.includes("admin")
-                ? "admin" as const
-                : user.roles?.includes("viewer")
-                    ? "viewer" as const
-                    : "editor" as const;
-
-            return { workspace, role, userId: user.userId ?? user.username };
-        } catch (err) {
-            throw new Error(err instanceof Error ? err.message : "Token validation failed");
         }
     }
 

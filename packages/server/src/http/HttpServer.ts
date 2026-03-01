@@ -488,18 +488,6 @@ export class HttpServer {
         const pathname = parsedUrl.pathname || '/';
         req.query = parsedUrl.query;
 
-        // CORS headers (you can customize these)
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-        // Handle OPTIONS requests
-        if (req.method === 'OPTIONS') {
-            res.statusCode = 204;
-            res.end();
-            return;
-        }
-
         try {
             // Execute global middlewares
             const continueProcessing = await this.executeMiddlewares(this.middlewares, req, res);
@@ -654,6 +642,18 @@ export const logger = (): Middleware => {
  */
 export const rateLimit = (options: { windowMs: number; max: number }): Middleware => {
     const requests = new Map<string, { count: number; resetTime: number }>();
+
+    // Periodic cleanup of expired entries every 60s
+    const cleanupInterval = setInterval(() => {
+        const now = Date.now();
+        for (const [ip, data] of requests) {
+            if (now > data.resetTime) {
+                requests.delete(ip);
+            }
+        }
+    }, 60000);
+    // Allow process to exit without waiting for this interval
+    if (cleanupInterval.unref) cleanupInterval.unref();
 
     return (req: Request, res: Response, next: NextFunction) => {
         const ip = req.socket.remoteAddress || 'unknown';

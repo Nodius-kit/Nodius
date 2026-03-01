@@ -52,6 +52,7 @@ import {
     validateImageBuffer
 } from "../utils/image/imageValidation";
 import {processImage, resizeAndCompressImage} from "../utils/image/imageCompression";
+import {getUserWorkspace, hasWorkspaceAccess, verifyWorkspaceAccess} from "../auth/workspaceAccess";
 
 /**
  * Configure multer for memory storage (no disk writes)
@@ -207,6 +208,9 @@ export class RequestImage {
                         code: "WORKSPACE_REQUIRED",
                     });
                 }
+                const { user } = getUserWorkspace(req);
+                const uploadAccess = verifyWorkspaceAccess(user, workspace);
+                if (!uploadAccess.allowed) return res.status(403).json({ error: uploadAccess.error });
 
                 // Name is required
                 const name = req.body.name;
@@ -363,7 +367,8 @@ export class RequestImage {
         app.get("/api/image/list", async (req: Request, res: Response) => {
             try {
                 // Get authenticated user
-                const authenticatedUserId = (req as any).user?.userId;
+                const { user, workspaces } = getUserWorkspace(req);
+                const authenticatedUserId = user.userId;
 
                 // Parse query parameters
                 const filterUserId = req.query?.userId as string | undefined;
@@ -372,6 +377,12 @@ export class RequestImage {
                 const offset = parseInt(req.query?.offset as string) || 0;
                 const maxSize = req.query?.maxSize ? parseInt(req.query.maxSize as string) : undefined;
                 const quality = req.query?.quality ? Math.min(Math.max(parseInt(req.query.quality as string), 1), 100) : 85;
+
+                // If workspace filter provided, verify user has access
+                if (filterWorkspace) {
+                    const wsAccess = verifyWorkspaceAccess(user, filterWorkspace);
+                    if (!wsAccess.allowed) return res.status(403).json({ error: wsAccess.error });
+                }
 
                 // Build filter conditions
                 const filters: string[] = [];
@@ -385,6 +396,10 @@ export class RequestImage {
                 if (filterWorkspace) {
                     filters.push("FILTER doc.workspace == @workspace");
                     bindVars.workspace = filterWorkspace;
+                } else if (workspaces.length > 0) {
+                    // Filter by user's accessible workspaces
+                    filters.push("FILTER doc.workspace IN @workspaces");
+                    bindVars.workspaces = workspaces;
                 }
 
                 // If no filters provided, return images for the authenticated user
@@ -560,12 +575,11 @@ export class RequestImage {
                 // Access control: Check if user has access via userId OR workspace match
                 const hasUserIdAccess = imageDoc.userId === authenticatedUserId;
 
-                // Check workspace access: user must provide the workspace in query param
-                const requestedWorkspace = req.query?.workspace as string | undefined;
-                const hasWorkspaceAccess = requestedWorkspace &&
-                    imageDoc.workspace === requestedWorkspace;
+                // Check workspace access: user must have the image's workspace in their workspaces
+                const user = (req as any).user;
+                const hasWsAccess = user && imageDoc.workspace && hasWorkspaceAccess(user, imageDoc.workspace);
 
-                if (!hasUserIdAccess && !hasWorkspaceAccess) {
+                if (!hasUserIdAccess && !hasWsAccess) {
                     return res.status(403).json({
                         error: "Forbidden: You don't have access to this image",
                         code: "FORBIDDEN",
@@ -742,6 +756,12 @@ export class RequestImage {
                     });
                 }
 
+                // Verify workspace access
+                const patchUser = (req as any).user;
+                if (patchUser && imageDoc.workspace && !hasWorkspaceAccess(patchUser, imageDoc.workspace)) {
+                    return res.status(403).json({ error: `Access denied to workspace '${imageDoc.workspace}'`, code: "FORBIDDEN" });
+                }
+
                 // Update the image name
                 const updateQuery = aql`
                     FOR doc IN nodius_images
@@ -821,6 +841,12 @@ export class RequestImage {
                         error: "Forbidden: You can only delete your own images",
                         code: "FORBIDDEN",
                     });
+                }
+
+                // Verify workspace access
+                const deleteUser = (req as any).user;
+                if (deleteUser && imageDoc.workspace && !hasWorkspaceAccess(deleteUser, imageDoc.workspace)) {
+                    return res.status(403).json({ error: `Access denied to workspace '${imageDoc.workspace}'`, code: "FORBIDDEN" });
                 }
 
                 // Delete the image

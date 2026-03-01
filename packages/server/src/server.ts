@@ -77,6 +77,8 @@ export interface StartServerOptions {
     arangodbName?: string;
     /** JWT secret for authentication */
     jwtSecret?: string;
+    /** CORS origin (default: '*') */
+    corsOrigin?: string;
 }
 
 /**
@@ -181,7 +183,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     // Create HTTP server
     const app = new HttpServer();
     app.use(logger());
-    app.use(cors());
+    app.use(cors({ origin: options.corsOrigin || '*' }));
     app.use(rateLimit({ windowMs: 60000, max: 100 }));
 
     // Initialize authentication system
@@ -294,6 +296,7 @@ if (isMainModule) {
         arangodbPass: args.get('arangodb_pass') || undefined,
         arangodbName: args.get('arangodb_name') || undefined,
         jwtSecret: args.get('jwt_secret') || undefined,
+        corsOrigin: args.get('cors_origin') || process.env.CORS_ORIGIN || undefined,
     };
 
     startServer(options).then((server) => {

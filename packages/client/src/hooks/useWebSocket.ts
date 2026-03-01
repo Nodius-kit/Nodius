@@ -55,7 +55,7 @@
  */
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import {WSMessage, WSResponseMessage} from "@nodius/utils";
+import {WSMessage, WSResponseMessage, WSAuthenticate, WSAuthResult} from "@nodius/utils";
 
 interface WebSocketStats {
     messageRate: number; // messages per second
@@ -190,26 +190,20 @@ export const useWebSocket = (
             urlRef.current = url;
 
             const connectStartTime = Date.now();
+            let authenticated = false;
 
             ws.onopen = () => {
-                const latency = Date.now() - connectStartTime;
-                setConnectionState('connected');
-                reconnectAttemptsRef.current = 0;
-
-                setStats(prev => ({ ...prev, latency }));
-
-                pendingConnectResolversRef.current.forEach(({ resolve }) => resolve(true));
-                pendingConnectResolversRef.current = [];
-
-                // Send ping to measure latency periodically
-                const pingInterval = setInterval(() => {
-                    if (ws.readyState === WebSocket.OPEN) {
-                        pingStartTimeRef.current = Date.now();
-                        ws.send(JSON.stringify({ type: '__ping__' }));
-                    } else {
-                        clearInterval(pingInterval);
-                    }
-                }, 5000);
+                // Send authentication message immediately on open
+                const token = localStorage.getItem("authToken");
+                if (token) {
+                    ws.send(JSON.stringify({ type: "authenticate", token } as WSAuthenticate));
+                } else {
+                    // No token - close connection
+                    console.error('No auth token available for WebSocket authentication');
+                    pendingConnectResolversRef.current.forEach(({ resolve }) => resolve(false));
+                    pendingConnectResolversRef.current = [];
+                    ws.close();
+                }
             };
 
             ws.onmessage = async (event) => {
@@ -225,6 +219,37 @@ export const useWebSocket = (
                 bytesCountRef.current += dataSize;
 
                 const data = JSON.parse(event.data) as WSMessage<any>;
+
+                // Handle auth result before any other messages
+                if (!authenticated && data.type === "authResult") {
+                    const authResult = data as unknown as WSAuthResult;
+                    if (authResult.success) {
+                        authenticated = true;
+                        const latency = Date.now() - connectStartTime;
+                        setConnectionState('connected');
+                        reconnectAttemptsRef.current = 0;
+                        setStats(prev => ({ ...prev, latency }));
+
+                        pendingConnectResolversRef.current.forEach(({ resolve }) => resolve(true));
+                        pendingConnectResolversRef.current = [];
+
+                        // Send ping to measure latency periodically
+                        const pingInterval = setInterval(() => {
+                            if (ws.readyState === WebSocket.OPEN) {
+                                pingStartTimeRef.current = Date.now();
+                                ws.send(JSON.stringify({ type: '__ping__' }));
+                            } else {
+                                clearInterval(pingInterval);
+                            }
+                        }, 5000);
+                    } else {
+                        console.error('WebSocket authentication failed:', authResult.error);
+                        pendingConnectResolversRef.current.forEach(({ resolve }) => resolve(false));
+                        pendingConnectResolversRef.current = [];
+                    }
+                    return;
+                }
+
                 if(data._id) {
                     messageReponseRef.current[data._id]?.(data);
                 } else {

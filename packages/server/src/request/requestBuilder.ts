@@ -35,6 +35,7 @@ import {aql} from "arangojs";
 import escapeHTML from "escape-html";
 import {db} from "../server";
 import {api_builder_components, HtmlBuilderComponent} from "@nodius/utils";
+import {getUserWorkspace} from "../auth/workspaceAccess";
 
 export class RequestBuilder {
 
@@ -43,15 +44,19 @@ export class RequestBuilder {
         const class_collection:DocumentCollection = await ensureCollection("nodius_html_class");
 
         app.post("/api/builder/components", async (req: Request, res: Response) => {
-            const body: api_builder_components = req.body;
-            if(!body.workspace) {
-                res.status(500).end();
-                return;
-            }
+            const { user, workspaces } = getUserWorkspace(req);
 
-            let query = aql`
+            let query = workspaces.length > 0 ? aql`
                 FOR doc IN nodius_builder_component
-                FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                FILTER doc.workspace IN ${workspaces}
+                LET htmlClass = FIRST(
+                  FOR obj IN nodius_html_class
+                    FILTER obj._key == doc.htmlKeyLinked
+                    RETURN obj
+                )
+                RETURN MERGE(doc, { object: htmlClass.object })
+            ` : aql`
+                FOR doc IN nodius_builder_component
                 LET htmlClass = FIRST(
                   FOR obj IN nodius_html_class
                     FILTER obj._key == doc.htmlKeyLinked

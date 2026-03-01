@@ -43,6 +43,7 @@ import {
 import {aql} from "arangojs";
 import {db} from "../server";
 import escapeHTML from 'escape-html';
+import {getUserWorkspace, verifyWorkspaceAccess} from "../auth/workspaceAccess";
 
 export class RequestCategory {
     public static init = async (app: HttpServer) => {
@@ -50,18 +51,22 @@ export class RequestCategory {
 
         app.post("/api/category/list", async (req: Request, res: Response) => {
             const body: api_category_list = req.body;
-            if (!body.workspace) {
-                res.status(500).end();
-                return;
-            }
+            const { user, workspaces } = getUserWorkspace(req);
 
             // Determine collection based on type (default to workflow for backwards compatibility)
             const type = body.type || "workflow";
 
-            let query = aql`
+            let query = workspaces.length > 0 ? aql`
                 FOR doc IN ${category_collection}
-                FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                FILTER doc.workspace IN ${workspaces}
                 AND doc.type == ${escapeHTML(type)}
+                RETURN {
+                    _key: doc._key,
+                    category: doc.category
+                }
+            ` : aql`
+                FOR doc IN ${category_collection}
+                FILTER doc.type == ${escapeHTML(type)}
                 RETURN {
                     _key: doc._key,
                     category: doc.category
@@ -74,8 +79,24 @@ export class RequestCategory {
 
         app.post("/api/category/delete", async (req: Request, res: Response) => {
             const body: api_category_delete = req.body;
+            const { user } = getUserWorkspace(req);
 
             const categoryKey = escapeHTML(body._key);
+
+            // Fetch category first to verify workspace access
+            const fetchCursor = await db.query(aql`
+              FOR c IN ${category_collection}
+                FILTER c._key == ${categoryKey}
+                LIMIT 1
+                RETURN c
+            `);
+            const existing = await fetchCursor.next();
+            if (!existing) {
+                return res.status(404).json({error: "Category not found"});
+            }
+
+            const access = verifyWorkspaceAccess(user, existing.workspace);
+            if (!access.allowed) return res.status(403).json({ error: access.error });
 
             // Delete matching category by _key
             const cursor = await db.query(aql`
@@ -86,18 +107,15 @@ export class RequestCategory {
             `);
 
             const deleted = await cursor.next();
-            if (!deleted) {
-                return res.status(404).json({error: "Category not found"});
-            }
             return res.status(200).json({success: true, deleted});
         });
 
         app.post("/api/category/rename", async (req: Request, res: Response) => {
             const body: api_category_rename = req.body;
+            const { user } = getUserWorkspace(req);
 
             const categoryKey = escapeHTML(body._key);
             const newName = escapeHTML(body.newName);
-            const workspace = escapeHTML(body.workspace);
 
             // Check if the category exists
             const checkCursor = await db.query(aql`
@@ -111,10 +129,13 @@ export class RequestCategory {
                 return res.status(404).json({error: "Category not found"});
             }
 
+            const access = verifyWorkspaceAccess(user, existingCategory.workspace);
+            if (!access.allowed) return res.status(403).json({ error: access.error });
+
             // Check if new name already exists in this workspace and type
             const duplicateCursor = await db.query(aql`
               FOR c IN ${category_collection}
-                FILTER c.workspace == ${workspace}
+                FILTER c.workspace == ${existingCategory.workspace}
                 AND c.category == ${newName}
                 AND c.type == ${existingCategory.type}
                 AND c._key != ${categoryKey}
@@ -141,6 +162,10 @@ export class RequestCategory {
 
         app.post("/api/category/create", async (req: Request, res: Response) => {
             const body: api_category_create = req.body;
+            const { user } = getUserWorkspace(req);
+            if (!body.workspace) return res.status(400).json({ error: "Missing workspace" });
+            const access = verifyWorkspaceAccess(user, body.workspace);
+            if (!access.allowed) return res.status(403).json({ error: access.error });
 
             // Sanitize inputs
             const workspace = escapeHTML(body.workspace);

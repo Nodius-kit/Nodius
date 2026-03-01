@@ -58,6 +58,7 @@ import {
 import {aql} from "arangojs";
 import {db} from "../server";
 import escapeHTML from 'escape-html';
+import {getUserWorkspace, verifyWorkspaceAccess} from "../auth/workspaceAccess";
 
 export class RequestNodeConfig {
 
@@ -73,26 +74,32 @@ export class RequestNodeConfig {
         app.post("/api/nodeconfig/list", async (req: Request, res: Response) => {
             try {
                 const body: api_node_config_list = req.body;
+                const { user, workspaces } = getUserWorkspace(req);
 
-                if (!body.workspace) {
-                    return res.status(400).json({error: "Missing workspace field"});
+                let filters: ReturnType<typeof aql>[] = [];
+
+                // also return "root" workspace, static entry
+                workspaces.push("root");
+
+                if (workspaces.length > 0) {
+                    filters.push(aql`doc.workspace IN ${workspaces}`);
                 }
-
-                let filters = [aql`doc.workspace == ${escapeHTML(body.workspace)}`];
 
                 // Add category filter if provided
                 if (body.category) {
                     filters.push(aql`doc.category == ${escapeHTML(body.category)}`);
                 }
 
-                let combinedFilter = filters.reduce(
-                    (acc, cond) => (acc ? aql`${acc} AND ${cond}` : cond),
-                    null as any
-                );
+                let combinedFilter = filters.length > 0
+                    ? filters.reduce((acc, cond) => (acc ? aql`${acc} AND ${cond}` : cond), null as any)
+                    : null;
 
-                const query = aql`
+                const query = combinedFilter ? aql`
                   FOR doc IN nodius_node_config
                   FILTER ${combinedFilter}
+                  RETURN doc
+                ` : aql`
+                  FOR doc IN nodius_node_config
                   RETURN doc
                 `;
 
@@ -118,14 +125,20 @@ export class RequestNodeConfig {
             try {
                 const body: api_node_config_get = req.body;
 
-                if (!body.workspace || !body._key) {
+                if (!body._key) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
+                const { user, workspaces } = getUserWorkspace(req);
 
-                const query = aql`
+                const query = workspaces.length > 0 ? aql`
                   FOR doc IN nodius_node_config
                   FILTER doc._key == ${escapeHTML(body._key)}
-                    AND doc.workspace == ${escapeHTML(body.workspace)}
+                    AND doc.workspace IN ${workspaces}
+                  LIMIT 1
+                  RETURN doc
+                ` : aql`
+                  FOR doc IN nodius_node_config
+                  FILTER doc._key == ${escapeHTML(body._key)}
                   LIMIT 1
                   RETURN doc
                 `;
@@ -156,6 +169,9 @@ export class RequestNodeConfig {
                 if (!body.nodeConfig || !body.nodeConfig.workspace) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
+                const { user } = getUserWorkspace(req);
+                const createAccess = verifyWorkspaceAccess(user, body.nodeConfig.workspace);
+                if (!createAccess.allowed) return res.status(403).json({ error: createAccess.error });
 
                 if (!body.nodeConfig.displayName || !body.nodeConfig.category) {
                     return res.status(400).json({error: "Missing displayName or category in nodeConfig"});
@@ -205,7 +221,7 @@ export class RequestNodeConfig {
                 const body: api_node_config_update = req.body;
 
                 // Basic validation
-                if (!body.nodeConfig || !body.nodeConfig._key || !body.nodeConfig.workspace) {
+                if (!body.nodeConfig || !body.nodeConfig._key) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
 
@@ -213,11 +229,12 @@ export class RequestNodeConfig {
                     return res.status(400).json({error: "Missing displayName or category in nodeConfig"});
                 }
 
-                // Ensure the document exists in the workspace
+                const { user } = getUserWorkspace(req);
+
+                // Fetch existing document by _key only
                 const existsQuery = aql`
                   FOR doc IN nodius_node_config
                   FILTER doc._key == ${escapeHTML(body.nodeConfig._key)}
-                    AND doc.workspace == ${escapeHTML(body.nodeConfig.workspace)}
                   LIMIT 1
                   RETURN doc
                 `;
@@ -225,14 +242,17 @@ export class RequestNodeConfig {
                 const existing = await existsCursor.next();
 
                 if (!existing) {
-                    return res.status(404).json({error: "Node config not found in this workspace"});
+                    return res.status(404).json({error: "Node config not found"});
                 }
+
+                const updateAccess = verifyWorkspaceAccess(user, existing.workspace);
+                if (!updateAccess.allowed) return res.status(403).json({ error: updateAccess.error });
 
                 // Check if displayName is being changed and conflicts with another doc
                 if (existing.displayName !== body.nodeConfig.displayName) {
                     const conflictQuery = aql`
                       FOR doc IN nodius_node_config
-                      FILTER doc.workspace == ${escapeHTML(body.nodeConfig.workspace)}
+                      FILTER doc.workspace == ${existing.workspace}
                         AND doc.displayName == ${escapeHTML(body.nodeConfig.displayName)}
                         AND doc._key != ${escapeHTML(body.nodeConfig._key)}
                       LIMIT 1
@@ -247,8 +267,10 @@ export class RequestNodeConfig {
                 }
 
                 // Replace (overwrites all fields except system ones)
+                // Force workspace to match existing doc
                 const updatedConfig = {
                     ...safeArangoObject(body.nodeConfig),
+                    workspace: existing.workspace,
                     lastUpdatedTime: Date.now(),
                 };
                 const meta = await nodeConfig_collection.replace(body.nodeConfig._key, updatedConfig);
@@ -265,18 +287,19 @@ export class RequestNodeConfig {
          */
         app.post("/api/nodeconfig/icon", async (req: Request, res: Response) => {
             try {
-                const body = req.body as { workspace: string; _key: string; newIcon: string };
+                const body = req.body as { _key: string; newIcon: string };
 
                 // Basic validation
-                if (!body._key || !body.workspace || !body.newIcon) {
+                if (!body._key || !body.newIcon) {
                     return res.status(400).json({ error: "Missing required fields" });
                 }
 
-                // Check if document exists in workspace
+                const { user } = getUserWorkspace(req);
+
+                // Fetch document by _key only
                 const existsQuery = aql`
                   FOR doc IN nodius_node_config
                   FILTER doc._key == ${escapeHTML(body._key)}
-                    AND doc.workspace == ${escapeHTML(body.workspace)}
                   LIMIT 1
                   RETURN doc
                 `;
@@ -284,8 +307,11 @@ export class RequestNodeConfig {
                 const existing = await existsCursor.next();
 
                 if (!existing) {
-                    return res.status(404).json({ error: "Node config not found in this workspace" });
+                    return res.status(404).json({ error: "Node config not found" });
                 }
+
+                const iconAccess = verifyWorkspaceAccess(user, existing.workspace);
+                if (!iconAccess.allowed) return res.status(403).json({ error: iconAccess.error });
 
                 // Update the icon
                 await nodeConfig_collection.update(body._key, {
@@ -305,18 +331,19 @@ export class RequestNodeConfig {
          */
         app.post("/api/nodeconfig/rename", async (req: Request, res: Response) => {
             try {
-                const body = req.body as { workspace: string; _key: string; newDisplayName: string };
+                const body = req.body as { _key: string; newDisplayName: string };
 
                 // Basic validation
-                if (!body._key || !body.workspace || !body.newDisplayName) {
+                if (!body._key || !body.newDisplayName) {
                     return res.status(400).json({ error: "Missing required fields" });
                 }
 
-                // Check if document exists in workspace
+                const { user } = getUserWorkspace(req);
+
+                // Fetch document by _key only
                 const existsQuery = aql`
                   FOR doc IN nodius_node_config
                   FILTER doc._key == ${escapeHTML(body._key)}
-                    AND doc.workspace == ${escapeHTML(body.workspace)}
                   LIMIT 1
                   RETURN doc
                 `;
@@ -324,13 +351,16 @@ export class RequestNodeConfig {
                 const existing = await existsCursor.next();
 
                 if (!existing) {
-                    return res.status(404).json({ error: "Node config not found in this workspace" });
+                    return res.status(404).json({ error: "Node config not found" });
                 }
+
+                const renameAccess = verifyWorkspaceAccess(user, existing.workspace);
+                if (!renameAccess.allowed) return res.status(403).json({ error: renameAccess.error });
 
                 // Check if new displayName conflicts with another node config
                 const conflictQuery = aql`
                   FOR doc IN nodius_node_config
-                  FILTER doc.workspace == ${escapeHTML(body.workspace)}
+                  FILTER doc.workspace == ${existing.workspace}
                     AND doc.displayName == ${escapeHTML(body.newDisplayName)}
                     AND doc._key != ${escapeHTML(body._key)}
                   LIMIT 1
@@ -364,15 +394,16 @@ export class RequestNodeConfig {
                 const body: api_node_config_delete = req.body;
 
                 // Basic validation
-                if (!body._key || !body.workspace) {
+                if (!body._key) {
                     return res.status(400).json({error: "Missing required fields"});
                 }
 
-                // Check if document exists in workspace
+                const { user } = getUserWorkspace(req);
+
+                // Fetch document by _key to verify workspace access
                 const existsQuery = aql`
                   FOR doc IN nodius_node_config
                   FILTER doc._key == ${escapeHTML(body._key)}
-                    AND doc.workspace == ${escapeHTML(body.workspace)}
                   LIMIT 1
                   RETURN doc
                 `;
@@ -380,8 +411,11 @@ export class RequestNodeConfig {
                 const existing = await existsCursor.next();
 
                 if (!existing) {
-                    return res.status(404).json({error: "Node config not found in this workspace"});
+                    return res.status(404).json({error: "Node config not found"});
                 }
+
+                const deleteAccess = verifyWorkspaceAccess(user, existing.workspace);
+                if (!deleteAccess.allowed) return res.status(403).json({ error: deleteAccess.error });
 
                 // Delete the document
                 await nodeConfig_collection.remove(body._key);

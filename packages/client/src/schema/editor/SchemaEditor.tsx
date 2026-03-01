@@ -90,9 +90,7 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                workspace: "root",
-            }),
+            body: JSON.stringify({}),
         });
 
         if(response.status === 200) {
@@ -128,9 +126,7 @@ export const SchemaEditor = memo(({}:AppMenuProps) => {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    workspace: "root",
-                }),
+                body: JSON.stringify({}),
             });
 
             if(response.status === 200) {

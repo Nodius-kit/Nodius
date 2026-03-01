@@ -25,15 +25,18 @@
  * - Me: GET with Authorization header → { success: boolean, user?: UserInfo }
  */
 
-import { HttpServer } from "../http/HttpServer";
+import { HttpServer, rateLimit } from "../http/HttpServer";
 import { AuthManager } from "../auth/AuthManager";
 
 export class RequestAuth {
     public static init = async (app: HttpServer) => {
         const authManager = AuthManager.getInstance();
 
+        // Rate limit login: 10 attempts per minute per IP
+        const loginRateLimit = rateLimit({ windowMs: 60000, max: 10 });
+
         // POST /api/auth/login - Authenticate user
-        app.post("/api/auth/login", authManager.loginHandler());
+        app.post("/api/auth/login", loginRateLimit, authManager.loginHandler());
 
         // POST /api/auth/logout - Logout user
         app.post("/api/auth/logout", authManager.logoutHandler());

@@ -39,6 +39,7 @@ import {
     WSRegisterUserOnGraph, WSRegisterUserOnNodeConfig,
     WSResponseMessage, WSCreateSheet, WSRenameSheet, WSDeleteSheet,
     WSSaveStatus, WSForceSave, WSToggleAutoSave,
+    WSAuthenticate, WSAuthResult,
     Edge, GraphHistory, GraphHistoryBase, Node, NodeTypeConfig,
     edgeArrayToMap, findEdgeByKey, nodeArrayToMap,
     applyInstruction,
@@ -55,6 +56,8 @@ import {RequestWorkFlow} from "../request/requestWorkFlow";
 import {WsAIController} from "../ai/wsAIController";
 import {createNodeEmbeddingText, hasNodeContentChanged} from "../ai/utils";
 import {detectEmbeddingProvider, type EmbeddingProvider} from "../ai/providers/embeddingProvider";
+import {AuthManager} from "../auth/AuthManager";
+import {hasWorkspaceAccess} from "../auth/workspaceAccess";
 
 import {createUniqueToken, ensureCollection} from "../utils/arangoUtils";
 import {aql} from "arangojs";
@@ -96,6 +99,14 @@ interface ManagedNodeConfig { // management of editing/creating node config
     hasUnsavedChanges: boolean
 }
 
+export interface AuthenticatedClient {
+    userId: string;
+    username: string;
+    workspaces: string[];
+    roles: string[];
+    authenticatedAt: number;
+}
+
 export interface WebSocketManagerOptions {
     /** Port number for standalone WebSocket server (when not using HTTPS server) */
     port?: number;
@@ -110,10 +121,12 @@ export interface WebSocketManagerOptions {
 export class WebSocketManager {
     private wss: WebSocketServer;
     private clients: Set<WebSocket> = new Set(); // Set to store connected clients
+    private authenticatedClients: Map<WebSocket, AuthenticatedClient> = new Map();
 
     private uniqueIdGenerator:Record<string, number> = {};
     private usedIds:Record<string, Set<string>> = {}; // Track all IDs that have ever been used
     private managedGraph:Record<string, Record<string, ManagedSheet>> = {}
+    private managedGraphWorkspace:Record<string, string> = {} // graphKey -> workspace
     private managedNodeConfig:Record<string, ManagedNodeConfig> = {}
 
     private intervalCleaning:NodeJS.Timeout|undefined;
@@ -179,14 +192,46 @@ export class WebSocketManager {
             this.clients.add(ws); // Add new client to the set
             console.log('WS: New client connected');
 
+            // 15-second auth timeout
+            const authTimeout = setTimeout(() => {
+                if (!this.authenticatedClients.has(ws)) {
+                    this.sendMessage(ws, {
+                        type: "authResult",
+                        success: false,
+                        error: "Authentication timeout"
+                    } as WSAuthResult);
+                    ws.close(4002, "Authentication timeout");
+                }
+            }, 15000);
+
             // Handle incoming messages
             ws.on('message', (message: string) => {
+                // If not authenticated, only accept authenticate messages
+                if (!this.authenticatedClients.has(ws)) {
+                    try {
+                        const data = JSON.parse(message as string);
+                        if (data.type === "authenticate") {
+                            this.handleAuthenticate(ws, data, authTimeout);
+                        } else {
+                            this.sendMessage(ws, {
+                                type: "authResult",
+                                success: false,
+                                error: "Not authenticated. Send authenticate message first."
+                            } as WSAuthResult);
+                        }
+                    } catch {
+                        this.sendMessage(ws, { error: 'Invalid JSON' });
+                    }
+                    return;
+                }
                 this.handleIncomingMessage(ws, message);
             });
 
             // Handle client disconnection
             ws.on('close', () => {
+                clearTimeout(authTimeout);
                 this.clients.delete(ws);
+                this.authenticatedClients.delete(ws);
                 // Abort any active AI streaming sessions for this client
                 this.aiController.onClientDisconnect(ws);
                 console.log('WS: Client disconnected');
@@ -244,6 +289,81 @@ export class WebSocketManager {
         return undefined;
     }
 
+    /**
+     * Get the authenticated user for a WebSocket connection
+     */
+    public getAuthenticatedUser(ws: WebSocket): AuthenticatedClient | undefined {
+        return this.authenticatedClients.get(ws);
+    }
+
+    /**
+     * Handle WebSocket authentication
+     */
+    private async handleAuthenticate(ws: WebSocket, data: WSAuthenticate, authTimeout: NodeJS.Timeout): Promise<void> {
+        try {
+            const authManager = AuthManager.getInstance();
+            if (!authManager.isInitialized()) {
+                // No auth configured - allow all connections with default identity
+                clearTimeout(authTimeout);
+                const client: AuthenticatedClient = {
+                    userId: "anonymous",
+                    username: "Anonymous",
+                    workspaces: [],
+                    roles: ["editor"],
+                    authenticatedAt: Date.now()
+                };
+                this.authenticatedClients.set(ws, client);
+                this.sendMessage(ws, {
+                    type: "authResult",
+                    success: true,
+                    userId: client.userId,
+                    username: client.username,
+                    workspaces: client.workspaces
+                } as WSAuthResult);
+                return;
+            }
+
+            const validation = await authManager.getProvider().validateToken(data.token);
+
+            if (!validation.valid || !validation.user) {
+                this.sendMessage(ws, {
+                    type: "authResult",
+                    success: false,
+                    error: validation.error ?? "Invalid token"
+                } as WSAuthResult);
+                ws.close(4001, "Authentication failed");
+                return;
+            }
+
+            clearTimeout(authTimeout);
+            const user = validation.user;
+            const client: AuthenticatedClient = {
+                userId: user.userId ?? user.username,
+                username: user.username,
+                workspaces: user.workspaces ?? [user.userId ?? user.username],
+                roles: user.roles ?? ["editor"],
+                authenticatedAt: Date.now()
+            };
+            this.authenticatedClients.set(ws, client);
+
+            this.sendMessage(ws, {
+                type: "authResult",
+                success: true,
+                userId: client.userId,
+                username: client.username,
+                workspaces: client.workspaces
+            } as WSAuthResult);
+            console.log(`WS: Client authenticated as ${client.username} (${client.userId})`);
+        } catch (error) {
+            this.sendMessage(ws, {
+                type: "authResult",
+                success: false,
+                error: "Authentication error"
+            } as WSAuthResult);
+            ws.close(4001, "Authentication error");
+        }
+    }
+
     private deleteUserOnGraph = (userId: string, options?: Partial<{ graphKey:string, advertUser: boolean }>) => {
         // Iterate directly over graph entries to get ID and Data simultaneously
         for (const [graphId, sheets] of Object.entries(this.managedGraph)) {
@@ -261,7 +381,6 @@ export class WebSocketManager {
                         const message: WSMessage<WSDisconnedUserOnGraph> = {
                             type: "disconnedUserOnGraph",
                             graphKey: graphId,
-                            userId: userId
                         };
 
                         this.sendMessage(user.ws, message);
@@ -288,7 +407,6 @@ export class WebSocketManager {
                     const message: WSMessage<WSDisconnectUserOnNodeConfig> = {
                         type: "disconnectUserOnNodeConfig",
                         nodeConfigKey: nodeConfigId,
-                        userId: userId
                     };
 
                     this.sendMessage(user.ws, message);
@@ -324,6 +442,7 @@ export class WebSocketManager {
 
                 // nobody in this graph, delete it
                 delete this.managedGraph[graphId];
+                delete this.managedGraphWorkspace[graphId];
                 await clusterManager.removeGraphPeer(graphId);
             }
         }
@@ -406,6 +525,9 @@ export class WebSocketManager {
         if (!graph) {
             throw new Error(`Graph with key ${graphKey} not found`);
         }
+
+        // Store workspace for access control
+        this.managedGraphWorkspace[graphKey] = graph.workspace;
 
         let hasInvalidEdges = false;
 
@@ -579,9 +701,6 @@ export class WebSocketManager {
     private async handleIncomingMessage(ws: WebSocket, message: string): Promise<void> {
         try {
             const jsonData = JSON.parse(message) as WSMessage<any>;
-            console.log('Received JSON message:');
-            console.dir(jsonData, {depth:null});
-            console.log("----------------");
 
             const messageId = (jsonData as WSMessage<any>)._id;
 
@@ -607,7 +726,8 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "registerUserOnGraph") {
                 const message:WSMessage<WSRegisterUserOnGraph> = jsonData;
-                //this.deleteUserOnGraph(message.userId, { advertUser: true });
+                const authClient = this.authenticatedClients.get(ws);
+                if(!authClient) { ws.close(4001, "Not authenticated"); return; }
 
                 const peer = clusterManager.getInstancehPeerId("graph-"+message.graphKey);
                 if(!peer || peer != "self") {
@@ -618,9 +738,17 @@ export class WebSocketManager {
                     await this.initGraph(message.graphKey);
                 }
 
+                // Verify workspace access
+                const graphWorkspace = this.managedGraphWorkspace[message.graphKey];
+                if (graphWorkspace && !hasWorkspaceAccess({ workspaces: authClient.workspaces } as any, graphWorkspace)) {
+                    if(messageId) return this.sendMessage(ws, { _id:messageId, _response: { status:false, message: "Access denied to this graph's workspace" } } as WSMessage<WSResponseMessage<unknown>>);
+                    ws.close(4003, "Workspace access denied");
+                    return;
+                }
+
                 this.managedGraph[message.graphKey][message.sheetId].user.push({
                     name: message.name,
-                    id: message.userId,
+                    id: authClient.userId,
                     lastPing: Date.now(),
                     ws: ws
                 });
@@ -636,11 +764,14 @@ export class WebSocketManager {
 
             } else if(jsonData.type === "disconnedUserOnGraph") {
                 const message:WSMessage<WSDisconnedUserOnGraph> = jsonData;
-                this.deleteUserOnGraph(message.userId, {graphKey:message.graphKey});
+                const authClient = this.authenticatedClients.get(ws);
+                if(!authClient) { ws.close(4001, "Not authenticated"); return; }
+                this.deleteUserOnGraph(authClient.userId, {graphKey:message.graphKey});
                 return;
             } else if(jsonData.type === "registerUserOnNodeConfig") {
                 const message:WSMessage<WSRegisterUserOnNodeConfig> = jsonData;
-                //this.deleteUserOnNodeConfig(message.userId, { advertUser: true });
+                const authClient = this.authenticatedClients.get(ws);
+                if(!authClient) { ws.close(4001, "Not authenticated"); return; }
 
                 const peer = clusterManager.getInstancehPeerId("nodeConfig-"+message.nodeConfigKey);
                 if(!peer || peer != "self") {
@@ -664,7 +795,7 @@ export class WebSocketManager {
                 // Add user to the node config
                 this.managedNodeConfig[message.nodeConfigKey].user.push({
                     name: message.name,
-                    id: message.userId,
+                    id: authClient.userId,
                     lastPing: Date.now(),
                     ws: ws
                 });
@@ -684,7 +815,9 @@ export class WebSocketManager {
                 return;
             } else if(jsonData.type === "disconnectUserOnNodeConfig") {
                 const message:WSMessage<WSDisconnectUserOnNodeConfig> = jsonData;
-                this.deleteUserOnNodeConfig(message.userId, {
+                const authClient = this.authenticatedClients.get(ws);
+                if(!authClient) { ws.close(4001, "Not authenticated"); return; }
+                this.deleteUserOnNodeConfig(authClient.userId, {
                     nodeConfigId: message.nodeConfigKey
                 });
                 return;
@@ -1728,7 +1861,9 @@ export class WebSocketManager {
                     return;
                 }
             } else if(this.aiController.canHandle(jsonData.type)) {
-                await this.aiController.handle(ws, jsonData, "default");
+                const authClient = this.authenticatedClients.get(ws);
+                if(!authClient) { ws.close(4001, "Not authenticated"); return; }
+                await this.aiController.handle(ws, jsonData, authClient);
                 return;
             } else if(jsonData.type === "toggleAutoSave") {
                 // CAS 1: Graph User

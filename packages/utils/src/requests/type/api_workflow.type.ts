@@ -20,7 +20,7 @@ import {HtmlClass, HtmlObject} from "../../html/htmlType";
 import {graphMetaData} from "../../graph/graphType";
 
 export interface api_category_list {
-    workspace: string;
+    workspace?: string;
     type: "workflow" | "nodeconfig" | "graph"
 }
 
@@ -31,12 +31,10 @@ export interface api_category_create {
 }
 
 export interface api_category_delete {
-    workspace: string;
     _key: string;
 }
 
 export interface api_category_rename {
-    workspace: string;
     _key: string;
     newName: string;
 }
@@ -57,7 +55,7 @@ export interface api_graph_delete {
 }
 
 export interface api_graph_html {
-    workspace: string;
+    workspace?: string;
     retrieveHtml?: {
         token?: string,
         buildGraph?:boolean,

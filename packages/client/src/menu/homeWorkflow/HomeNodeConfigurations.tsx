@@ -416,7 +416,6 @@ export const HomeNodeConfigurations = memo(({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     _key: nodeConfigKey,
                     newDisplayName: newName
                 }),
@@ -454,7 +453,6 @@ export const HomeNodeConfigurations = memo(({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     _key: nodeConfigKey
                 }),
             });
@@ -515,7 +513,6 @@ export const HomeNodeConfigurations = memo(({
                             "Content-Type": "application/json",
                         },
                         body: JSON.stringify({
-                            workspace: "root",
                             _key: nodeConfig._key,
                             newIcon: iconName
                         }),

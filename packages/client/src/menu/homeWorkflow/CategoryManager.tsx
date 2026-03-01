@@ -264,7 +264,6 @@ export const CategoryManager = memo(({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     _key: categoryKey
                 } as api_category_delete)
             });
@@ -308,7 +307,6 @@ export const CategoryManager = memo(({
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    workspace: "root",
                     _key: categoryKey,
                     newName: newName.trim()
                 } as api_category_rename)

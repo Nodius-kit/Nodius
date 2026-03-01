@@ -27,8 +27,6 @@ export interface AIChatMessage {
 export interface UseAIChatOptions {
     graphKey: string;
     serverInfo: api_sync_info | null;
-    /** JWT token for authenticating AI messages. */
-    token?: string | null;
     autoConnect?: boolean;
 }
 
@@ -51,7 +49,7 @@ const FLUSH_INTERVAL_MS = 32;
 // ─── Hook ───────────────────────────────────────────────────────────
 
 export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
-    const { graphKey, serverInfo, token = null, autoConnect = false } = options;
+    const { graphKey, serverInfo, autoConnect = false } = options;
 
     // ── State ───────────────────────────────────────────────────────
     const [messages, setMessages] = useState<AIChatMessage[]>([]);
@@ -219,9 +217,17 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         const url = `${protocol}://${serverInfo.host}:${serverInfo.port}${path}`;
 
         const ws = new WebSocket(url);
+        let authenticated = false;
 
         ws.addEventListener("open", () => {
-            setIsConnected(true);
+            // Send authentication message immediately
+            const token = localStorage.getItem("authToken");
+            if (token) {
+                ws.send(JSON.stringify({ type: "authenticate", token }));
+            } else {
+                console.error('No auth token available for AI WebSocket authentication');
+                ws.close();
+            }
         });
 
         ws.addEventListener("close", () => {
@@ -237,6 +243,17 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         ws.addEventListener("message", (event) => {
             try {
                 const data = JSON.parse(event.data as string);
+                // Handle auth result before other messages
+                if (!authenticated && data.type === "authResult") {
+                    if (data.success) {
+                        authenticated = true;
+                        setIsConnected(true);
+                    } else {
+                        console.error('AI WebSocket authentication failed:', data.error);
+                        ws.close();
+                    }
+                    return;
+                }
                 handleMessage(data);
             } catch {
                 // Ignore non-JSON messages
@@ -295,9 +312,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             graphKey,
             message: text,
             threadId: threadIdRef.current ?? undefined,
-            ...(token ? { token } : {}),
         }));
-    }, [graphKey, token]);
+    }, [graphKey]);
 
     // ── Resume (HITL approve/reject) ────────────────────────────────
 
@@ -321,9 +337,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             threadId: resumeThreadId,
             approved,
             feedback,
-            ...(token ? { token } : {}),
         }));
-    }, [token]);
+    }, []);
 
     // ── Stop generation ─────────────────────────────────────────────
 
@@ -335,7 +350,6 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             type: "ai:interrupt",
             _id: requestIdRef.current,
             threadId: threadIdRef.current ?? "",
-            ...(token ? { token } : {}),
         }));
 
         // Flush remaining tokens and stop streaming
