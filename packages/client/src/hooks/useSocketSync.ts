@@ -40,7 +40,7 @@ import {
     BeforeApplyInstructionWithContext, getInverseInstruction
 } from "@nodius/utils";
 import {DataTypeClass, EnumClass} from "@nodius/utils";
-import {api_node_config_get} from "@nodius/utils";
+import {api_node_config_get, api_node_config_get_batch} from "@nodius/utils";
 import {deepCopy} from "@nodius/utils";
 import {triggerNodeUpdateOption} from "../schema/SchemaDisplay";
 import {modalManager} from "@nodius/process";
@@ -102,13 +102,92 @@ export const useSocketSync = () => {
 
     const htmlRender = useRef<Map<string, htmlRenderContext[]>>(new Map());
 
-    /* ---------------------------- MISSING NODE CONFIG QUEUE SYSTEM ------------------------- */
+    /* ---------------------------- MISSING NODE CONFIG BATCH SYSTEM ------------------------- */
     const fetchingNodeConfigs = useRef<Set<string>>(new Set());
-    const fetchNodeConfigAbortControllers = useRef<Map<string, AbortController>>(new Map());
     const fetchErroredConfigs = useRef<Set<string>>(new Set());
+    const pendingBatchQueue = useRef<Map<string, { workspace: string, resolve: (v: NodeTypeConfig | undefined) => void }>>(new Map());
+    const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const batchAbortController = useRef<AbortController | null>(null);
+
+    const executeBatch = useCallback(async () => {
+        const batch = new Map(pendingBatchQueue.current);
+        pendingBatchQueue.current.clear();
+
+        if (batch.size === 0) return;
+
+        const keys = Array.from(batch.keys());
+        // Use workspace from first entry (all come from same graph)
+        const workspace = batch.values().next().value!.workspace;
+
+        // Cancel previous batch if still in flight
+        if (batchAbortController.current) {
+            batchAbortController.current.abort();
+        }
+        const abortController = new AbortController();
+        batchAbortController.current = abortController;
+
+        try {
+            const response = await fetch('/api/nodeconfig/get-batch', {
+                method: "POST",
+                signal: abortController.signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    _keys: keys,
+                    workspace: workspace
+                } as api_node_config_get_batch),
+            });
+
+            if (response.status === 200) {
+                const configs = await response.json() as NodeTypeConfig[];
+                const configMap = new Map(configs.map(c => [c._key, c]));
+
+                for (const [key, { resolve }] of batch) {
+                    const config = configMap.get(key);
+                    if (config) {
+                        projectRef.current.state.nodeTypeConfig[config._key] = config;
+                        resolve(config);
+                    } else {
+                        fetchErroredConfigs.current.add(key);
+                        resolve(undefined);
+                    }
+                }
+
+                if (configs.length > 0) {
+                    Project.dispatch({
+                        field: "nodeTypeConfig",
+                        value: { ...projectRef.current.state.nodeTypeConfig }
+                    });
+                    projectRef.current.state.computeVisibility?.();
+                }
+            } else {
+                console.warn(`Failed to fetch node configs batch: HTTP ${response.status}`);
+                for (const [key, { resolve }] of batch) {
+                    fetchErroredConfigs.current.add(key);
+                    resolve(undefined);
+                }
+            }
+        } catch (error) {
+            if ((error as Error).name !== 'AbortError') {
+                console.error(`Error fetching node configs batch:`, error);
+                for (const [key, { resolve }] of batch) {
+                    fetchErroredConfigs.current.add(key);
+                    resolve(undefined);
+                }
+            }
+        } finally {
+            for (const key of batch.keys()) {
+                fetchingNodeConfigs.current.delete(key);
+            }
+            if (batchAbortController.current === abortController) {
+                batchAbortController.current = null;
+            }
+        }
+    }, []);
 
     const fetchMissingNodeConfig = useCallback(async (nodeType: string, workspace: string): Promise<NodeTypeConfig | undefined> => {
-        // Check if already fetching
+        // Check if already fetching or errored
         if (fetchingNodeConfigs.current.has(nodeType) || fetchErroredConfigs.current.has(nodeType)) {
             return undefined;
         }
@@ -121,61 +200,19 @@ export const useSocketSync = () => {
         // Mark as fetching
         fetchingNodeConfigs.current.add(nodeType);
 
-        // Cancel any previous request for this node type
-        const existingController = fetchNodeConfigAbortControllers.current.get(nodeType);
-        if (existingController) {
-            existingController.abort();
-        }
+        // Queue and debounce into a single batch request
+        return new Promise<NodeTypeConfig | undefined>((resolve) => {
+            pendingBatchQueue.current.set(nodeType, { workspace, resolve });
 
-        // Create new abort controller
-        const abortController = new AbortController();
-        fetchNodeConfigAbortControllers.current.set(nodeType, abortController);
-
-        try {
-            const response = await fetch('/api/nodeconfig/get', {
-                method: "POST",
-                signal: abortController.signal,
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    workspace: workspace,
-                    _key: nodeType
-                } as api_node_config_get),
-            });
-
-            if (response.status === 200) {
-                const nodeConfig = await response.json() as NodeTypeConfig;
-                if (nodeConfig) {
-                    // Store in state
-                    projectRef.current.state.nodeTypeConfig[nodeConfig._key] = nodeConfig;
-                    Project.dispatch({
-                        field: "nodeTypeConfig",
-                        value: { ...projectRef.current.state.nodeTypeConfig }
-                    });
-
-                    // Trigger visibility recompute to render nodes that were waiting for this config
-                    projectRef.current.state.computeVisibility?.();
-
-                    return nodeConfig;
-                }
-            } else {
-                console.warn(`Failed to fetch node config for type "${nodeType}": HTTP ${response.status}`);
-                fetchErroredConfigs.current.add(nodeType);
+            if (batchTimerRef.current) {
+                clearTimeout(batchTimerRef.current);
             }
-        } catch (error) {
-            if ((error as Error).name !== 'AbortError') {
-                console.error(`Error fetching node config for type "${nodeType}":`, error);
-                fetchErroredConfigs.current.add(nodeType);
-            }
-        } finally {
-            // Remove from fetching set
-            fetchingNodeConfigs.current.delete(nodeType);
-            fetchNodeConfigAbortControllers.current.delete(nodeType);
-        }
-
-        return undefined;
-    }, []);
+            batchTimerRef.current = setTimeout(() => {
+                batchTimerRef.current = null;
+                executeBatch();
+            }, 50);
+        });
+    }, [executeBatch]);
 
     useEffect(() => {
         Project.dispatch({
