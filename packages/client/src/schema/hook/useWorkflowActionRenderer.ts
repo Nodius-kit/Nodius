@@ -239,7 +239,6 @@ export const useWorkflowActionRenderer = ({
 
         let wfButton: HTMLButtonElement|undefined = undefined;
         if(node._key === "root") {
-            console.log(node);
             wfButton = document.createElement("button");
             container.appendChild(wfButton);
 
