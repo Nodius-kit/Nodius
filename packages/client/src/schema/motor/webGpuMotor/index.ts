@@ -71,6 +71,9 @@ export class WebGpuMotor implements GraphicalMotor {
     private minZoom: number = 1;
     private isDisposed: boolean = false;
     private animationFrameId: number | null = null;
+    private msaaTexture: GPUTexture | null = null;
+    private msaaTextureWidth: number = 0;
+    private msaaTextureHeight: number = 0;
 
     // Canvas event listener references for cleanup
     private canvasMouseMoveListener: ((e: MouseEvent) => void) | null = null;
@@ -405,16 +408,21 @@ export class WebGpuMotor implements GraphicalMotor {
         const colorTextureView = colorTexture.createView();
 
         let colorAttachment: GPURenderPassColorAttachment;
-        let msTexture: GPUTexture | null = null;
         if (this.sampleCount > 1) {
-            msTexture = this.device.createTexture({
-                size: [colorTexture.width, colorTexture.height, 1],
-                sampleCount: this.sampleCount,
-                format: this.format!,
-                usage: GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+            // Recreate MSAA texture only if canvas size changed
+            if (!this.msaaTexture || this.msaaTextureWidth !== colorTexture.width || this.msaaTextureHeight !== colorTexture.height) {
+                if (this.msaaTexture) this.msaaTexture.destroy();
+                this.msaaTexture = this.device.createTexture({
+                    size: [colorTexture.width, colorTexture.height, 1],
+                    sampleCount: this.sampleCount,
+                    format: this.format!,
+                    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+                });
+                this.msaaTextureWidth = colorTexture.width;
+                this.msaaTextureHeight = colorTexture.height;
+            }
             colorAttachment = {
-                view: msTexture.createView(),
+                view: this.msaaTexture.createView(),
                 resolveTarget: colorTextureView,
                 clearValue: [0, 0, 0, 0],
                 loadOp: "clear",
@@ -449,10 +457,6 @@ export class WebGpuMotor implements GraphicalMotor {
 
         passEncoder.end();
         this.device.queue.submit([commandEncoder.finish()]);
-
-        if (msTexture) {
-            msTexture.destroy();
-        }
 
         this.animationFrameId = requestAnimationFrame(this.renderLoop);
     };
@@ -513,6 +517,10 @@ export class WebGpuMotor implements GraphicalMotor {
         this.cameraAnimator = null;
 
         // Destroy GPU resources
+        if (this.msaaTexture) {
+            this.msaaTexture.destroy();
+            this.msaaTexture = null;
+        }
         if (this.uniformBuffer) {
             this.uniformBuffer.destroy();
             this.uniformBuffer = null;

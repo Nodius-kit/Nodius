@@ -59,7 +59,7 @@ export function deepCopy<T>(obj: T): T {
  * @param currentPath - Used internally for recursion to track the current path being checked.
  * @returns - True if the objects are equal, false otherwise.
  */
-export const deepEqual = (obj1: any, obj2: any, excludedPaths?: string[], currentPath = ''): boolean => {
+export const deepEqual = (obj1: any, obj2: any, excludedPaths?: string[], currentPath = '', _excludedSet?: Set<string>): boolean => {
     // Helper function to format the current path with the new key
     const formatPath = (key: string) => currentPath ? `${currentPath}.${key}` : key;
 
@@ -71,11 +71,14 @@ export const deepEqual = (obj1: any, obj2: any, excludedPaths?: string[], curren
         return false;
     }
 
+    // Convert excludedPaths to Set once at the top-level call
+    const excludedSet = _excludedSet ?? (excludedPaths ? new Set(excludedPaths) : undefined);
+
     // Check if both values are arrays
     if (Array.isArray(obj1) && Array.isArray(obj2)) {
         if (obj1.length !== obj2.length) return false;
         for (let i = 0; i < obj1.length; i++) {
-            if (!deepEqual(obj1[i], obj2[i], excludedPaths, formatPath(String(i)))) return false;
+            if (!deepEqual(obj1[i], obj2[i], undefined, formatPath(String(i)), excludedSet)) return false;
         }
         return true;
     }
@@ -92,17 +95,20 @@ export const deepEqual = (obj1: any, obj2: any, excludedPaths?: string[], curren
     // Check if the objects have the same number of keys
     if (keys1.length !== keys2.length) return false;
 
+    // Use Set for O(1) key lookups
+    const keys2Set = new Set(keys2);
+
     // Check if all keys in obj1 exist in obj2 and their corresponding values are equal
     for (const key of keys1) {
         const newPath = formatPath(key);
 
         // If excludedPaths is defined and the current path is in the exclusion list, skip it
-        if (excludedPaths && excludedPaths.includes(newPath)) {
+        if (excludedSet?.has(newPath)) {
             continue;
         }
 
-        if (!keys2.includes(key)) return false;
-        if (!deepEqual(obj1[key], obj2[key], excludedPaths, newPath)) return false;
+        if (!keys2Set.has(key)) return false;
+        if (!deepEqual(obj1[key], obj2[key], undefined, newPath, excludedSet)) return false;
     }
 
     return true;
@@ -116,7 +122,9 @@ export const deepEqual = (obj1: any, obj2: any, excludedPaths?: string[], curren
  * @returns A new array with the element inserted at the specified index.
  */
 export const insertAtIndex = <T>(arr: T[], index: number, element: T): T[] => {
-    return [...arr.slice(0, index), element, ...arr.slice(index)];
+    const result = arr.slice();
+    result.splice(index, 0, element);
+    return result;
 };
 
 

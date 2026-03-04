@@ -25,8 +25,15 @@
 import {Edge, Graph, GraphHistory, Node, NodeType, NodeTypeConfig} from "./graphType";
 import {deepCopy} from "../objectUtils";
 
-export const flatEdgeMap = (edges:Map<string, Edge[]>):Edge[] => Array.from(edges.entries())
-    .filter(([key, value]) => key.startsWith('target')).map(([key, value]) => value).flat();
+export const flatEdgeMap = (edges: Map<string, Edge[]>): Edge[] => {
+    const result: Edge[] = [];
+    for (const [key, value] of edges) {
+        if (key.startsWith('target')) {
+            for (const edge of value) result.push(edge);
+        }
+    }
+    return result;
+};
 
 
 export const nodeArrayToMap = (nodes:Node<any>[]):Map<string, Node<any>> => new Map(nodes.map(n => [n._key, n]));

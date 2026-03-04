@@ -77,8 +77,12 @@ export class InstructionBuilder {
     clone(): InstructionBuilder {
         const cloned = new InstructionBuilder();
 
-        // Deep clone the instruction object
-        cloned.instruction = deepCopy(this.instruction);
+        // Shallow clone with array copies for path fields
+        cloned.instruction = {
+            ...this.instruction,
+            p: this.instruction.p ? [...this.instruction.p] : undefined,
+            d: this.instruction.d ? [...this.instruction.d] : undefined,
+        };
 
         return cloned;
     }

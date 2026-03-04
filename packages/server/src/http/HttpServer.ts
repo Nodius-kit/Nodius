@@ -274,6 +274,25 @@ export class HttpServer {
         return { fields, files };
     }
 
+    // 50MB body size limit
+    private static readonly MAX_BODY_SIZE = 50 * 1024 * 1024;
+
+    /**
+     * Collect request body chunks with size limit
+     */
+    private async collectBody(req: Request): Promise<Buffer> {
+        const chunks: Buffer[] = [];
+        let totalSize = 0;
+        for await (const chunk of req) {
+            totalSize += chunk.length;
+            if (totalSize > HttpServer.MAX_BODY_SIZE) {
+                throw Object.assign(new Error('Payload too large'), { statusCode: 413 });
+            }
+            chunks.push(chunk);
+        }
+        return Buffer.concat(chunks);
+    }
+
     /**
      * Parse request body based on content type
      */
@@ -282,11 +301,7 @@ export class HttpServer {
 
         if (contentType.includes('application/json')) {
             // Parse JSON body
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-                chunks.push(chunk);
-            }
-            const body = Buffer.concat(chunks).toString();
+            const body = (await this.collectBody(req)).toString();
             try {
                 req.body = JSON.parse(body);
             } catch (error) {
@@ -294,11 +309,7 @@ export class HttpServer {
             }
         } else if (contentType.includes('application/x-www-form-urlencoded')) {
             // Parse URL-encoded form data
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-                chunks.push(chunk);
-            }
-            const body = Buffer.concat(chunks).toString();
+            const body = (await this.collectBody(req)).toString();
             req.body = parse(body);
         } else if (contentType.includes('multipart/form-data')) {
             // Parse multipart form data
@@ -311,11 +322,7 @@ export class HttpServer {
             }
         } else {
             // Raw body
-            const chunks: Buffer[] = [];
-            for await (const chunk of req) {
-                chunks.push(chunk);
-            }
-            req.body = Buffer.concat(chunks);
+            req.body = await this.collectBody(req);
         }
     }
 
@@ -522,7 +529,11 @@ export class HttpServer {
                     res.json({ error: 'Not Found' });
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.statusCode === 413 && !res.headersSent) {
+                res.status(413).json({ error: 'Payload too large' });
+                return;
+            }
             await this.handleError(error as Error, req, res);
         }
     }
@@ -679,11 +690,11 @@ export const rateLimit = (options: { windowMs: number; max: number }): Middlewar
  * CORS middleware
  */
 export const cors = (options?: { origin?: string; methods?: string[]; headers?: string[] }): Middleware => {
-    return (req: Request, res: Response, next: NextFunction) => {
-        const origin = options?.origin || '*';
-        const methods = options?.methods?.join(', ') || 'GET, POST, PUT, DELETE, OPTIONS';
-        const headers = options?.headers?.join(', ') || 'Content-Type, Authorization';
+    const origin = options?.origin || '*';
+    const methods = options?.methods?.join(', ') || 'GET, POST, PUT, DELETE, OPTIONS';
+    const headers = options?.headers?.join(', ') || 'Content-Type, Authorization';
 
+    return (req: Request, res: Response, next: NextFunction) => {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Methods', methods);
         res.setHeader('Access-Control-Allow-Headers', headers);

@@ -1187,6 +1187,10 @@ export const useSocketSync = () => {
 
             const backInstructions:GraphInstructions[] = [];
 
+            // Pre-calculate once before the loop instead of per-instruction
+            const shouldReRenderNodeConfig = instructions.some((i) => i.triggerHtmlRender);
+            let editedHtmlChanged = false;
+
             for(let i = 0; i < instructions.length; i++) {
                 const instruction = instructions[i];
                 if(instruction.edgeId) {
@@ -1239,17 +1243,22 @@ export const useSocketSync = () => {
                     if(!instruction.dontTriggerUpdateNode) {
                         // Trigger node update
                         const options: triggerNodeUpdateOption = {
-                            reRenderNodeConfig: instructions.some((i) => i.triggerHtmlRender)
+                            reRenderNodeConfig: shouldReRenderNodeConfig
                         };
                         await (window as any).triggerNodeUpdate?.(instruction.nodeId, options);
-                        if (options.reRenderNodeConfig && projectRef.current.state.editedHtml) {
-                            projectRef.current.dispatch({
-                                field: "editedHtml",
-                                value: {...projectRef.current.state.editedHtml},
-                            });
+                        if (shouldReRenderNodeConfig && projectRef.current.state.editedHtml) {
+                            editedHtmlChanged = true;
                         }
                     }
                 }
+            }
+
+            // Dispatch editedHtml once after the loop instead of per-instruction
+            if (editedHtmlChanged && projectRef.current.state.editedHtml) {
+                projectRef.current.dispatch({
+                    field: "editedHtml",
+                    value: {...projectRef.current.state.editedHtml},
+                });
             }
 
             if(backInstructions.length > 0) {
@@ -2134,7 +2143,7 @@ export const useSocketSync = () => {
             cancelled = true;
             workingOnCaughtUp.current = false;
         };
-    }, [Project.state.graph, Project.state.caughtUpMessage, handleIncomingMessage]);
+    }, [!!Project.state.graph, Project.state.caughtUpMessage, handleIncomingMessage]);
 
     const generateUniqueId = useCallback(async (amount:number) : Promise<string[]|undefined> => {
 

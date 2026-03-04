@@ -76,6 +76,37 @@ export async function createUniqueToken(
     return token!;
 }
 
+/**
+ * Ensure persistent indexes exist on collections for query performance.
+ * Safe to call multiple times - ArangoDB skips existing indexes.
+ */
+export async function ensureIndexes(): Promise<void> {
+    const indexConfigs: { collection: string; fields: string[] }[] = [
+        { collection: "nodius_nodes", fields: ["graphKey"] },
+        { collection: "nodius_nodes", fields: ["graphKey", "sheet"] },
+        { collection: "nodius_edges", fields: ["graphKey"] },
+        { collection: "nodius_edges", fields: ["graphKey", "sheet"] },
+        { collection: "nodius_html_class", fields: ["workspace"] },
+        { collection: "nodius_node_config", fields: ["workspace"] },
+        { collection: "nodius_node_config", fields: ["workspace", "displayName"] },
+        { collection: "nodius_graphs", fields: ["workspace"] },
+        { collection: "nodius_graphs_history", fields: ["graphKey", "type"] },
+    ];
+
+    for (const config of indexConfigs) {
+        try {
+            const collection = db.collection(config.collection);
+            if (await collection.exists()) {
+                await collection.ensureIndex({ type: "persistent", fields: config.fields });
+            }
+        } catch (err) {
+            // Non-critical: index may already exist or collection not yet created
+            console.warn(`Warning: Could not ensure index on ${config.collection}[${config.fields.join(",")}]:`, err);
+        }
+    }
+    console.log("✅ Database indexes ensured");
+}
+
 type ArangoMetaKeys = "_key" | "_id" | "_rev";
 
 /**

@@ -97,7 +97,7 @@ export const useWebSocket = (
         'disconnected' | 'connecting' | 'connected' | 'reconnecting'
     >('disconnected');
 
-    const [stats, setStats] = useState<WebSocketStats>({
+    const statsRef = useRef<WebSocketStats>({
         messageRate: 0,
         bitrate: 0,
         latency: 0,
@@ -123,11 +123,8 @@ export const useWebSocket = (
                 const msgRate = messageCountRef.current / timeDiff;
                 const bitRate = (bytesCountRef.current * 8) / timeDiff;
 
-                setStats(prev => ({
-                    ...prev,
-                    messageRate: Math.round(msgRate * 10) / 10,
-                    bitrate: Math.round(bitRate),
-                }));
+                statsRef.current.messageRate = Math.round(msgRate * 10) / 10;
+                statsRef.current.bitrate = Math.round(bitRate);
 
                 messageCountRef.current = 0;
                 bytesCountRef.current = 0;
@@ -209,11 +206,8 @@ export const useWebSocket = (
             ws.onmessage = async (event) => {
                 const dataSize = new Blob([event.data]).size;
 
-                setStats(prev => ({
-                    ...prev,
-                    messagesReceived: prev.messagesReceived + 1,
-                    bytesReceived: prev.bytesReceived + dataSize,
-                }));
+                statsRef.current.messagesReceived++;
+                statsRef.current.bytesReceived += dataSize;
 
                 messageCountRef.current++;
                 bytesCountRef.current += dataSize;
@@ -228,7 +222,7 @@ export const useWebSocket = (
                         const latency = Date.now() - connectStartTime;
                         setConnectionState('connected');
                         reconnectAttemptsRef.current = 0;
-                        setStats(prev => ({ ...prev, latency }));
+                        statsRef.current.latency = latency;
 
                         pendingConnectResolversRef.current.forEach(({ resolve }) => resolve(true));
                         pendingConnectResolversRef.current = [];
@@ -256,8 +250,7 @@ export const useWebSocket = (
 
                     // Handle ping response
                     if (data.type === '__pong__') {
-                        const latency = Date.now() - pingStartTimeRef.current;
-                        setStats(prev => ({...prev, latency}));
+                        statsRef.current.latency = Date.now() - pingStartTimeRef.current;
                         return;
                     }
 
@@ -370,11 +363,8 @@ export const useWebSocket = (
 
             wsRef.current.send(messageStr);
 
-            setStats(prev => ({
-                ...prev,
-                messagesSent: prev.messagesSent + 1,
-                bytesSent: prev.bytesSent + messageSize,
-            }));
+            statsRef.current.messagesSent++;
+            statsRef.current.bytesSent += messageSize;
 
             setTimeout(() => {
                 if (!settled) {
@@ -402,7 +392,7 @@ export const useWebSocket = (
 
     return {
         connectionState,
-        stats,
+        stats: statsRef.current,
         connect,
         disconnect,
         sendMessage,

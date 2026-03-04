@@ -42,6 +42,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { loadOrGenerateCert } from './utils/generateCert';
 import { getLocalIP } from './utils/getLocalIP';
+import { ensureIndexes } from './utils/arangoUtils';
 
 // Global exports for module access
 export let db: Database;
@@ -212,6 +213,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Ser
     RequestImage.init(app);
     RequestExportImport.init(app);
     RequestAI.init(app);
+
+    // Ensure database indexes for query performance
+    await ensureIndexes();
 
     // Start server with proper options
     const serverOptions: { port: number; host: string; https?: { key: string; cert: string } } = {
