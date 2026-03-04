@@ -437,11 +437,23 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-        // Clear toolLimitInfo from previous messages and add new streaming message
+        // Clear toolLimitInfo and resume streaming on the last assistant bubble
         setMessages(prev => {
             const cleaned = prev.map(msg =>
                 msg.toolLimitInfo ? { ...msg, toolLimitInfo: undefined } : msg,
             );
+            // Find last assistant message and mark it as streaming again
+            const lastAssistantIdx = cleaned.findLastIndex(m => m.role === "assistant");
+            if (lastAssistantIdx !== -1) {
+                const updated = [...cleaned];
+                updated[lastAssistantIdx] = {
+                    ...updated[lastAssistantIdx],
+                    isStreaming: true,
+                    // Keep existing content — new tokens will append
+                };
+                return updated;
+            }
+            // Fallback: create new bubble if no assistant message found
             return [...cleaned, { id: `asst_${Date.now()}`, role: "assistant", content: "", isStreaming: true }];
         });
 

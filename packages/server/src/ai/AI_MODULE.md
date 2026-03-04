@@ -45,9 +45,10 @@ Client React
 │  │          │     └──────────────────┘                               │
 │  │          │                                                        │
 │  │          │     ┌──────────────────┐                               │
-│  │          │◀───▶│ ReadTools (×7)   │ ← outils lecture (exec auto)  │
+│  │          │◀───▶│ ReadTools (×8)   │ ← outils lecture (exec auto)  │
+│  │          │     │ (results: TOON)  │   incl. read_subgraph batch   │
 │  │          │     ├──────────────────┤                               │
-│  │          │◀───▶│ WriteTools (×3)  │ ← outils ecriture (HITL)     │
+│  │          │◀───▶│ WriteTools (×6)  │ ← outils ecriture (HITL)     │
 │  │          │     └──────────────────┘                               │
 │  │          │                                                        │
 │  │          │──── TokenTracker ──── suivi couts/tokens                │
@@ -166,8 +167,9 @@ Au **premier message** de la conversation, un system prompt est construit avec :
 - Permissions : viewer (lecture seule) vs editor/admin (peut proposer des modifs)
 - 4 types built-in documentes : starter, return, html, entryType
 - Types custom listes dynamiquement depuis les NodeTypeConfigs
-- 7 regles strictes (pas d'AQL, pas de cross-graph, outils obligatoires, etc.)
+- 9 regles strictes (pas d'AQL, pas de cross-graph, outils obligatoires, batch read, etc.)
 - Conventions Nodius (localKeys, handles, process/data)
+- Regle absolue {{node:KEY}} pour mentionner les nodes (liens cliquables)
 
 ### Etape 3 — Injection du contexte RAG (TOON)
 
@@ -195,6 +197,10 @@ EDGES PERTINENTES :
 
 **Gain de tokens :** ~13% de reduction sur le contexte RAG par rapport au format texte
 precedent. Le gain augmente avec le nombre de nodes/edges (l'en-tete n'est emis qu'une fois).
+
+**Note :** Tous les resultats des ReadTools et WriteTools sont egalement encodes en TOON
+(`encode()` de `@toon-format/toon`) au lieu de `JSON.stringify()`, pour reduire les tokens
+dans les tool results qui sont re-injectes dans l'historique de conversation.
 
 ### Etape 4 — Boucle Tool-Calling (aiAgent.ts)
 
@@ -225,9 +231,19 @@ runToolLoop(context) :
   Si rounds epuises → appel final sans outils → return reponse texte
 ```
 
+**Compaction de conversation :**
+Avant chaque appel LLM (`chat()` et `chatStream()`), `maybeCompactHistory()` est appele.
+Si la taille totale des messages non-system depasse 12000 chars et qu'il y a assez de messages,
+les anciens messages sont resumes via un appel LLM rapide (max 500 tokens) et remplaces par
+un unique message `[Conversation summary]`. Les 6 derniers messages sont toujours conserves.
+
 **Distinction Read vs Write :**
-- **ReadTools** : executes automatiquement, le resultat est renvoye au LLM
-- **WriteTools** : l'execution est **interrompue**, le client recoit un `AgentInterrupt` avec la `ProposedAction` a valider
+- **ReadTools** (×8) : executes automatiquement, le resultat est renvoye au LLM
+  - `read_graph_overview`, `search_nodes`, `explore_neighborhood`, `read_node_detail`,
+    `read_node_config`, `list_available_node_types`, `list_node_edges`, **`read_subgraph`** (batch)
+- **WriteTools** (×6) : l'execution est **interrompue**, le client recoit un `AgentInterrupt` avec la `ProposedAction` a valider
+  - `propose_create_node`, `propose_create_edge`, `propose_delete_node`,
+    **`propose_update_node`**, **`propose_move_node`**, **`propose_delete_edge`**
 
 ### Etape 5 — Resume apres validation (HITL)
 
@@ -267,7 +283,7 @@ de string dans les requetes AQL.
 ### Validation des entrees
 
 - **Request bodies** : 3 schemas Zod `.strict()` dans `requestAI.ts` (`ChatBodySchema`, `ResumeBodySchema`, `ThreadsBodySchema`). Les cles inattendues sont rejetees.
-- **WriteTools schemas** : 3 schemas Zod `.strict()` (`ProposeCreateNodeSchema`, `ProposeCreateEdgeSchema`, `ProposeDeleteNodeSchema`). Les cles hallucinées par le LLM sont rejetees.
+- **WriteTools schemas** : 6 schemas Zod `.strict()` (`ProposeCreateNodeSchema`, `ProposeCreateEdgeSchema`, `ProposeDeleteNodeSchema`, `ProposeUpdateNodeSchema`, `ProposeMoveNodeSchema`, `ProposeDeleteEdgeSchema`). Les cles hallucinées par le LLM sont rejetees.
 - **ReadTools schemas** : validation Zod standard (sans `.strict()` car lecture seule, pas de risque de mutation)
 
 ### Robustesse JSON

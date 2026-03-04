@@ -10,6 +10,35 @@ import { z } from "zod";
 import type OpenAI from "openai";
 import type { ProposedAction, CreateNodePayload, CreateEdgePayload } from "../types.js";
 
+// ─── New Zod Schemas ────────────────────────────────────────────────
+
+export const ProposeUpdateNodeSchema = z.object({
+    nodeKey: z.string().describe("localKey du node a modifier"),
+    updates: z.object({
+        name: z.string().optional().describe("Nouveau nom du node"),
+        process: z.string().optional().describe("Nouveau code JavaScript du node"),
+        data: z.record(z.string(), z.unknown()).optional().describe("Nouvelles donnees du node"),
+        description: z.string().optional().describe("Nouvelle description du node"),
+    }).describe("Champs a modifier (au moins un)"),
+    reason: z.string().describe("Explication de pourquoi cette modification est necessaire"),
+}).strict();
+
+export const ProposeMoveNodeSchema = z.object({
+    nodeKey: z.string().describe("localKey du node a deplacer"),
+    posX: z.number().describe("Nouvelle position X"),
+    posY: z.number().describe("Nouvelle position Y"),
+    reason: z.string().describe("Explication de pourquoi ce deplacement est necessaire"),
+}).strict();
+
+export const ProposeDeleteEdgeSchema = z.object({
+    edgeKey: z.string().describe("_key de l'edge a supprimer"),
+    reason: z.string().describe("Explication de pourquoi cette suppression est necessaire"),
+}).strict();
+
+export type ProposeUpdateNodeArgs = z.infer<typeof ProposeUpdateNodeSchema>;
+export type ProposeMoveNodeArgs = z.infer<typeof ProposeMoveNodeSchema>;
+export type ProposeDeleteEdgeArgs = z.infer<typeof ProposeDeleteEdgeSchema>;
+
 // ─── Zod Schemas ────────────────────────────────────────────────────
 
 /**
@@ -145,6 +174,63 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
                 },
             },
         },
+        {
+            type: "function",
+            function: {
+                name: "propose_update_node",
+                description: "Proposer la modification de proprietes d'un node existant (nom, code process, data, description). L'action sera soumise a l'approbation de l'utilisateur.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        nodeKey: { type: "string", description: "localKey du node a modifier" },
+                        updates: {
+                            type: "object",
+                            description: "Champs a modifier (au moins un)",
+                            properties: {
+                                name: { type: "string", description: "Nouveau nom du node" },
+                                process: { type: "string", description: "Nouveau code JavaScript du node" },
+                                data: { type: "object", description: "Nouvelles donnees du node" },
+                                description: { type: "string", description: "Nouvelle description du node" },
+                            },
+                        },
+                        reason: { type: "string", description: "Explication de la raison de cette modification" },
+                    },
+                    required: ["nodeKey", "updates", "reason"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "propose_move_node",
+                description: "Proposer le deplacement d'un node a de nouvelles coordonnees. L'action sera soumise a l'approbation de l'utilisateur.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        nodeKey: { type: "string", description: "localKey du node a deplacer" },
+                        posX: { type: "number", description: "Nouvelle position X" },
+                        posY: { type: "number", description: "Nouvelle position Y" },
+                        reason: { type: "string", description: "Explication de la raison de ce deplacement" },
+                    },
+                    required: ["nodeKey", "posX", "posY", "reason"],
+                },
+            },
+        },
+        {
+            type: "function",
+            function: {
+                name: "propose_delete_edge",
+                description: "Proposer la suppression d'une connexion (edge) entre deux nodes. L'action sera soumise a l'approbation de l'utilisateur.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        edgeKey: { type: "string", description: "_key de l'edge a supprimer" },
+                        reason: { type: "string", description: "Explication de la raison de cette suppression" },
+                    },
+                    required: ["edgeKey", "reason"],
+                },
+            },
+        },
     ];
 }
 
@@ -190,6 +276,27 @@ export function parseProposedAction(toolName: string, args: Record<string, unkno
             return {
                 type: "delete_node",
                 payload: { nodeKey: parsed.nodeKey },
+            };
+        }
+        case "propose_update_node": {
+            const parsed = ProposeUpdateNodeSchema.parse(args);
+            return {
+                type: "update_node",
+                payload: { nodeKey: parsed.nodeKey, changes: parsed.updates },
+            };
+        }
+        case "propose_move_node": {
+            const parsed = ProposeMoveNodeSchema.parse(args);
+            return {
+                type: "move_node",
+                payload: { nodeKey: parsed.nodeKey, posX: parsed.posX, posY: parsed.posY },
+            };
+        }
+        case "propose_delete_edge": {
+            const parsed = ProposeDeleteEdgeSchema.parse(args);
+            return {
+                type: "delete_edge",
+                payload: { edgeKey: parsed.edgeKey },
             };
         }
         default:

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type OpenAI from "openai";
+import { encode } from "@toon-format/toon";
 import type { GraphDataSource } from "../types.js";
 import { truncate, summarizeHandles } from "../utils.js";
 
@@ -34,6 +35,12 @@ export const ListNodeTypesSchema = z.object({});
 export const ListNodeEdgesSchema = z.object({
     nodeKey: z.string().describe("localKey du node"),
     direction: z.enum(["inbound", "outbound", "any"]).default("any"),
+});
+
+export const ReadSubgraphSchema = z.object({
+    nodeKeys: z.array(z.string()).describe("Array of node _key values to read"),
+    includeConfigs: z.boolean().default(true).describe("Also include nodeConfig for each node (default: true)"),
+    includeEdges: z.boolean().default(true).describe("Also include edges connected to these nodes (default: true)"),
 });
 
 // ─── Tool definitions (OpenAI function calling format) ──────────────
@@ -140,6 +147,32 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
                 },
             },
         },
+        {
+            type: "function",
+            function: {
+                name: "read_subgraph",
+                description: "Read detailed info for multiple nodes at once. Use this instead of calling read_node_detail multiple times. Returns node details, configs, and edges for all requested nodes.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        nodeKeys: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Array of node _key values to read",
+                        },
+                        includeConfigs: {
+                            type: "boolean",
+                            description: "Also include nodeConfig for each node (default: true)",
+                        },
+                        includeEdges: {
+                            type: "boolean",
+                            description: "Also include edges connected to these nodes (default: true)",
+                        },
+                    },
+                    required: ["nodeKeys"],
+                },
+            },
+        },
     ];
 }
 
@@ -150,7 +183,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
         switch (toolName) {
             case "read_graph_overview": {
                 const graph = await dataSource.getGraph(graphKey);
-                if (!graph) return JSON.stringify({ error: "Graph not found" });
+                if (!graph) return encode({ error: "Graph not found" });
 
                 const nodes = await dataSource.getNodes(graphKey);
                 const edges = await dataSource.getEdges(graphKey);
@@ -163,7 +196,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     };
                 }
 
-                return JSON.stringify({
+                return encode({
                     name: graph.name,
                     description: graph.description,
                     sheets: Object.entries(graph.sheets).map(([id, name]) => ({
@@ -183,7 +216,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     ? results.filter(n => n.sheet === parsed.sheetId)
                     : results;
 
-                return JSON.stringify(filtered.map(n => ({
+                return encode(filtered.map(n => ({
                     _key: n._key,
                     type: n.type,
                     sheet: n.sheet,
@@ -201,7 +234,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     parsed.direction,
                 );
 
-                return JSON.stringify({
+                return encode({
                     nodes: result.nodes.map(n => ({
                         _key: n._key,
                         type: n.type,
@@ -221,9 +254,9 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
             case "read_node_detail": {
                 const parsed = ReadNodeDetailSchema.parse(args);
                 const node = await dataSource.getNodeByKey(graphKey, parsed.nodeKey);
-                if (!node) return JSON.stringify({ error: "Node not found" });
+                if (!node) return encode({ error: "Node not found" });
 
-                return JSON.stringify({
+                return encode({
                     _key: node._key,
                     type: node.type,
                     sheet: node.sheet,
@@ -240,9 +273,9 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                 const parsed = ReadNodeConfigSchema.parse(args);
                 const configs = await dataSource.getNodeConfigs(graphKey);
                 const config = configs.find(c => c._key === parsed.typeKey);
-                if (!config) return JSON.stringify({ error: "NodeTypeConfig not found" });
+                if (!config) return encode({ error: "NodeTypeConfig not found" });
 
-                return JSON.stringify({
+                return encode({
                     _key: config._key,
                     displayName: config.displayName,
                     description: config.description,
@@ -261,7 +294,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     { _key: "entryType", displayName: "Entry Data Type", description: "Formulaire de saisie de donnees", category: "built-in" },
                 ];
 
-                return JSON.stringify([
+                return encode([
                     ...builtIn,
                     ...configs.map(c => ({
                         _key: c._key,
@@ -283,7 +316,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     return e.source === parsed.nodeKey || e.target === parsed.nodeKey;
                 });
 
-                return JSON.stringify(filtered.map(e => ({
+                return encode(filtered.map(e => ({
                     _key: e._key,
                     source: e.source,
                     sourceHandle: e.sourceHandle,
@@ -293,8 +326,69 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                 })));
             }
 
+            case "read_subgraph": {
+                const parsed = ReadSubgraphSchema.parse(args);
+                const includeConfigs = parsed.includeConfigs ?? true;
+                const includeEdges = parsed.includeEdges ?? true;
+
+                // Fetch all nodes in parallel
+                const nodeResults = await Promise.all(
+                    parsed.nodeKeys.map(key => dataSource.getNodeByKey(graphKey, key)),
+                );
+
+                const nodes = nodeResults
+                    .filter((n): n is NonNullable<typeof n> => n !== null)
+                    .map(n => ({
+                        _key: n._key,
+                        type: n.type,
+                        sheet: n.sheet,
+                        posX: n.posX,
+                        posY: n.posY,
+                        size: n.size,
+                        process: n.process,
+                        handles: summarizeHandles(n.handles),
+                        data: n.data ? truncate(JSON.stringify(n.data), 500) : undefined,
+                    }));
+
+                const result: Record<string, unknown> = { nodes };
+
+                // Optionally include configs
+                if (includeConfigs) {
+                    const allConfigs = await dataSource.getNodeConfigs(graphKey);
+                    const nodeTypes = new Set(nodeResults.filter(Boolean).map(n => n!.type));
+                    const configs = allConfigs
+                        .filter(c => nodeTypes.has(c._key))
+                        .map(c => ({
+                            _key: c._key,
+                            displayName: c.displayName,
+                            description: c.description,
+                            handles: c.node?.handles ? summarizeHandles(c.node.handles) : [],
+                        }));
+                    result.configs = configs;
+                }
+
+                // Optionally include edges
+                if (includeEdges) {
+                    const allEdges = await dataSource.getEdges(graphKey);
+                    const keySet = new Set(parsed.nodeKeys);
+                    const edges = allEdges
+                        .filter(e => keySet.has(e.source) || keySet.has(e.target))
+                        .map(e => ({
+                            _key: e._key,
+                            source: e.source,
+                            sourceHandle: e.sourceHandle,
+                            target: e.target,
+                            targetHandle: e.targetHandle,
+                            label: e.label,
+                        }));
+                    result.edges = edges;
+                }
+
+                return encode(result);
+            }
+
             default:
-                return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+                return encode({ error: `Unknown tool: ${toolName}` });
         }
     };
 }

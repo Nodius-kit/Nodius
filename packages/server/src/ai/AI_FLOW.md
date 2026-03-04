@@ -31,6 +31,8 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       ▼
 [5] AIAgent.chatStream()        ── packages/server/src/ai/aiAgent.ts
       │
+      ├── [5.0] maybeCompactHistory()  ── compaction des anciens messages si >12k chars
+      │
       ├── [5a] GraphRAGRetriever.retrieve()  ── graphRAGRetriever.ts
       │         ├── Cache check (TTL 2 min)
       │         ├── Embedding de la query (optionnel)
@@ -53,8 +55,8 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       ├── [6b] Streaming tokens → callbacks.onToken() → WS "ai:token"
       │
       ├── [6c] Si tool_calls detectes :
-      │         ├── ReadTool → execution immediate → resultat injecte → reboucle
-      │         └── WriteTool → HITL interrupt → arret
+      │         ├── ReadTool (×8, incl. read_subgraph batch) → execution → resultat TOON → reboucle
+      │         └── WriteTool (×6, incl. update/move/delete_edge) → HITL interrupt → arret
       │
       └── [6d] Pas de tool_calls → reponse finale → callbacks.onComplete()
       │

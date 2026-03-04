@@ -182,6 +182,9 @@ export class AIAgent {
     async chat(userMessage: string): Promise<AgentResult> {
         debugAI("agent_chat_start", { graphKey: this.graphKey, messageLength: userMessage.length });
 
+        // Step 0: Compact history if needed
+        await this.maybeCompactHistory();
+
         // Step 1: Retrieve context via GraphRAG
         const context = await this.retriever.retrieve(this.graphKey, userMessage);
         debugAI("rag_context", { nodes: context.relevantNodes.length, edges: context.relevantEdges.length, nodeTypes: context.nodeTypeConfigs.length });
@@ -345,6 +348,9 @@ export class AIAgent {
         try {
             debugAI("stream_chat_start", { graphKey: this.graphKey, messageLength: userMessage.length });
 
+            // Step 0: Compact history if needed
+            await this.maybeCompactHistory();
+
             // Step 1: Retrieve context via GraphRAG
             const context = await this.retriever.retrieve(this.graphKey, userMessage);
             debugAI("rag_context", { nodes: context.relevantNodes.length, edges: context.relevantEdges.length, nodeTypes: context.nodeTypeConfigs.length });
@@ -432,6 +438,60 @@ export class AIAgent {
     }
 
     // ─── Private ─────────────────────────────────────────────────────
+
+    /**
+     * Compact conversation history when it grows too large, by summarizing
+     * older messages into a single summary message to reduce prompt tokens.
+     */
+    private async maybeCompactHistory(): Promise<void> {
+        const COMPACTION_THRESHOLD = 12000; // chars approximatifs
+        const KEEP_RECENT = 6; // garder les 6 derniers messages
+
+        const nonSystem = this.conversationHistory.filter(m => m.role !== "system");
+        const totalChars = nonSystem.reduce((sum, m) => {
+            const content = (m as { content?: string | null }).content;
+            return sum + (typeof content === "string" ? content.length : JSON.stringify(content ?? "").length);
+        }, 0);
+
+        if (totalChars < COMPACTION_THRESHOLD) return;
+        if (nonSystem.length <= KEEP_RECENT + 2) return; // pas assez pour compacter
+
+        debugAI("compaction_start", { totalChars, messageCount: nonSystem.length });
+
+        const systemMsgs = this.conversationHistory.filter(m => m.role === "system");
+        const toSummarize = nonSystem.slice(0, -KEEP_RECENT);
+        const toKeep = nonSystem.slice(-KEEP_RECENT);
+
+        const summaryPrompt = `Summarize this conversation concisely, preserving key facts, decisions, and tool results:\n${toSummarize.map(m => {
+            const content = (m as { content?: string | null }).content;
+            return `${m.role}: ${typeof content === "string" ? content.slice(0, 300) : JSON.stringify(content ?? "").slice(0, 300)}`;
+        }).join("\n")}`;
+
+        try {
+            const summaryResult = await this.llmProvider.chatCompletion([
+                { role: "user", content: summaryPrompt },
+            ], { max_tokens: 500 });
+
+            const summaryContent = typeof summaryResult.message?.content === "string"
+                ? summaryResult.message.content
+                : "Summary unavailable.";
+
+            this.conversationHistory = [
+                ...systemMsgs,
+                { role: "assistant", content: `[Conversation summary]\n${summaryContent}` },
+                ...toKeep as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            ];
+
+            debugAI("compaction_done", {
+                removedMessages: toSummarize.length,
+                keptMessages: toKeep.length,
+                newTotal: this.conversationHistory.length,
+            });
+        } catch (err) {
+            debugAI("compaction_error", { error: String(err) });
+            // Compaction failed — continue with original history
+        }
+    }
 
     private getTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
         const tools = [...getReadToolDefinitions()];
@@ -678,9 +738,10 @@ export class AIAgent {
 
         // Build a concise summary of gathered data from tool results to include in the prompt
         const gatheredData = this.extractToolResultsSummary();
+        const nodeKeyReminder = "RAPPEL: Utilise TOUJOURS {{node:KEY}} pour mentionner un node, {{sheet:KEY}} pour les sheets, {{graph:KEY}} pour les graphs.";
         const forceTextPrompt = gatheredData
-            ? `Tu as atteint la limite de rounds d'outils. Voici un resume des donnees que tu as collectees :\n\n${gatheredData}\n\nReponds maintenant directement a l'utilisateur en te basant sur ces donnees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.`
-            : "Tu as atteint la limite de rounds d'outils. Reponds maintenant directement a l'utilisateur avec les informations que tu as deja collectees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.";
+            ? `Tu as atteint la limite de rounds d'outils. Voici un resume des donnees que tu as collectees :\n\n${gatheredData}\n\nReponds maintenant directement a l'utilisateur en te basant sur ces donnees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.\n${nodeKeyReminder}`
+            : `Tu as atteint la limite de rounds d'outils. Reponds maintenant directement a l'utilisateur avec les informations que tu as deja collectees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.\n${nodeKeyReminder}`;
 
         this.conversationHistory.push({
             role: "system",
