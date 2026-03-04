@@ -36,6 +36,7 @@ export * from './hooks/useDynamicClass';
 export * from './hooks/useDynamicCssListing';
 export * from './hooks/useElementSize';
 export * from './hooks/useImageUpload';
+export * from './hooks/useResizablePanel';
 export * from './hooks/useSocketSync';
 export * from './hooks/useStableProjectRef';
 export * from './hooks/useWebSocket';

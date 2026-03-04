@@ -10,21 +10,27 @@
  * Used in both HomeWorkflow (selection menu) and SchemaEditor (editing view).
  */
 
-import { memo, useState, useCallback, useContext } from "react";
+import { memo, useState, useCallback, useContext, useMemo } from "react";
 import { Bot, X } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
+import { useResizablePanel } from "../../hooks/useResizablePanel";
 import { ProjectContext } from "../../hooks/contexts/ProjectContext";
-import { useAIChat } from "../../hooks/useAIChat";
+import { useAIChat, type AIContextType } from "../../hooks/useAIChat";
 import { AIChatPanel } from "./AIChatPanel";
 import { Fade } from "../animate/Fade";
 
-interface AIChatFloatingProps {
-
-}
-
-export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
+export const AIChatFloating = memo(() => {
     const Project = useContext(ProjectContext);
     const [open, setOpen] = useState(false);
+
+    // Derive contextType and contextKey from current editing state
+    const { contextType, contextKey } = useMemo((): { contextType: AIContextType; contextKey: string } => {
+        const graph = Project.state.graph;
+        if (!graph) return { contextType: "home", contextKey: "home" };
+        if (Project.state.editedNodeConfig) return { contextType: "nodeConfig", contextKey: Project.state.editedNodeConfig };
+        if (Project.state.editedHtml) return { contextType: "htmlClass", contextKey: graph._key };
+        return { contextType: "graph", contextKey: graph._key };
+    }, [Project.state.graph, Project.state.editedNodeConfig, Project.state.editedHtml]);
 
     const {
         messages,
@@ -42,7 +48,8 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
         deleteThread,
         refreshThreads,
     } = useAIChat({
-        graphKey: Project.state.graph?._key ?? "home",
+        graphKey: contextKey,
+        contextType,
         serverInfo: Project.state.serverInfo ?? null,
         autoConnect: false,
     });
@@ -57,9 +64,13 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
         });
     }, [isConnected, connect]);
 
-    const handleClose = useCallback(() => {
-        setOpen(false);
-    }, []);
+    const { width, height, isResizing, resetSize, startResize } = useResizablePanel({
+        storageKey: "nodius-ai-panel-size",
+        defaultWidth: 400,
+        defaultHeight: 520,
+        minWidth: 320,
+        minHeight: 400,
+    });
 
     // ── Styles ──────────────────────────────────────────────────────
 
@@ -96,10 +107,8 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
             position: fixed;
             bottom: 84px;
             right: 24px;
-            width: 400px;
-            height: 520px;
             border-radius: 12px;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 8px 32px rgba(0,0,0,0.25);
             z-index: 10000010;
             display: flex;
@@ -107,26 +116,12 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
         }
     `);
 
-    const closeButtonClass = useDynamicClass(`
+    const panelInnerClass = useDynamicClass(`
         & {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 50%;
-            background: transparent;
-            color: var(--nodius-text-secondary);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1;
-            transition: background-color 0.15s;
-        }
-        &:hover {
-            background: var(--nodius-grey-200);
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            overflow: hidden;
         }
     `);
 
@@ -139,24 +134,39 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
 
             {/* Chat Panel Overlay */}
             <Fade in={open} timeout={200} unmountOnExit={true}>
-                <div className={panelOverlayClass}>
-                    <button className={closeButtonClass} onClick={handleClose} title="Close">
-                        <X size={16} />
-                    </button>
-                    <AIChatPanel
-                        messages={messages}
-                        isTyping={isTyping}
-                        isConnected={isConnected}
-                        threadId={threadId}
-                        onSend={sendMessage}
-                        onStop={stopGeneration}
-                        onResume={resume}
-                        threads={threads}
-                        onLoadThread={loadThread}
-                        onNewThread={newThread}
-                        onDeleteThread={deleteThread}
-                        onRefreshThreads={refreshThreads}
+                <div className={panelOverlayClass} style={{ width, height }}>
+                    {/* Resize handles */}
+                    <div
+                        style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, cursor: "n-resize", zIndex: 2 }}
+                        onMouseDown={(e) => startResize("top", e)}
                     />
+                    <div
+                        style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 6, cursor: "w-resize", zIndex: 2 }}
+                        onMouseDown={(e) => startResize("left", e)}
+                    />
+                    <div
+                        style={{ position: "absolute", top: 0, left: 0, width: 12, height: 12, cursor: "nw-resize", zIndex: 3 }}
+                        onMouseDown={(e) => startResize("topLeft", e)}
+                    />
+                    <div className={panelInnerClass}>
+                        <AIChatPanel
+                            messages={messages}
+                            isTyping={isTyping}
+                            isConnected={isConnected}
+                            threadId={threadId}
+                            contextType={contextType}
+                            onSend={sendMessage}
+                            onStop={stopGeneration}
+                            onResume={resume}
+                            onClose={() => setOpen(false)}
+                            onResetSize={resetSize}
+                            threads={threads}
+                            onLoadThread={loadThread}
+                            onNewThread={newThread}
+                            onDeleteThread={deleteThread}
+                            onRefreshThreads={refreshThreads}
+                        />
+                    </div>
                 </div>
             </Fade>
         </>

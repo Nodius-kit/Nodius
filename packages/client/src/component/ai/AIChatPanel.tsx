@@ -11,12 +11,12 @@
  * - Integrates AIChatInput and AIInterruptModal
  */
 
-import { memo, useState, useEffect, useRef, useContext, useMemo, useCallback } from "react";
-import { Bot, User, Wrench, Loader, ChevronDown, ChevronRight, Coins, Check, Plus, List } from "lucide-react";
+import { memo, useState, useEffect, useRef, useMemo, useCallback } from "react";
+// useCallback kept for handleSelectThread/handleNewThread (passed to memo'd AIThreadList)
+import { Bot, User, Wrench, Loader, ChevronDown, ChevronRight, Coins, Check, Plus, List, X, Minimize2 } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import { ThemeContext } from "../../hooks/contexts/ThemeContext";
-import { ProjectContext } from "../../hooks/contexts/ProjectContext";
-import type { AIChatMessage, AIThreadSummary } from "../../hooks/useAIChat";
+import { useStableProjectRef } from "../../hooks/useStableProjectRef";
+import type { AIChatMessage, AIThreadSummary, AIContextType } from "../../hooks/useAIChat";
 import { AIChatInput } from "./AIChatInput";
 import { AIInterruptModal } from "./AIInterruptModal";
 import { AIToolLimitBanner } from "./AIToolLimitBanner";
@@ -146,9 +146,12 @@ interface AIChatPanelProps {
     isTyping: boolean;
     isConnected: boolean;
     threadId: string | null;
+    contextType?: AIContextType;
     onSend: (text: string) => void;
     onStop: () => void;
     onResume: (threadId: string, approved: boolean, feedback?: string) => void;
+    onClose?: () => void;
+    onResetSize?: () => void;
     // ── Multi-thread props ────────────────
     threads?: AIThreadSummary[];
     onLoadThread?: (threadId: string) => void;
@@ -162,17 +165,19 @@ export const AIChatPanel = memo(({
     isTyping,
     isConnected,
     threadId,
+    contextType = "graph",
     onSend,
     onStop,
     onResume,
+    onClose,
+    onResetSize,
     threads = [],
     onLoadThread,
     onNewThread,
     onDeleteThread,
     onRefreshThreads,
 }: AIChatPanelProps) => {
-    const Theme = useContext(ThemeContext);
-    const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
     const scrollRef = useRef<HTMLDivElement>(null);
     const [showThreadList, setShowThreadList] = useState(false);
 
@@ -187,59 +192,58 @@ export const AIChatPanel = memo(({
     // Build display name maps from current scene (resolved client-side)
     const nodeDisplayNames = useMemo(() => {
         const map = new Map<string, string>();
-        const motor = Project.state.getMotor();
+        const state = projectRef.current.state;
+        const motor = state.getMotor();
         const scene = motor?.getScene?.();
         if (!scene?.nodes) return map;
-        const configs = Project.state.nodeTypeConfig;
+        const configs = state.nodeTypeConfig;
         for (const [key, node] of scene.nodes) {
             const config = configs[node.type];
             const displayName = config?.displayName ?? node.type;
             map.set(key, `${displayName} (${key})`);
         }
         return map;
-    }, [Project.state]);
+    }, [projectRef]);
 
     const sheetDisplayNames = useMemo(() => {
         const map = new Map<string, string>();
-        const graph = Project.state.graph;
+        const graph = projectRef.current.state.graph;
         if (graph?.sheets) {
             for (const [key, sheet] of Object.entries(graph.sheets)) {
                 map.set(key, (sheet as { name?: string })?.name ?? key);
             }
         }
         return map;
-    }, [Project.state.graph]);
+    }, [projectRef]);
 
-    // ── Client action handlers ─────────────────────────────────────
-    const handleNodeClick = useCallback((nodeKey: string) => {
-        const motor = Project.state.getMotor();
+    // ── Client action handlers (no useCallback needed — projectRef is stable) ──
+    const handleNodeClick = (nodeKey: string) => {
+        const motor = projectRef.current.state.getMotor();
         motor?.smoothFitToNode?.(nodeKey, { padding: 150 });
-        Project.dispatch({ field: "selectedNode", value: [nodeKey] });
-    }, [Project]);
+        projectRef.current.dispatch({ field: "selectedNode", value: [nodeKey] });
+    };
 
-    const handleSelectNodes = useCallback((nodeKeys: string[]) => {
-        Project.dispatch({ field: "selectedNode", value: nodeKeys });
-    }, [Project]);
+    const handleSelectNodes = (nodeKeys: string[]) => {
+        projectRef.current.dispatch({ field: "selectedNode", value: nodeKeys });
+    };
 
-    const handleFitArea = useCallback((bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
-        const motor = Project.state.getMotor();
+    const handleFitArea = (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
+        const motor = projectRef.current.state.getMotor();
         motor?.smoothFitToArea?.(bounds, { padding: 50 });
-    }, [Project.state]);
+    };
 
-    const handleChangeSheet = useCallback((sheetKey: string) => {
-        Project.state.changeSheet?.(sheetKey);
-    }, [Project.state]);
+    const handleChangeSheet = (sheetKey: string) => {
+        projectRef.current.state.changeSheet?.(sheetKey);
+    };
 
-    const handleOpenGraph = useCallback((graphKey: string) => {
-        // Open graph by key — needs to fetch graph object first
-        // For now, navigate via URL params which the app will pick up
+    const handleOpenGraph = (graphKey: string) => {
         const url = new URL(window.location.href);
         url.searchParams.set("graph", graphKey);
         url.searchParams.delete("sheet");
         url.searchParams.delete("node");
         window.history.pushState({}, "", url.toString());
         window.dispatchEvent(new PopStateEvent("popstate"));
-    }, []);
+    };
 
     // Find the last message with a pending proposedAction (for HITL modal)
     const pendingInterrupt = useMemo(() => {
@@ -432,7 +436,17 @@ export const AIChatPanel = memo(({
             <div className={headerClass}>
                 <Bot size={18} color="var(--nodius-primary-main)" />
                 <span style={{ fontWeight: 600, fontSize: 14 }}>AI Assistant</span>
+                {contextType !== "graph" && (
+                    <span style={{ fontSize: 11, color: "var(--nodius-text-secondary)", background: "var(--nodius-grey-100)", padding: "2px 8px", borderRadius: 10 }}>
+                        {contextType === "nodeConfig" ? "Config" : contextType === "htmlClass" ? "HTML" : "Home"}
+                    </span>
+                )}
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
+                    {onResetSize && (
+                        <button className={headerBtnClass} onClick={onResetSize} title="Reset size">
+                            <Minimize2 size={16} />
+                        </button>
+                    )}
                     {onNewThread && (
                         <button className={headerBtnClass} onClick={handleNewThread} title="New conversation">
                             <Plus size={16} />
@@ -451,6 +465,11 @@ export const AIChatPanel = memo(({
                         className={statusDotClass}
                         style={{ background: isConnected ? "var(--nodius-success-main)" : "var(--nodius-grey-400)", marginLeft: 4 }}
                     />
+                    {onClose && (
+                        <button className={headerBtnClass} onClick={onClose} title="Close">
+                            <X size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -468,7 +487,12 @@ export const AIChatPanel = memo(({
                 <div className={emptyClass}>
                     <div>
                         <Bot size={32} color="var(--nodius-grey-400)" style={{ marginBottom: 8 }} />
-                        <div>Ask anything about your graph.</div>
+                        <div>{
+                            contextType === "nodeConfig" ? "Ask about this node configuration."
+                            : contextType === "htmlClass" ? "Ask about the HTML class editor."
+                            : contextType === "home" ? "Ask anything about Nodius."
+                            : "Ask anything about your graph."
+                        }</div>
                     </div>
                 </div>
             ) : (

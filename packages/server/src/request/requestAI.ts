@@ -21,7 +21,7 @@ import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "
 import type { LLMProvider } from "../ai/providers/llmProvider.js";
 import type { EmbeddingProvider } from "../ai/providers/embeddingProvider.js";
 import type { AgentResult } from "../ai/aiAgent.js";
-import { threadStore, defaultMetadata, type AIThread } from "../ai/threadStore.js";
+import { threadStore, defaultMetadata, type AIThread, type AIContextType } from "../ai/threadStore.js";
 
 // ─── Request body schemas ───────────────────────────────────────────
 
@@ -29,6 +29,7 @@ const ChatBodySchema = z.object({
     graphKey: z.string().min(1),
     message: z.string().min(1),
     threadId: z.string().optional(),
+    contextType: z.enum(["graph", "nodeConfig", "htmlClass", "home"]).optional(),
 }).strict();
 
 const ResumeBodySchema = z.object({
@@ -39,6 +40,7 @@ const ResumeBodySchema = z.object({
 
 const ThreadsBodySchema = z.object({
     graphKey: z.string().optional(),
+    contextType: z.enum(["graph", "nodeConfig", "htmlClass", "home"]).optional(),
 }).strict();
 
 // ─── Request handler ────────────────────────────────────────────────
@@ -90,7 +92,8 @@ export class RequestAI {
                 if (!parsed.success) {
                     return res.status(400).json({ error: "Invalid request body", details: parsed.error.issues });
                 }
-                const { graphKey, message, threadId } = parsed.data;
+                const { graphKey, message, threadId, contextType: rawContextType } = parsed.data;
+                const contextType: AIContextType = rawContextType ?? "graph";
 
                 const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
                 const role = user.roles?.includes("admin") ? "admin" : user.roles?.includes("viewer") ? "viewer" : "editor";
@@ -127,6 +130,7 @@ export class RequestAI {
                         graphKey,
                         workspace,
                         userId: user.id ?? user.username,
+                        contextType,
                         agent,
                         metadata: defaultMetadata(),
                         createdTime: Date.now(),
@@ -213,14 +217,16 @@ export class RequestAI {
                 if (!parsed.success) {
                     return res.status(400).json({ error: "Invalid request body", details: parsed.error.issues });
                 }
-                const { graphKey } = parsed.data;
+                const { graphKey, contextType } = parsed.data;
 
                 const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
                 const userId = user.id ?? user.username;
 
-                // If graphKey provided, filter by it; otherwise return all user threads
+                // Filter by context if both graphKey and contextType provided
                 let allDocs;
-                if (graphKey) {
+                if (graphKey && contextType) {
+                    allDocs = await threadStore.listByContext(graphKey, contextType, workspace, userId);
+                } else if (graphKey) {
                     allDocs = await threadStore.listByGraph(graphKey, workspace, userId);
                 } else {
                     allDocs = await threadStore.listByUser(workspace, userId);
@@ -229,6 +235,7 @@ export class RequestAI {
                 const threads = allDocs.map(doc => ({
                     threadId: doc._key,
                     graphKey: doc.graphKey,
+                    contextType: doc.contextType ?? "graph",
                     title: doc.title || "New conversation",
                     totalTokens: doc.totalTokens || 0,
                     totalCost: doc.totalCost || 0,

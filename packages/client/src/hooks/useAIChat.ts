@@ -30,9 +30,12 @@ export interface AIChatMessage {
     retryable?: boolean;
 }
 
+export type AIContextType = "graph" | "nodeConfig" | "htmlClass" | "home";
+
 export interface AIThreadSummary {
     threadId: string;
     graphKey: string;
+    contextType: AIContextType;
     title: string;
     totalTokens: number;
     messageCount: number;
@@ -42,6 +45,7 @@ export interface AIThreadSummary {
 
 export interface UseAIChatOptions {
     graphKey: string;
+    contextType?: AIContextType;
     serverInfo: api_sync_info | null;
     autoConnect?: boolean;
 }
@@ -71,7 +75,7 @@ const FLUSH_INTERVAL_MS = 32;
 // ─── Hook ───────────────────────────────────────────────────────────
 
 export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
-    const { graphKey, serverInfo, autoConnect = false } = options;
+    const { graphKey, contextType = "graph", serverInfo, autoConnect = false } = options;
 
     // ── State ───────────────────────────────────────────────────────
     const [messages, setMessages] = useState<AIChatMessage[]>([]);
@@ -87,6 +91,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const graphKeyRef = useRef(graphKey);
     graphKeyRef.current = graphKey;
+    const contextTypeRef = useRef(contextType);
+    contextTypeRef.current = contextType;
 
     // Expose threadId as state-like via a derived value
     const [threadId, setThreadId] = useState<string | null>(null);
@@ -124,7 +130,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         fetch("/api/ai/threads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ graphKey: graphKeyRef.current }),
+            body: JSON.stringify({ graphKey: graphKeyRef.current, contextType: contextTypeRef.current }),
         })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
@@ -132,6 +138,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                     setThreads(data.threads.map((t: any) => ({
                         threadId: t.threadId,
                         graphKey: t.graphKey,
+                        contextType: t.contextType || "graph",
                         title: t.title || "New conversation",
                         totalTokens: t.totalTokens || 0,
                         messageCount: t.messageCount || 0,
@@ -385,6 +392,15 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         };
     }, [autoConnect, serverInfo, connect, disconnect]);
 
+    // ── Reset on context change ────────────────────────────────────
+    useEffect(() => {
+        threadIdRef.current = null;
+        setThreadId(null);
+        setMessages([]);
+        setIsTyping(false);
+        refreshThreads();
+    }, [graphKey, contextType, refreshThreads]);
+
     // ── Send message ────────────────────────────────────────────────
 
     const sendMessage = useCallback((text: string) => {
@@ -411,8 +427,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             graphKey,
             message: text,
             threadId: threadIdRef.current ?? undefined,
+            contextType,
         }));
-    }, [graphKey]);
+    }, [graphKey, contextType]);
 
     // ── Resume (HITL approve/reject) ────────────────────────────────
 

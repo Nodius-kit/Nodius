@@ -17,6 +17,8 @@ import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+export type AIContextType = "graph" | "nodeConfig" | "htmlClass" | "home";
+
 export interface ThreadMetadata {
     title: string;
     totalPromptTokens: number;
@@ -34,6 +36,7 @@ export interface AIThread {
     graphKey: string;
     workspace: string;
     userId: string;
+    contextType: AIContextType;
     agent: AIAgent;
     metadata: ThreadMetadata;
     createdTime: number;
@@ -46,6 +49,7 @@ export interface AIThreadDocument {
     graphKey: string;
     workspace: string;
     userId: string;
+    contextType?: AIContextType;
     title: string;
     conversationHistory: object[];
     pendingInterrupt: object | null;
@@ -246,6 +250,7 @@ export class ThreadStore {
             graphKey: doc.graphKey,
             workspace: doc.workspace,
             userId: doc.userId,
+            contextType: doc.contextType ?? "graph",
             agent,
             metadata: {
                 title: doc.title || extractTitle(doc.conversationHistory),
@@ -365,6 +370,55 @@ export class ThreadStore {
         }
     }
 
+    /** List thread documents filtered by (graphKey, contextType, workspace), optionally by userId. */
+    async listByContext(graphKey: string, contextType: AIContextType, workspace: string, userId?: string): Promise<AIThreadDocument[]> {
+        // From cache
+        const fromCache: AIThreadDocument[] = [];
+        for (const thread of this.cache.values()) {
+            if (thread.graphKey === graphKey && thread.workspace === workspace && thread.contextType === contextType) {
+                if (!userId || thread.userId === userId) {
+                    fromCache.push(this.threadToDocument(thread));
+                }
+            }
+        }
+
+        if (!this.collection) return fromCache;
+
+        try {
+            const { db } = await import("../server.js");
+            const cursor = userId
+                ? await db.query(aql`
+                    FOR doc IN ${this.collection}
+                        FILTER doc.graphKey == ${graphKey}
+                            AND doc.workspace == ${workspace}
+                            AND doc.userId == ${userId}
+                            AND (doc.contextType == ${contextType} OR (${contextType} == "graph" AND !doc.contextType))
+                        SORT doc.lastUpdatedTime DESC
+                        RETURN doc
+                `)
+                : await db.query(aql`
+                    FOR doc IN ${this.collection}
+                        FILTER doc.graphKey == ${graphKey}
+                            AND doc.workspace == ${workspace}
+                            AND (doc.contextType == ${contextType} OR (${contextType} == "graph" AND !doc.contextType))
+                        SORT doc.lastUpdatedTime DESC
+                        RETURN doc
+                `);
+            const fromDb: AIThreadDocument[] = await cursor.all();
+
+            const cacheKeys = new Set(fromCache.map(d => d._key));
+            for (const doc of fromDb) {
+                if (!cacheKeys.has(doc._key)) {
+                    fromCache.push(doc);
+                }
+            }
+
+            return fromCache.sort((a, b) => b.lastUpdatedTime - a.lastUpdatedTime);
+        } catch {
+            return fromCache;
+        }
+    }
+
     /** List all threads for a user across all graphs, sorted by lastUpdatedTime DESC. */
     async listByUser(workspace: string, userId: string): Promise<AIThreadDocument[]> {
         // From cache
@@ -420,6 +474,7 @@ export class ThreadStore {
             graphKey: thread.graphKey,
             workspace: thread.workspace,
             userId: thread.userId,
+            contextType: thread.contextType,
             title: m.title || extractTitle(history),
             conversationHistory: history,
             pendingInterrupt: thread.agent.getPendingInterrupt() as object | null,

@@ -5,7 +5,7 @@
  */
 
 import { memo, useCallback } from "react";
-import { MessageSquare, Plus, Trash2, Clock } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Clock, FileCode, Code, Home } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import type { AIThreadSummary } from "../../hooks/useAIChat";
 
@@ -21,6 +21,15 @@ function timeAgo(timestamp: number): string {
     const days = Math.floor(hours / 24);
     if (days < 30) return `${days}d ago`;
     return new Date(timestamp).toLocaleDateString();
+}
+
+function contextBadge(type?: string): { icon: typeof Home; label: string } | null {
+    switch (type) {
+        case "nodeConfig": return { icon: FileCode, label: "Config" };
+        case "htmlClass": return { icon: Code, label: "HTML" };
+        case "home": return { icon: Home, label: "Home" };
+        default: return null; // "graph" — no badge needed
+    }
 }
 
 // ─── Props ──────────────────────────────────────────────────────────
@@ -188,7 +197,9 @@ export const AIThreadList = memo(({
                         <div>No conversations yet</div>
                     </div>
                 ) : (
-                    threads.map(thread => (
+                    threads.map(thread => {
+                        const badge = contextBadge(thread.contextType);
+                        return (
                         <div
                             key={thread.threadId}
                             className={thread.threadId === activeThreadId ? itemActiveClass : itemClass}
@@ -204,6 +215,12 @@ export const AIThreadList = memo(({
                                     {thread.totalTokens > 0 && (
                                         <span>{thread.totalTokens.toLocaleString()} tok</span>
                                     )}
+                                    {badge && (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: "var(--nodius-primary-main)", fontWeight: 500 }}>
+                                            <badge.icon size={9} />
+                                            {badge.label}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                             <button
@@ -214,7 +231,8 @@ export const AIThreadList = memo(({
                                 <Trash2 size={14} />
                             </button>
                         </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
         </div>

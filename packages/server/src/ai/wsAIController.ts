@@ -14,7 +14,7 @@ import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "
 import type { LLMProvider } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { getAIConfig } from "./config/aiConfig.js";
-import { threadStore, defaultMetadata, type AIThread } from "./threadStore.js";
+import { threadStore, defaultMetadata, type AIThread, type AIContextType } from "./threadStore.js";
 import type { StreamCallbacks } from "./types.js";
 import type { MemoryGraphProvider } from "./memoryAwareDataSource.js";
 import type { AuthenticatedClient } from "../cluster/webSocketManager.js";
@@ -30,6 +30,7 @@ const AIChatSchema = z.object({
     graphKey: z.string().min(1),
     message: z.string().min(1),
     threadId: z.string().optional(),
+    contextType: z.enum(["graph", "nodeConfig", "htmlClass", "home"]).optional(),
 }).strict();
 
 const AIResumeSchema = z.object({
@@ -130,7 +131,8 @@ export class WsAIController {
             return;
         }
 
-        const { _id, graphKey, message, threadId } = parsed.data;
+        const { _id, graphKey, message, threadId, contextType: rawContextType } = parsed.data;
+        const contextType: AIContextType = rawContextType ?? "graph";
 
         if (!this.llmProvider) {
             this.send(ws, { type: "ai:error", _id, error: "AI is not configured. No LLM API key found." });
@@ -179,6 +181,7 @@ export class WsAIController {
                 graphKey,
                 workspace,
                 userId,
+                contextType,
                 agent,
                 metadata: defaultMetadata(),
                 createdTime: Date.now(),
