@@ -96,6 +96,7 @@ export class RequestAI {
                 const contextType: AIContextType = rawContextType ?? "graph";
 
                 const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
+                const userId = user.userId ?? user.username;
                 const role = user.roles?.includes("admin") ? "admin" : user.roles?.includes("viewer") ? "viewer" : "editor";
 
                 // Find, load (thread roaming), or create thread
@@ -129,7 +130,7 @@ export class RequestAI {
                         threadId: newThreadId,
                         graphKey,
                         workspace,
-                        userId: user.id ?? user.username,
+                        userId,
                         contextType,
                         agent,
                         metadata: defaultMetadata(),
@@ -220,7 +221,7 @@ export class RequestAI {
                 const { graphKey, contextType } = parsed.data;
 
                 const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
-                const userId = user.id ?? user.username;
+                const userId = user.userId ?? user.username;
 
                 // Filter by context if both graphKey and contextType provided
                 let allDocs;
@@ -269,7 +270,7 @@ export class RequestAI {
                     return res.status(400).json({ error: "Missing threadId parameter" });
                 }
 
-                const userId = user.id ?? user.username;
+                const userId = user.userId ?? user.username;
 
                 // Try to get from cache first (has full agent)
                 const cached = await threadStore.get(threadId);
