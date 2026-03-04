@@ -675,9 +675,16 @@ export class AIAgent {
     /** Stream a forced final answer (no tools) when tool rounds are exhausted. */
     private async streamFinalAnswer(callbacks: StreamCallbacks): Promise<void> {
         truncateOldToolResults(this.conversationHistory);
+
+        // Build a concise summary of gathered data from tool results to include in the prompt
+        const gatheredData = this.extractToolResultsSummary();
+        const forceTextPrompt = gatheredData
+            ? `Tu as atteint la limite de rounds d'outils. Voici un resume des donnees que tu as collectees :\n\n${gatheredData}\n\nReponds maintenant directement a l'utilisateur en te basant sur ces donnees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.`
+            : "Tu as atteint la limite de rounds d'outils. Reponds maintenant directement a l'utilisateur avec les informations que tu as deja collectees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.";
+
         this.conversationHistory.push({
             role: "system",
-            content: "Tu as atteint la limite de rounds d'outils. Reponds maintenant directement a l'utilisateur avec les informations que tu as deja collectees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.",
+            content: forceTextPrompt,
         });
         debugAI("stream_exhausted_rounds", { maxRounds: this.toolLimitExtended ? EXTENDED_TOOL_ROUNDS : INITIAL_TOOL_ROUNDS });
         const { text: finalText, usage: finalUsage } = await this.streamOneLLMCall([], callbacks);
@@ -690,8 +697,60 @@ export class AIAgent {
             );
             callbacks.onUsage?.(finalUsage);
         }
+
+        // Fallback: if the LLM returned empty/whitespace text (e.g. DeepSeek emitting only XML tool calls
+        // that got filtered), retry once with a user-role message to force a text response
+        if (finalText.trim().length === 0) {
+            debugAI("stream_final_empty_retry", { originalLength: finalText.length });
+            this.conversationHistory.push({ role: "assistant", content: finalText });
+            this.conversationHistory.push({
+                role: "user",
+                content: "Ta reponse etait vide. Peux-tu resumer ce que tu as trouve en te basant sur les donnees collectees ? Reponds en texte uniquement, pas d'appels d'outils.",
+            });
+            const retry = await this.streamOneLLMCall([], callbacks);
+            if (retry.usage) {
+                getTokenTracker().record(
+                    { prompt_tokens: retry.usage.promptTokens, completion_tokens: retry.usage.completionTokens, total_tokens: retry.usage.totalTokens },
+                    this.llmProvider!.getModel(),
+                    "stream-final-retry",
+                );
+                callbacks.onUsage?.(retry.usage);
+            }
+            const retryText = retry.text.trim().length > 0
+                ? retry.text
+                : "Je n'ai pas pu generer de reponse. Voici les donnees que j'ai collectees :\n\n" + (gatheredData || "(aucune donnee)");
+            this.conversationHistory.push({ role: "assistant", content: retryText });
+            callbacks.onComplete(retryText);
+            return;
+        }
+
         this.conversationHistory.push({ role: "assistant", content: finalText });
         callbacks.onComplete(finalText);
+    }
+
+    /**
+     * Extract a concise summary of tool results from conversation history.
+     * Used as context for the forced final answer when tool rounds are exhausted.
+     */
+    private extractToolResultsSummary(): string {
+        const summaries: string[] = [];
+        for (let i = 0; i < this.conversationHistory.length; i++) {
+            const msg = this.conversationHistory[i] as unknown as { role: string; tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }> };
+            if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+                for (const tc of msg.tool_calls) {
+                    // Find the matching tool result
+                    const toolResult = this.conversationHistory.slice(i + 1).find(
+                        (m) => {
+                            const tm = m as unknown as { role: string; tool_call_id?: string };
+                            return tm.role === "tool" && tm.tool_call_id === tc.id;
+                        },
+                    );
+                    const resultContent = toolResult ? String((toolResult as unknown as { content?: string }).content ?? "").slice(0, 400) : "(no result)";
+                    summaries.push(`- ${tc.function.name}: ${resultContent}`);
+                }
+            }
+        }
+        return summaries.length > 0 ? summaries.join("\n") : "";
     }
 
     /**

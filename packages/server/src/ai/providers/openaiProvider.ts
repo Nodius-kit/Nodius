@@ -46,7 +46,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         const response = await this.client.chat.completions.create({
             model: this.model,
             messages,
-            tools,
+            ...(tools.length > 0 ? { tools } : {}),
             ...options,
         });
         this.trackUsage(response, label ?? "tool-call");
@@ -71,7 +71,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         const stream = await this.client.chat.completions.create({
             model: this.model,
             messages,
-            tools,
+            ...(tools.length > 0 ? { tools } : {}),
             stream: true,
             stream_options: { include_usage: true },
             ...(options?.temperature != null ? { temperature: options.temperature } : {}),
