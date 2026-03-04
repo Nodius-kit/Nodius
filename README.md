@@ -58,6 +58,16 @@ Nodius is a workflow creation platform that combines:
 - **Auto-Save**: Automatic save every 30 seconds
 - **Change History**: Complete tracking of modifications
 
+### AI Assistant
+
+- **Multi-provider LLM**: DeepSeek, OpenAI, and Anthropic support with automatic detection
+- **GraphRAG**: Retrieval-augmented generation over graph data (nodes, edges, configs)
+- **Streaming Chat**: Real-time token streaming via dedicated WebSocket
+- **Multi-conversation**: Per-user, per-graph thread history with persistent metadata (tokens, cost, provider)
+- **Human-in-the-Loop**: Proposed write actions (create/delete node/edge) require user approval
+- **Tool System**: 7 read tools + 3 write tools for graph exploration and modification
+- **Embeddings**: Optional vector search via OpenAI embeddings with cosine similarity
+
 ### Distributed Architecture
 
 - **Cluster Manager**: Horizontal scaling support with ZeroMQ

@@ -60,13 +60,34 @@ export function isAIDebugEnabled(): boolean {
     return _debugEnabled;
 }
 
+/** Format a timestamp as HH:mm:ss for console output. */
+function formatTime(): string {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+}
+
+/** Format data as key=value pairs for readable console output. */
+function formatDebugData(data: Record<string, unknown>): string {
+    return Object.entries(data)
+        .filter(([, v]) => v !== undefined && v !== null && v !== "")
+        .map(([k, v]) => {
+            if (typeof v === "string" && v.length > 200) return `${k}=${v.slice(0, 200)}...`;
+            if (typeof v === "object") return `${k}=${JSON.stringify(v)}`;
+            return `${k}=${v}`;
+        })
+        .join(" ");
+}
+
 /**
  * Emit a debug log entry (only when AI debug is enabled).
- * Use this to trace the AI pipeline step by step.
+ * Outputs both structured JSON (stderr) and a human-readable console line.
  */
 export function debugAI(event: string, data?: Record<string, unknown>): void {
     if (!_debugEnabled) return;
     emit("info", `debug:${event}`, data ?? {});
+    // Human-readable console output
+    const kvStr = data ? formatDebugData(data) : "";
+    console.log(`[AI ${formatTime()}] ${event}${kvStr ? " " + kvStr : ""}`);
 }
 
 // ─── Public logging functions ────────────────────────────────────────

@@ -20,8 +20,6 @@ export class ArangoGraphDataSource implements GraphDataSource {
 
     constructor(workspace: string) {
         this.workspace = workspace;
-        console.trace();
-        console.log("aaa", this.workspace);
     }
 
     async getGraph(graphKey: string): Promise<GraphRAGContext["graph"] | null> {

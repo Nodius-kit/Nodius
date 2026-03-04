@@ -91,6 +91,8 @@ export async function ensureIndexes(): Promise<void> {
         { collection: "nodius_node_config", fields: ["workspace", "displayName"] },
         { collection: "nodius_graphs", fields: ["workspace"] },
         { collection: "nodius_graphs_history", fields: ["graphKey", "type"] },
+        { collection: "nodius_ai_threads", fields: ["userId", "graphKey"] },
+        { collection: "nodius_ai_threads", fields: ["userId", "lastUpdatedTime"] },
     ];
 
     for (const config of indexConfigs) {

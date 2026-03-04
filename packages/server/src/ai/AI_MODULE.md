@@ -80,16 +80,24 @@ Client React
 Client React (useAIChat hook + composants AI)
     │
     │  WebSocket dedie (separe du socket de sync)
-    │  JWT token envoye dans chaque message ai:*
+    │  Auth via authenticate message a la connexion
     │  Throttle tokens ~32ms pour limiter les re-renders
-    │  Gere: ai:token, ai:tool_start, ai:tool_result, ai:complete, ai:error
+    │  Multi-thread: threads list, loadThread, newThread, deleteThread, refreshThreads
+    │  REST: POST /api/ai/threads, GET /api/ai/thread/:id/messages, DELETE /api/ai/thread/:id
+    │  Gere: ai:token, ai:tool_start, ai:tool_result, ai:tool_limit, ai:usage, ai:complete, ai:error
     │
-    │  ┌──────────────────────────────────────────────────────┐
-    │  │  AIChatPanel          AIChatInput    AIInterruptModal │
-    │  │  (message list,       (textarea,    (approve/reject  │
-    │  │   auto-scroll,         send/stop)    HITL modal)     │
-    │  │   typing indicator)                                   │
-    │  └──────────────────────────────────────────────────────┘
+    │  ┌──────────────────────────────────────────────────────────────────┐
+    │  │  AIChatFloating (FAB + overlay panel, wire useAIChat → Panel)    │
+    │  │  AIChatPanel              AIChatInput    AIInterruptModal        │
+    │  │  (markdown rendering,     (textarea,    (approve/reject          │
+    │  │   client actions,         send/stop)     HITL modal)             │
+    │  │   header: New/List,                                              │
+    │  │   {{node:}},{{sheet:}},   AIToolLimitBanner                      │
+    │  │   {{fitArea:}},...)       (continue/summarize)                   │
+    │  │  AIThreadList             renderMessageContent()                  │
+    │  │  (scrollable history,     (markdown + {{action:params}})         │
+    │  │   select/delete threads)                                         │
+    │  └──────────────────────────────────────────────────────────────────┘
     ▼
 ```
 
@@ -637,7 +645,7 @@ recordEmbedding(inputTokens, model, pricingPerMillion) → cout =
 ### `prompts/systemPrompt.ts` — Prompt systeme + contexte TOON
 
 Deux fonctions :
-- **`buildSystemPrompt(context, role)`** — Prompt complet en francais avec contexte, regles, types
+- **`buildSystemPrompt(context, role)`** — Prompt complet en francais avec contexte, 8 regles, types, conventions, format de reponse. Inclut la documentation des actions client `{{action:params}}` (node, select, fitArea, sheet, graph, link) pour que le LLM puisse generer des elements interactifs dans ses reponses.
 - **`buildContextSummary(context)`** — Encode les nodes/edges pertinents en format TOON tabulaire via `@toon-format/toon`. Chaque node est reduit a 4 colonnes (`_key, type, sheet, process`), chaque edge a 3 colonnes (`from, to, label`).
 
 ### `tools/readTools.ts` — 7 outils de lecture
@@ -723,6 +731,8 @@ L'`embeddingProvider` est transmis au `GraphRAGRetriever` dans le constructeur.
 | `onToken(token)` | Fragment de texte emis par le LLM |
 | `onToolStart(toolCallId, toolName)` | Debut d'un appel d'outil |
 | `onToolResult(toolCallId, result)` | Resultat d'un outil execute |
+| `onUsage(usage)` | Stats de tokens apres chaque appel LLM |
+| `onToolLimit(info)` | Limite de rounds d'outils atteinte (5), demande confirmation utilisateur |
 | `onComplete(fullText)` | Fin du streaming (texte complet accumule) |
 | `onError(error)` | Erreur survenue pendant le streaming |
 
@@ -733,21 +743,34 @@ chatStream(userMessage, callbacks) :
   1. Retrieve context via GraphRAG
   2. Build system prompt (1er message)
   3. Inject RAG context
-  4. runStreamToolLoop(callbacks) :
+  4. runStreamToolLoop(callbacks, startRound=0) :
      │
-     └─ Boucle (max rounds) :
+     └─ Boucle (round startRound..maxRounds) :
+          │   maxRounds = INITIAL_TOOL_ROUNDS (5) ou EXTENDED_TOOL_ROUNDS (10)
           │
           ├── streamOneLLMCall(tools, callbacks)
           │     → AsyncGenerator de LLMStreamChunk
+          │     → filterToolCallText() avec prefix buffering (anti-XML leak)
           │     → yield tokens via callbacks.onToken()
           │     → Accumule tool_calls fragmentes
+          │     → Flush heldBack a la fin du stream
           │     → Retourne { text, toolCalls, usage }
           │
           ├── Si pas de tool_calls → onComplete(text) → fin
           │
-          └── Pour chaque tool call :
-                ├── propose_* → pendingInterrupt → onComplete(interrupt JSON) → fin
-                └── read tool → onToolStart + execute → onToolResult → continue
+          ├── Pour chaque tool call :
+          │     ├── propose_* → pendingInterrupt(kind="hitl") → onComplete(interrupt JSON) → fin
+          │     └── read tool → onToolStart + execute → onToolResult → continue
+          │
+          └── Si round == INITIAL_TOOL_ROUNDS-1 et !toolLimitExtended :
+                → pendingInterrupt(kind="tool_limit")
+                → onToolLimit({ roundsUsed: 5, maxExtended: 10 })
+                → onComplete(tool_limit JSON) → PAUSE
+
+  resumeConversationStream(approved, callbacks) :
+    ├── kind == "tool_limit" + approved → toolLimitExtended=true → relance runStreamToolLoop(startRound)
+    ├── kind == "tool_limit" + !approved → streamFinalAnswer() (reponse forcee)
+    └── kind == "hitl" → injecte tool result → relance runStreamToolLoop()
 ```
 
 **Types de retour (`AgentResult`, mode classique)** :
@@ -756,7 +779,9 @@ chatStream(userMessage, callbacks) :
 
 **Etat interne :**
 - `conversationHistory` — messages OpenAI accumules (system, user, assistant, tool)
-- `pendingInterrupt` — etat sauvegarde quand un write tool est detecte (toolCallId, args, context, remaining tool calls)
+- `pendingInterrupt` — etat sauvegarde quand un write tool ou tool_limit est detecte. Contient un champ `kind: "hitl" | "tool_limit"` pour distinguer les deux cas
+- `toolLimitExtended` — `true` si l'utilisateur a approuve l'extension au-dela de INITIAL_TOOL_ROUNDS
+- `toolLimitRound` — round courant quand tool_limit fire (pour reprendre au bon endroit)
 - Le system prompt n'est injecte qu'au premier message
 - Le contexte RAG est mis en cache par le `GraphRAGRetriever` (TTL 2 min). Le cache est invalide dans `resumeConversation()` et `resumeConversationStream()` apres chaque action HITL
 
@@ -778,7 +803,7 @@ Enregistre dans `server.ts` via `RequestAI.init(app)`.
 |--------|--------|-------------|
 | `ChatBodySchema` | `graphKey: string, message: string, threadId?: string` | POST /api/ai/chat |
 | `ResumeBodySchema` | `threadId: string, approved: boolean, feedback?: string` | POST /api/ai/resume |
-| `ThreadsBodySchema` | `graphKey: string` | POST /api/ai/threads |
+| `ThreadsBodySchema` | `graphKey?: string` | POST /api/ai/threads |
 
 **Endpoints :**
 
@@ -786,7 +811,8 @@ Enregistre dans `server.ts` via `RequestAI.init(app)`.
 |---------|-----|-------------|
 | POST | `/api/ai/chat` | Envoie un message. Cree un thread si `threadId` absent. |
 | POST | `/api/ai/resume` | Approuve/refuse une ProposedAction. |
-| POST | `/api/ai/threads` | Liste les threads d'un graph (tries par date). |
+| POST | `/api/ai/threads` | Liste les threads. Si `graphKey` fourni, filtre par graph ; sinon retourne tous les threads de l'utilisateur. Retourne metadata enrichies (title, tokens, cost, provider, model, messageCount, toolCallCount). |
+| GET | `/api/ai/thread/:threadId/messages` | Retourne l'historique de conversation d'un thread. Verifie que le thread appartient a l'utilisateur. |
 | DELETE | `/api/ai/thread/:threadId` | Supprime un thread. |
 
 **Gestion des threads (avec thread roaming) :**
@@ -817,8 +843,10 @@ Classe `ThreadStore` partagee entre les endpoints HTTP et le controlleur WebSock
 Maintient un cache en memoire (Map) pour les acces rapides, et persiste dans la collection ArangoDB `nodius_ai_threads`.
 
 **Types :**
-- **`AIThread`** — Interface runtime : `{ threadId, graphKey, workspace, userId, agent: AIAgent, createdTime, lastUpdatedTime }`
-- **`AIThreadDocument`** — Document ArangoDB : `{ _key, graphKey, workspace, userId, conversationHistory: object[], pendingInterrupt, createdTime, lastUpdatedTime }`
+- **`AIThread`** — Interface runtime : `{ threadId, graphKey, workspace, userId, agent: AIAgent, metadata: ThreadMetadata, createdTime, lastUpdatedTime }`
+- **`ThreadMetadata`** — Metadata accumulees : `{ title, totalPromptTokens, totalCompletionTokens, totalTokens, totalCost, provider, model, messageCount, toolCallCount }`
+- **`AIThreadDocument`** — Document ArangoDB : `{ _key, graphKey, workspace, userId, title, conversationHistory, pendingInterrupt, totalPromptTokens, totalCompletionTokens, totalTokens, totalCost, provider, model, messageCount, toolCallCount, createdTime, lastUpdatedTime }`
+- **`ThreadMetadataDelta`** — Delta pour `updateMetadata()` : `{ promptTokens?, completionTokens?, totalTokens?, cost?, toolCallCount?, provider?, model? }`
 
 **Methodes publiques :**
 
@@ -833,8 +861,12 @@ Maintient un cache en memoire (Map) pour les acces rapides, et persiste dans la 
 | `set(thread)` | Met en cache + persiste en DB |
 | `save(threadId)` | Persiste un thread deja en cache vers la DB |
 | `delete(threadId)` | Supprime du cache et de la DB |
-| `listByGraph(graphKey, workspace)` | Liste combinee cache + DB, triee par date |
+| `updateMetadata(threadId, delta)` | Accumule les tokens/couts sur un thread apres completion. Met a jour title et messageCount depuis l'historique. |
+| `listByGraph(graphKey, workspace, userId?)` | Liste combinee cache + DB, triee par date, filtrage optionnel par userId |
+| `listByUser(workspace, userId)` | Liste tous les threads d'un utilisateur (tous graphs), triee par lastUpdatedTime DESC |
 | `values()` | Iterateur sur les threads en cache |
+
+**Helpers exportes :** `defaultMetadata()` — cree un objet ThreadMetadata initialise a zero.
 
 **Singleton :** `export const threadStore = new ThreadStore()` — initialise une fois au demarrage via `threadStore.init()`.
 
@@ -855,6 +887,7 @@ Classe `WsAIController` deleguee par le `WebSocketManager` pour tous les message
 Auto-detecte le `LLMProvider` et l'`EmbeddingProvider` au constructeur. Log le statut des providers au demarrage.
 Initialise le `ThreadStore` via `init(memoryProvider?)` (lazy, au premier message `ai:*`).
 Persiste les conversations apres chaque `chatStream()` et `resumeConversationStream()` via `threadStore.save()`.
+Accumule les tokens/couts via un `UsageAccumulator` pendant le streaming, puis persiste via `threadStore.updateMetadata()` apres completion.
 
 **Fonctionnalites :**
 - **JWT auth** : chaque message `ai:*` peut contenir un `token` JWT. Le controlleur valide via `AuthManager.getProvider().validateToken()` et extrait `workspace`, `role`, `userId`. Si pas de token, fallback au workspace passe par le WebSocketManager.
@@ -883,6 +916,8 @@ Persiste les conversations apres chaque `chatStream()` et `resumeConversationStr
 | `ai:token` | `_id, token` | Fragment de texte |
 | `ai:tool_start` | `_id, toolCallId, toolName` | Debut d'execution d'un outil |
 | `ai:tool_result` | `_id, toolCallId, result` | Resultat d'un outil |
+| `ai:usage` | `_id, usage` | Stats de tokens (promptTokens, completionTokens, totalTokens) |
+| `ai:tool_limit` | `_id, roundsUsed, maxExtended` | Limite de rounds atteinte, demande confirmation |
 | `ai:complete` | `_id, threadId, fullText` | Fin du streaming |
 | `ai:error` | `_id, error, code?, retryable?` | Erreur classifiee (voir errorClassifier) |
 
@@ -1076,6 +1111,22 @@ interface UseAIChatReturn {
     connect: () => void;
     disconnect: () => void;
     threadId: string | null;
+    // ── Multi-thread ────────────
+    threads: AIThreadSummary[];         // liste des threads pour le graphKey courant
+    loadThread: (threadId: string) => void;   // charger un thread existant
+    newThread: () => void;                     // demarrer une nouvelle conversation
+    deleteThread: (threadId: string) => void;  // supprimer un thread
+    refreshThreads: () => void;                // rafraichir la liste
+}
+
+interface AIThreadSummary {
+    threadId: string;
+    graphKey: string;
+    title: string;
+    totalTokens: number;
+    messageCount: number;
+    createdTime: number;
+    lastUpdatedTime: number;
 }
 ```
 
@@ -1084,24 +1135,31 @@ interface UseAIChatReturn {
 | Type WS | Action React |
 |---------|--------------|
 | `ai:token` | Accumule dans un buffer, flush throttle a ~32ms |
-| `ai:tool_start` | Ajoute un `toolCall` au dernier message assistant |
+| `ai:tool_start` | Ajoute un `toolCall` au dernier message assistant (dedup par id) |
 | `ai:tool_result` | Met a jour le `toolCall` correspondant avec le resultat |
-| `ai:complete` | Flush final, `isTyping=false`, sauvegarde `threadId`, detecte les interrupts HITL |
+| `ai:usage` | Accumule les tokens (prompt + completion) sur le message assistant |
+| `ai:tool_limit` | Setter `toolLimitInfo` sur le dernier message assistant → affiche `AIToolLimitBanner` |
+| `ai:complete` | Flush final, `isTyping=false`, sauvegarde `threadId`, detecte les interrupts HITL et tool_limit, **appelle `refreshThreads()`** |
 | `ai:error` | Flush final, `isTyping=false`, affiche l'erreur. Stocke `errorCode` et `retryable` sur le message pour afficher un bouton Retry si pertinent |
 
 **Throttle tokens :** Les tokens sont accumules dans un `pendingTextRef` et flushes toutes les ~32ms pour eviter les re-renders excessifs React.
+
+**Multi-thread :**
+- `refreshThreads()` : appelle `POST /api/ai/threads { graphKey }`, met a jour le state `threads`. Appele a la connexion et apres chaque `ai:complete`.
+- `loadThread(threadId)` : setter `threadIdRef`, appelle `GET /api/ai/thread/${threadId}/messages`, reconvertit le `conversationHistory` serveur en `AIChatMessage[]`.
+- `newThread()` : reset `threadIdRef = null`, vide les messages.
+- `deleteThread(threadId)` : appelle `DELETE /api/ai/thread/${threadId}`, si thread actif → `newThread()`, puis `refreshThreads()`.
 
 **Options :**
 - `graphKey` — Graph cible
 - `serverInfo` — `api_sync_info` (host, port, secure, path) depuis `ProjectContext`
 - `autoConnect` — Connexion automatique au montage (defaut: `false`)
-- `token` — JWT token optionnel pour authentifier les messages `ai:*` (depuis `UserContext`)
 
 ---
 
 ## Composants React (`packages/client/src/component/ai/`)
 
-3 composants React dediees a l'interface de chat AI, suivant les conventions Nodius (`memo`, `useDynamicClass`, `ThemeContext`, `lucide-react`).
+7 composants/fichiers React dedies a l'interface de chat AI, suivant les conventions Nodius (`memo`, `useDynamicClass`, `ThemeContext`, `ProjectContext`, `lucide-react`).
 
 ### `AIChatInput.tsx`
 
@@ -1120,7 +1178,7 @@ Champ de saisie avec auto-expansion (textarea) et boutons contextuels.
 
 ### `AIChatPanel.tsx`
 
-Panneau de chat complet integrant `AIChatInput` et `AIInterruptModal`.
+Panneau de chat complet integrant `AIChatInput`, `AIInterruptModal`, `AIToolLimitBanner`, `AIThreadList` et `renderMessageContent`.
 
 | Prop | Type | Description |
 |------|------|-------------|
@@ -1130,15 +1188,113 @@ Panneau de chat complet integrant `AIChatInput` et `AIInterruptModal`.
 | `threadId` | `string \| null` | Thread ID courant |
 | `onSend` | `(text: string) => void` | Envoyer un message |
 | `onStop` | `() => void` | Stop generation |
-| `onResume` | `(threadId, approved, feedback?) => void` | Resume HITL |
+| `onResume` | `(threadId, approved, feedback?) => void` | Resume HITL ou tool limit |
+| `threads` | `AIThreadSummary[]` | Liste des conversations (optionnel) |
+| `onLoadThread` | `(threadId: string) => void` | Charger un thread (optionnel) |
+| `onNewThread` | `() => void` | Nouvelle conversation (optionnel) |
+| `onDeleteThread` | `(threadId: string) => void` | Supprimer un thread (optionnel) |
+| `onRefreshThreads` | `() => void` | Rafraichir la liste (optionnel) |
 
-- Header avec icone Bot, statut connexion (dot vert/gris)
+- Header avec icone Bot, boutons "+" (nouvelle conversation) et "List" (toggle historique), statut connexion (dot vert/gris)
+- Toggle `showThreadList` : affiche `AIThreadList` a la place des messages
 - Liste de messages scrollable avec auto-scroll
-- Bulles user (droite, couleur primaire) / assistant (gauche, bordure grise)
-- Badges `toolCalls` avec icone Wrench
+- Bulles user (droite, couleur primaire) / assistant (gauche, bordure grise, **rendu markdown**)
+- `ToolCallsSection` collapsible avec icone Wrench et resultats
+- `TokenBadge` avec icone Coins (affiche totalTokens)
+- `AIToolLimitBanner` inline quand `msg.toolLimitInfo` present
 - Indicateur "AI is thinking..." avec spinner
 - Etat vide avec icone Bot placeholder
 - Detection automatique du `pendingInterrupt` (dernier message assistant avec `proposedAction`)
+
+**Resolution client-side des noms d'affichage :**
+- `nodeDisplayNames` : `useMemo` → parcourt `motor.getScene().nodes` + `nodeTypeConfig` → `Map<localKey, "DisplayName (key)">`
+- `sheetDisplayNames` : `useMemo` → parcourt `graph.sheets` → `Map<sheetKey, sheetName>`
+
+**Handlers d'actions client :**
+
+| Handler | Action |
+|---------|--------|
+| `handleNodeClick(key)` | `motor.smoothFitToNode(key)` + `dispatch({ field: "selectedNode", value: [key] })` |
+| `handleSelectNodes(keys)` | `dispatch({ field: "selectedNode", value: keys })` |
+| `handleFitArea(bounds)` | `motor.smoothFitToArea(bounds, { padding: 50 })` |
+| `handleChangeSheet(key)` | `Project.state.changeSheet(key)` |
+| `handleOpenGraph(key)` | Navigation URL params + `PopStateEvent` |
+
+Les messages assistant sont rendus via `renderMessageContent(msg.content, { handlers, displayNames })`.
+
+### `renderMessageContent.tsx`
+
+Renderer markdown leger **sans dependance externe** pour les messages assistant. Parse le contenu en blocs et inline avec support du **Protocole d'Actions Client** `{{action:params}}`.
+
+**Blocs supportes :**
+
+| Syntaxe | Element HTML |
+|---------|-------------|
+| ` ``` ` | `<pre><code>` (CodeBlock memo) |
+| `#`, `##`, `###` | Header bold (1.2em, 1.1em, 1em) |
+| `- ` / `* ` | `<ul><li>` |
+| `1. ` | `<ol><li>` |
+| Autre | `<div>` paragraphe |
+
+**Inline supportes :**
+
+| Syntaxe | Rendu |
+|---------|-------|
+| `` `code` `` | `<code>` monospace avec fond gris |
+| `**bold**` | `<strong>` |
+| `*italic*` | `<em>` |
+| `{{action:params}}` | Composant React interactif (voir ci-dessous) |
+
+**Protocole d'Actions Client (`{{action:params}}`) :**
+
+Syntaxe inline distincte des tool_calls LLM. Le LLM insere ces tokens dans son texte, le client les parse et les remplace par des composants React interactifs. Le **client resout les noms d'affichage** (displayName) a partir des maps locales, pas le LLM.
+
+| Action | Params | Composant | Icone | Description |
+|--------|--------|-----------|-------|-------------|
+| `node` | `localKey` | `NodeRefLink` | MapPin | Zoom + selection du node |
+| `select` | `key1,key2,...` | `SelectNodesLink` | MousePointerClick | Selection multiple |
+| `fitArea` | `minX,minY,maxX,maxY` | `FitAreaLink` | Maximize2 | Zoom camera sur zone |
+| `sheet` | `sheetKey` | `SheetLink` | Layers | Changement de sheet |
+| `graph` | `graphKey` | `GraphLink` | Network | Ouverture d'un autre graph |
+| `link` | `url\|label` | `ExternalLinkComp` | ExternalLink | Hyperlien externe |
+
+**Interface :**
+
+```typescript
+interface ClientActionHandlers {
+    onNodeClick?: (nodeKey: string) => void;
+    onSelectNodes?: (nodeKeys: string[]) => void;
+    onFitArea?: (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => void;
+    onChangeSheet?: (sheetKey: string) => void;
+    onOpenGraph?: (graphKey: string) => void;
+}
+
+interface RenderOptions extends ClientActionHandlers {
+    nodeDisplayNames?: Map<string, string>;
+    sheetDisplayNames?: Map<string, string>;
+    graphDisplayNames?: Map<string, string>;
+}
+```
+
+**Regex inline :** `` /(`[^`]+`)|(\\{\\{(\\w+):([^}]*)\\}\\})|(\\*\\*[^*]+\\*\\*)|(\\*[^*]+\\*)/ ``
+
+Priorite : code > action > bold > italic (evite les conflits).
+
+### `AIToolLimitBanner.tsx`
+
+Banniere inline affichee quand le serveur atteint la limite de tool rounds (5 par defaut).
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `roundsUsed` | `number` | Nombre de rounds utilises |
+| `maxExtended` | `number` | Maximum si extension accordee |
+| `threadId` | `string` | Thread a reprendre |
+| `onResume` | `(threadId, approved, feedback?) => void` | Callback decision |
+
+- Icone AlertTriangle jaune avec message contextuel
+- Bouton **Continue** (icone Play) → `onResume(threadId, true)` — accorde N rounds supplementaires
+- Bouton **Summarize now** (icone FileText) → `onResume(threadId, false)` — force une reponse finale
+- Affichee inline sous les `ToolCallsSection`, pas en modal overlay
 
 ### `AIInterruptModal.tsx`
 
@@ -1155,6 +1311,29 @@ Modal HITL pour approuver/rejeter les actions proposees par l'IA.
 - Carte centree avec header (icone AlertTriangle), corps (JSON formate), footer (boutons)
 - Bouton **Approve** (vert) / **Reject** (rouge)
 - Champ feedback optionnel
+
+### `AIThreadList.tsx`
+
+Panneau liste des conversations passees, affiche a la place des messages quand l'utilisateur clique sur le bouton "List" dans le header.
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `threads` | `AIThreadSummary[]` | Liste des threads a afficher |
+| `activeThreadId` | `string \| null` | Thread actif (surligne) |
+| `onSelect` | `(threadId: string) => void` | Charger un thread |
+| `onDelete` | `(threadId: string) => void` | Supprimer un thread |
+| `onNewThread` | `() => void` | Creer une nouvelle conversation |
+
+- Bouton "New conversation" en haut (icone Plus)
+- Liste scrollable triee par `lastUpdatedTime DESC`
+- Chaque item affiche : titre (bold), date relative (timeAgo), nombre de messages, tokens
+- Click → charge le thread + ferme la liste
+- Bouton delete (icone Trash2) par thread avec `stopPropagation`
+- Etat vide avec icone MessageSquare
+
+### `AIChatFloating.tsx`
+
+Bouton flottant (bottom-right) + overlay panel. Wire `useAIChat` vers `AIChatPanel` avec toutes les props multi-thread (`threads`, `onLoadThread`, `onNewThread`, `onDeleteThread`, `onRefreshThreads`).
 
 ---
 
@@ -1313,11 +1492,15 @@ packages/server/
 │   └── request/
 │       └── requestAI.ts                   # REST endpoints /api/ai/* + validation Zod (imports ThreadStore)
 ├── ../client/src/hooks/
-│   └── useAIChat.ts                       # Hook React : WebSocket AI dedie, throttle tokens, HITL resume, JWT token
+│   └── useAIChat.ts                       # Hook React : WebSocket AI dedie, throttle tokens, HITL resume, multi-thread (threads, loadThread, newThread, deleteThread)
 ├── ../client/src/component/ai/
 │   ├── AIChatInput.tsx                    # Textarea auto-resize + Send/Stop boutons
-│   ├── AIChatPanel.tsx                    # Panneau de chat complet (messages, scroll, typing, HITL)
-│   └── AIInterruptModal.tsx               # Modal HITL approve/reject avec feedback
+│   ├── AIChatPanel.tsx                    # Panneau de chat complet (messages, scroll, typing, HITL, toggle liste threads)
+│   ├── AIChatFloating.tsx                 # Bouton flottant + overlay panel, wire useAIChat → AIChatPanel
+│   ├── AIThreadList.tsx                   # Liste scrollable des conversations (titre, date, messages, tokens, select/delete)
+│   ├── AIToolLimitBanner.tsx              # Banniere inline pour limite de tool rounds (Continue/Summarize)
+│   ├── AIInterruptModal.tsx               # Modal HITL approve/reject avec feedback
+│   └── renderMessageContent.tsx           # Renderer markdown + actions client {{action:params}}
 └── test-ai/
     ├── mock-data.ts                       # 9 nodes, 6 edges, 4 configs, MockGraphDataSource
     ├── run-all.ts                         # Runner global (--introspect)
@@ -1363,7 +1546,7 @@ packages/server/
 - [x] **MemoryAwareDataSource** — Source de donnees hybride (memoire WebSocketManager + fallback ArangoDB), deduplication edges
 - [x] **Thread roaming** — `loadThread()` reconstruit un AIAgent depuis ArangoDB quand le thread n'est pas en cache local (3-tier : cache → DB → create)
 - [x] **Authentification JWT** — Token optionnel dans les messages `ai:*`, valide via `AuthManager.getProvider().validateToken()`
-- [x] **Composants React AI** — `AIChatPanel`, `AIChatInput`, `AIInterruptModal` (useDynamicClass, memo, ThemeContext)
+- [x] **Composants React AI** — `AIChatPanel`, `AIChatInput`, `AIInterruptModal`, `AIToolLimitBanner`, `AIThreadList`, `AIChatFloating`, `renderMessageContent` (useDynamicClass, memo, ThemeContext)
 - [x] **EmbeddingProvider** — Interface separee du LLM, implementation OpenAI (text-embedding-3-small/large/ada-002), detection auto via `OPENAI_API_KEY`
 - [x] **Recherche vectorielle** — `COSINE_SIMILARITY` dans ArangoDataSource, fallback gracieux sur tokens, `recordEmbedding()` dans TokenTracker
 - [x] **Write-path embeddings** — Generation automatique des embeddings lors de l'auto-save dans `webSocketManager.ts` (fire-and-forget, try/catch, skip position-only). Helpers `createNodeEmbeddingText()` et `hasNodeContentChanged()` dans `utils.ts`.
@@ -1378,6 +1561,9 @@ packages/server/
 - [x] **Debug mode** — `AI_DEBUG=true` active `debugAI()` dans `aiLogger.ts`. Trace chaque etape : `agent_chat_start`, `rag_retrieve`, `rag_embedding`, `llm_call_start/done`, `tool_execute/result`, `hitl_interrupt`, `ws_chat/resume`.
 - [x] **Suppression deepseekClient.ts** — `llmProvider` est maintenant required dans `AIAgentOptions`. Plus de fallback legacy.
 - [x] **Split providers/** — `llmProvider.ts` monolithique (617 lignes) eclate en `providers/llmProvider.ts` (types), `openaiProvider.ts`, `anthropicProvider.ts`, `embeddingProvider.ts`, `providerFactory.ts`. Les anciens fichiers sont des re-export shims.
+
+- [x] **Multi-conversations persistees** — `AIThreadDocument` enrichi avec metadata (title, totalPromptTokens, totalCompletionTokens, totalTokens, totalCost, provider, model, messageCount, toolCallCount). `updateMetadata()` accumule les tokens/couts apres chaque completion. `listByUser()` pour la vue home. `listByGraph()` avec filtre userId optionnel. Indexes ArangoDB `[userId, graphKey]` et `[userId, lastUpdatedTime]`.
+- [x] **Multi-thread client** — `useAIChat` expose `threads`, `loadThread()`, `newThread()`, `deleteThread()`, `refreshThreads()`. `AIThreadList` pour l'historique. `AIChatPanel` avec boutons New/List dans le header. `GET /api/ai/thread/:threadId/messages` pour charger l'historique.
 
 ### A faire
 - [ ] Supprimer les re-export shims (`llmProvider.ts`, `llmProviderFactory.ts`, `embeddingProvider.ts`) quand tous les consommateurs externes sont migres

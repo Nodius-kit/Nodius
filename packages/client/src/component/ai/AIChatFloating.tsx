@@ -36,6 +36,11 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
         stopGeneration,
         connect,
         disconnect,
+        threads,
+        loadThread,
+        newThread,
+        deleteThread,
+        refreshThreads,
     } = useAIChat({
         graphKey: Project.state.graph?._key ?? "home",
         serverInfo: Project.state.serverInfo ?? null,
@@ -146,6 +151,11 @@ export const AIChatFloating = memo(({  }: AIChatFloatingProps) => {
                         onSend={sendMessage}
                         onStop={stopGeneration}
                         onResume={resume}
+                        threads={threads}
+                        onLoadThread={loadThread}
+                        onNewThread={newThread}
+                        onDeleteThread={deleteThread}
+                        onRefreshThreads={refreshThreads}
                     />
                 </div>
             </Fade>

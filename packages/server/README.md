@@ -362,6 +362,36 @@ const authManager = AuthManager.getInstance();
 authManager.setProvider(new MyCustomAuthProvider());
 ```
 
+### AI Module
+
+AI assistant with multi-provider LLM support and graph-aware retrieval (GraphRAG).
+
+#### Features
+
+- **Multi-provider**: DeepSeek, OpenAI, and Anthropic with automatic detection
+- **GraphRAG**: Context-aware retrieval over graph nodes, edges, and configs
+- **Streaming**: Real-time token streaming via WebSocket (`ai:*` messages)
+- **Multi-conversation**: Per-user, per-graph thread history persisted to ArangoDB
+- **Thread Metadata**: Accumulated tokens, cost, provider, model, message count per thread
+- **Human-in-the-Loop**: Write tools (create/delete node/edge) require user approval
+- **Tool System**: 7 read tools + 3 write tools for graph exploration and modification
+- **Embeddings**: Optional vector search via OpenAI embeddings with cosine similarity
+- **Thread Roaming**: Threads can be loaded across cluster servers via ArangoDB
+
+#### Architecture
+
+```
+WsAIController (WebSocket) / RequestAI (REST)
+    └── ThreadStore (cache + ArangoDB persistence, metadata accumulation)
+        └── AIAgent (conversation loop)
+            ├── GraphRAGRetriever (search + BFS expansion)
+            ├── LLMProvider (DeepSeek / OpenAI / Anthropic)
+            ├── ReadTools (7 tools, auto-execute)
+            └── WriteTools (3 tools, HITL interrupt)
+```
+
+See `src/ai/AI_MODULE.md` and `src/ai/AI_FLOW.md` for detailed documentation.
+
 ## API Endpoints
 
 ### Authentication
@@ -592,6 +622,124 @@ Get modification history for a workflow.
   ]
 }
 ```
+
+### AI Chat
+
+#### POST /api/ai/chat
+
+Send a message to the AI assistant (creates or continues a thread).
+
+**Request:**
+```json
+{
+  "graphKey": "my-workflow",
+  "message": "What does the fetch-api node do?",
+  "threadId": "ai_1709123456_1"
+}
+```
+
+**Response:**
+```json
+{
+  "threadId": "ai_1709123456_1",
+  "type": "message",
+  "message": "The fetch-api node is an API Call type...",
+  "toolCalls": []
+}
+```
+
+#### POST /api/ai/resume
+
+Approve or reject a proposed action (Human-in-the-Loop).
+
+**Request:**
+```json
+{
+  "threadId": "ai_1709123456_1",
+  "approved": true,
+  "feedback": "Go ahead"
+}
+```
+
+#### POST /api/ai/threads
+
+List AI conversation threads. If `graphKey` is provided, filters by graph; otherwise returns all threads for the authenticated user.
+
+**Request:**
+```json
+{
+  "graphKey": "my-workflow"
+}
+```
+
+**Response:**
+```json
+{
+  "threads": [
+    {
+      "threadId": "ai_1709123456_1",
+      "graphKey": "my-workflow",
+      "title": "What does the fetch-api node do?",
+      "totalTokens": 1801,
+      "totalCost": 0.000756,
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "messageCount": 4,
+      "toolCallCount": 1,
+      "createdTime": 1709123456000,
+      "lastUpdatedTime": 1709123489000,
+      "hasPendingAction": false
+    }
+  ]
+}
+```
+
+#### GET /api/ai/thread/:threadId/messages
+
+Get the conversation history for a specific thread. Only accessible by the thread owner.
+
+**Response:**
+```json
+{
+  "threadId": "ai_1709123456_1",
+  "conversationHistory": [
+    { "role": "system", "content": "..." },
+    { "role": "user", "content": "What does the fetch-api node do?" },
+    { "role": "assistant", "content": "The fetch-api node..." }
+  ]
+}
+```
+
+#### DELETE /api/ai/thread/:threadId
+
+Delete an AI conversation thread. Only the thread owner (same workspace) can delete.
+
+**Response:**
+```json
+{
+  "deleted": true
+}
+```
+
+#### WebSocket AI Messages
+
+AI streaming uses a dedicated WebSocket connection with the following message types:
+
+| Client → Server | Description |
+|-----------------|-------------|
+| `ai:chat { _id, graphKey, message, threadId? }` | Start/continue a conversation |
+| `ai:resume { _id, threadId, approved, feedback? }` | Approve/reject a proposed action |
+| `ai:interrupt { _id, threadId }` | Abort the current streaming session |
+
+| Server → Client | Description |
+|-----------------|-------------|
+| `ai:token { _id, token }` | Streaming text token |
+| `ai:tool_start { _id, toolCallId, toolName }` | Tool execution started |
+| `ai:tool_result { _id, toolCallId, result }` | Tool execution completed |
+| `ai:usage { _id, usage }` | Token usage for this LLM call |
+| `ai:tool_limit { _id, roundsUsed, maxExtended }` | Tool round limit reached |
+| `ai:complete { _id, threadId, fullText }` | Streaming completed |
+| `ai:error { _id, error, code?, retryable? }` | Error occurred |
 
 ## Configuration
 

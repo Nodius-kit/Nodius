@@ -4,6 +4,8 @@
  * Uses its own WebSocket connection (separate from useWebSocket/sync) because
  * the sync socket routes messages by `_id` to a one-shot resolver, which is
  * incompatible with multi-message streaming (ai:token, ai:complete, etc.).
+ *
+ * Supports multi-thread: listing threads, switching, creating new, deleting.
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -18,10 +20,24 @@ export interface AIChatMessage {
     isStreaming?: boolean;
     toolCalls?: Array<{ id: string; name: string; result?: string }>;
     proposedAction?: unknown;
+    /** Accumulated token usage for this message. */
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+    /** Set when tool round limit is reached, waiting for user decision. */
+    toolLimitInfo?: { roundsUsed: number; maxExtended: number };
     /** Error code from the server (rate_limit, server_error, timeout, etc.). */
     errorCode?: string;
     /** Whether the error is retryable. */
     retryable?: boolean;
+}
+
+export interface AIThreadSummary {
+    threadId: string;
+    graphKey: string;
+    title: string;
+    totalTokens: number;
+    messageCount: number;
+    createdTime: number;
+    lastUpdatedTime: number;
 }
 
 export interface UseAIChatOptions {
@@ -40,6 +56,12 @@ export interface UseAIChatReturn {
     connect: () => void;
     disconnect: () => void;
     threadId: string | null;
+    // ── Multi-thread ────────────────────────
+    threads: AIThreadSummary[];
+    loadThread: (threadId: string) => void;
+    newThread: () => void;
+    deleteThread: (threadId: string) => void;
+    refreshThreads: () => void;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────
@@ -55,6 +77,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     const [messages, setMessages] = useState<AIChatMessage[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
+    const [threads, setThreads] = useState<AIThreadSummary[]>([]);
 
     // ── Refs ────────────────────────────────────────────────────────
     const threadIdRef = useRef<string | null>(null);
@@ -62,6 +85,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     const requestIdRef = useRef(0);
     const pendingTextRef = useRef("");
     const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const graphKeyRef = useRef(graphKey);
+    graphKeyRef.current = graphKey;
 
     // Expose threadId as state-like via a derived value
     const [threadId, setThreadId] = useState<string | null>(null);
@@ -93,6 +118,31 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         }
     }, [flushTokens]);
 
+    // ── Refresh threads list ─────────────────────────────────────────
+
+    const refreshThreads = useCallback(() => {
+        fetch("/api/ai/threads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ graphKey: graphKeyRef.current }),
+        })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.threads) {
+                    setThreads(data.threads.map((t: any) => ({
+                        threadId: t.threadId,
+                        graphKey: t.graphKey,
+                        title: t.title || "New conversation",
+                        totalTokens: t.totalTokens || 0,
+                        messageCount: t.messageCount || 0,
+                        createdTime: t.createdTime,
+                        lastUpdatedTime: t.lastUpdatedTime,
+                    })));
+                }
+            })
+            .catch(() => { /* silent */ });
+    }, []);
+
     // ── Message handler ─────────────────────────────────────────────
 
     const handleMessage = useCallback((data: Record<string, unknown>) => {
@@ -112,6 +162,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 setMessages(prev => {
                     const last = prev[prev.length - 1];
                     if (last?.role === "assistant") {
+                        // Deduplicate by id — ignore if already present
+                        if (last.toolCalls?.some(tc => tc.id === toolCallId)) return prev;
                         const toolCalls = [...(last.toolCalls ?? []), { id: toolCallId, name: toolName }];
                         return [...prev.slice(0, -1), { ...last, toolCalls }];
                     }
@@ -137,6 +189,41 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 break;
             }
 
+            case "ai:tool_limit": {
+                const roundsUsed = data.roundsUsed as number;
+                const maxExtended = data.maxExtended as number;
+                setMessages(prev => {
+                    const last = prev[prev.length - 1];
+                    if (last?.role === "assistant") {
+                        return [...prev.slice(0, -1), { ...last, toolLimitInfo: { roundsUsed, maxExtended } }];
+                    }
+                    return prev;
+                });
+                break;
+            }
+
+            case "ai:usage": {
+                const usage = data.usage as { promptTokens: number; completionTokens: number; totalTokens: number };
+                if (usage) {
+                    setMessages(prev => {
+                        const last = prev[prev.length - 1];
+                        if (last?.role === "assistant") {
+                            const existing = last.usage;
+                            const merged = existing
+                                ? {
+                                    promptTokens: existing.promptTokens + usage.promptTokens,
+                                    completionTokens: existing.completionTokens + usage.completionTokens,
+                                    totalTokens: existing.totalTokens + usage.totalTokens,
+                                }
+                                : usage;
+                            return [...prev.slice(0, -1), { ...last, usage: merged }];
+                        }
+                        return prev;
+                    });
+                }
+                break;
+            }
+
             case "ai:complete": {
                 const fullText = data.fullText as string;
                 const newThreadId = data.threadId as string;
@@ -146,12 +233,15 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                     flushTokens();
                 }
 
-                // Check if the complete message contains a HITL interrupt
+                // Check if the complete message contains a HITL interrupt or tool_limit
                 let proposedAction: unknown = undefined;
+                let isToolLimit = false;
                 try {
                     const parsed = JSON.parse(fullText);
                     if (parsed?.type === "interrupt" && parsed.proposedAction) {
                         proposedAction = parsed.proposedAction;
+                    } else if (parsed?.type === "tool_limit") {
+                        isToolLimit = true;
                     }
                 } catch {
                     // Not JSON — normal text completion
@@ -161,6 +251,10 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 setMessages(prev => {
                     const last = prev[prev.length - 1];
                     if (last?.role === "assistant" && last.isStreaming) {
+                        // For tool_limit, keep existing content and toolLimitInfo — don't overwrite
+                        if (isToolLimit) {
+                            return [...prev.slice(0, -1), { ...last, isStreaming: false }];
+                        }
                         const finalContent = proposedAction ? (last.content || fullText) : last.content;
                         return [
                             ...prev.slice(0, -1),
@@ -173,6 +267,9 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 threadIdRef.current = newThreadId;
                 setThreadId(newThreadId);
                 setIsTyping(false);
+
+                // Refresh threads list after each completion
+                refreshThreads();
                 break;
             }
 
@@ -205,7 +302,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                 break;
             }
         }
-    }, [flushTokens, scheduleFlush]);
+    }, [flushTokens, scheduleFlush, refreshThreads]);
 
     // ── WebSocket connect/disconnect ────────────────────────────────
 
@@ -248,6 +345,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                     if (data.success) {
                         authenticated = true;
                         setIsConnected(true);
+                        // Refresh threads on connect
+                        refreshThreads();
                     } else {
                         console.error('AI WebSocket authentication failed:', data.error);
                         ws.close();
@@ -261,7 +360,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         });
 
         wsRef.current = ws;
-    }, [serverInfo, handleMessage]);
+    }, [serverInfo, handleMessage, refreshThreads]);
 
     const disconnect = useCallback(() => {
         if (wsRef.current) {
@@ -321,11 +420,13 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-        // Add a new streaming assistant message for the continuation
-        setMessages(prev => [
-            ...prev,
-            { id: `asst_${Date.now()}`, role: "assistant", content: "", isStreaming: true },
-        ]);
+        // Clear toolLimitInfo from previous messages and add new streaming message
+        setMessages(prev => {
+            const cleaned = prev.map(msg =>
+                msg.toolLimitInfo ? { ...msg, toolLimitInfo: undefined } : msg,
+            );
+            return [...cleaned, { id: `asst_${Date.now()}`, role: "assistant", content: "", isStreaming: true }];
+        });
 
         setIsTyping(true);
         pendingTextRef.current = "";
@@ -368,6 +469,76 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         setIsTyping(false);
     }, [flushTokens]);
 
+    // ── Multi-thread: load thread ───────────────────────────────────
+
+    const loadThread = useCallback((targetThreadId: string) => {
+        threadIdRef.current = targetThreadId;
+        setThreadId(targetThreadId);
+        setMessages([]);
+        setIsTyping(false);
+
+        // Fetch conversation history from server
+        fetch(`/api/ai/thread/${targetThreadId}/messages`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.conversationHistory) {
+                    const converted: AIChatMessage[] = [];
+                    for (const msg of data.conversationHistory) {
+                        const m = msg as { role?: string; content?: string; tool_calls?: any[] };
+                        if (m.role === "user" && m.content) {
+                            converted.push({
+                                id: `hist_user_${converted.length}`,
+                                role: "user",
+                                content: m.content,
+                            });
+                        } else if (m.role === "assistant") {
+                            const toolCalls = m.tool_calls?.map((tc: any) => ({
+                                id: tc.id,
+                                name: tc.function?.name ?? tc.name ?? "unknown",
+                                result: "done",
+                            }));
+                            converted.push({
+                                id: `hist_asst_${converted.length}`,
+                                role: "assistant",
+                                content: m.content || "",
+                                toolCalls: toolCalls?.length ? toolCalls : undefined,
+                            });
+                        }
+                    }
+                    setMessages(converted);
+                }
+            })
+            .catch(() => { /* silent */ });
+    }, []);
+
+    // ── Multi-thread: new thread ────────────────────────────────────
+
+    const newThread = useCallback(() => {
+        threadIdRef.current = null;
+        setThreadId(null);
+        setMessages([]);
+        setIsTyping(false);
+    }, []);
+
+    // ── Multi-thread: delete thread ─────────────────────────────────
+
+    const deleteThread = useCallback((targetThreadId: string) => {
+        fetch(`/api/ai/thread/${targetThreadId}`, { method: "DELETE" })
+            .then(res => {
+                if (res.ok) {
+                    // If we deleted the active thread, reset
+                    if (threadIdRef.current === targetThreadId) {
+                        threadIdRef.current = null;
+                        setThreadId(null);
+                        setMessages([]);
+                        setIsTyping(false);
+                    }
+                    refreshThreads();
+                }
+            })
+            .catch(() => { /* silent */ });
+    }, [refreshThreads]);
+
     // ── Return ──────────────────────────────────────────────────────
 
     return {
@@ -380,5 +551,10 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
         connect,
         disconnect,
         threadId,
+        threads,
+        loadThread,
+        newThread,
+        deleteThread,
+        refreshThreads,
     };
 }

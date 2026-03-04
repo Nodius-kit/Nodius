@@ -504,6 +504,42 @@ const MyComponent = () => {
 };
 ```
 
+### useAIChat
+
+Hook for AI streaming chat via a dedicated WebSocket. Supports multi-conversation with thread listing, loading, creating, and deleting.
+
+```typescript
+import { useAIChat } from '@nodius/client';
+
+const MyComponent = () => {
+  const {
+    messages,         // AIChatMessage[] — current conversation
+    isConnected,      // WebSocket connected
+    isTyping,         // AI is generating
+    threadId,         // Current thread ID
+    sendMessage,      // (text: string) => void
+    resume,           // (threadId, approved, feedback?) => void — HITL
+    stopGeneration,   // () => void — abort streaming
+    connect,          // () => void
+    disconnect,       // () => void
+    // Multi-thread
+    threads,          // AIThreadSummary[] — list of conversations
+    loadThread,       // (threadId: string) => void — load a past conversation
+    newThread,        // () => void — start fresh
+    deleteThread,     // (threadId: string) => void
+    refreshThreads,   // () => void — refresh list from server
+  } = useAIChat({
+    graphKey: 'my-graph',
+    serverInfo: { host: 'localhost', port: 8426, secure: true, path: '/ws' },
+    autoConnect: true,
+  });
+
+  return <div>{messages.length} messages</div>;
+};
+```
+
+**AIThreadSummary** fields: `threadId`, `graphKey`, `title`, `totalTokens`, `messageCount`, `createdTime`, `lastUpdatedTime`.
+
 ## UI Components
 
 ### Form Components
@@ -663,6 +699,17 @@ initializeFetchMiddleware();
 const response = await fetch('/api/workflow');
 // Automatically becomes: https://api.example.com/api/workflow
 ```
+
+### AI Chat Components
+
+The AI chat system is composed of several components:
+
+- **`AIChatFloating`**: Floating action button (bottom-right) that toggles an overlay chat panel. Manages the AI WebSocket lifecycle via `useAIChat`.
+- **`AIChatPanel`**: Main chat panel with message list, input, HITL modal, and thread management. Header includes "New conversation" and "History" toggle buttons.
+- **`AIThreadList`**: Scrollable list of past conversations with title, relative time, message count, and token count. Supports selecting (loads thread) and deleting threads.
+- **`AIInterruptModal`**: Modal for approving/rejecting proposed write actions (Human-in-the-Loop).
+- **`AIToolLimitBanner`**: Banner shown when tool round limit is reached, offering "Continue" or "Summarize" options.
+- **`renderMessageContent`**: Renders assistant messages with markdown and interactive client actions (`{{node:key}}`, `{{sheet:key}}`, `{{fitArea:...}}`, `{{graph:key}}`).
 
 ### Image API
 

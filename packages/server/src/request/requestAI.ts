@@ -4,7 +4,8 @@
  * Endpoints:
  *   POST /api/ai/chat    — Send a message to the AI (creates or continues a thread)
  *   POST /api/ai/resume  — Approve or reject a proposed action (HITL)
- *   GET  /api/ai/threads  — List AI threads for a graph
+ *   POST /api/ai/threads — List AI threads (optionally filtered by graphKey)
+ *   GET  /api/ai/thread/:threadId/messages — Get conversation history for a thread
  *   DELETE /api/ai/thread/:threadId — Delete a thread
  *
  * Each thread holds an AIAgent instance with its conversation history.
@@ -20,7 +21,7 @@ import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "
 import type { LLMProvider } from "../ai/providers/llmProvider.js";
 import type { EmbeddingProvider } from "../ai/providers/embeddingProvider.js";
 import type { AgentResult } from "../ai/aiAgent.js";
-import { threadStore, type AIThread } from "../ai/threadStore.js";
+import { threadStore, defaultMetadata, type AIThread } from "../ai/threadStore.js";
 
 // ─── Request body schemas ───────────────────────────────────────────
 
@@ -37,7 +38,7 @@ const ResumeBodySchema = z.object({
 }).strict();
 
 const ThreadsBodySchema = z.object({
-    graphKey: z.string().min(1),
+    graphKey: z.string().optional(),
 }).strict();
 
 // ─── Request handler ────────────────────────────────────────────────
@@ -127,6 +128,7 @@ export class RequestAI {
                         workspace,
                         userId: user.id ?? user.username,
                         agent,
+                        metadata: defaultMetadata(),
                         createdTime: Date.now(),
                         lastUpdatedTime: Date.now(),
                     };
@@ -198,7 +200,7 @@ export class RequestAI {
             }
         });
 
-        // ─── GET /api/ai/threads ────────────────────────────────────
+        // ─── POST /api/ai/threads ────────────────────────────────────
 
         app.post("/api/ai/threads", async (req: Request, res: Response) => {
             try {
@@ -214,21 +216,81 @@ export class RequestAI {
                 const { graphKey } = parsed.data;
 
                 const workspace = user.workspaces?.[0] ?? user.userId ?? "default";
+                const userId = user.id ?? user.username;
 
-                // Use threadStore.listByGraph for combined cache + DB listing
-                const allDocs = await threadStore.listByGraph(graphKey, workspace);
+                // If graphKey provided, filter by it; otherwise return all user threads
+                let allDocs;
+                if (graphKey) {
+                    allDocs = await threadStore.listByGraph(graphKey, workspace, userId);
+                } else {
+                    allDocs = await threadStore.listByUser(workspace, userId);
+                }
 
-                const userThreads = allDocs.map(doc => ({
+                const threads = allDocs.map(doc => ({
                     threadId: doc._key,
                     graphKey: doc.graphKey,
+                    title: doc.title || "New conversation",
+                    totalTokens: doc.totalTokens || 0,
+                    totalCost: doc.totalCost || 0,
+                    provider: doc.provider || "",
+                    model: doc.model || "",
+                    messageCount: doc.messageCount || 0,
+                    toolCallCount: doc.toolCallCount || 0,
                     createdTime: doc.createdTime,
                     lastUpdatedTime: doc.lastUpdatedTime,
                     hasPendingAction: doc.pendingInterrupt !== null,
                 }));
 
-                return res.status(200).json({ threads: userThreads });
+                return res.status(200).json({ threads });
             } catch (err: any) {
                 console.error("AI threads error:", err);
+                return res.status(500).json({ error: err.message ?? "Internal error" });
+            }
+        });
+
+        // ─── GET /api/ai/thread/:threadId/messages ──────────────────
+
+        app.get("/api/ai/thread/:threadId/messages", async (req: Request, res: Response) => {
+            try {
+                const user = (req as any).user;
+                if (!user) {
+                    return res.status(401).json({ error: "Not authenticated" });
+                }
+
+                const threadId = req.params?.threadId;
+                if (!threadId) {
+                    return res.status(400).json({ error: "Missing threadId parameter" });
+                }
+
+                const userId = user.id ?? user.username;
+
+                // Try to get from cache first (has full agent)
+                const cached = await threadStore.get(threadId);
+                if (cached) {
+                    if (cached.userId !== userId) {
+                        return res.status(403).json({ error: "Not authorized to view this thread" });
+                    }
+                    return res.status(200).json({
+                        threadId,
+                        conversationHistory: cached.agent.getConversationHistory(),
+                    });
+                }
+
+                // Fallback to raw document
+                const doc = await threadStore.getDocument(threadId);
+                if (!doc) {
+                    return res.status(404).json({ error: "Thread not found" });
+                }
+                if (doc.userId !== userId) {
+                    return res.status(403).json({ error: "Not authorized to view this thread" });
+                }
+
+                return res.status(200).json({
+                    threadId,
+                    conversationHistory: doc.conversationHistory,
+                });
+            } catch (err: any) {
+                console.error("AI thread messages error:", err);
                 return res.status(500).json({ error: err.message ?? "Internal error" });
             }
         });

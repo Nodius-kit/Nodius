@@ -17,12 +17,25 @@ import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
+export interface ThreadMetadata {
+    title: string;
+    totalPromptTokens: number;
+    totalCompletionTokens: number;
+    totalTokens: number;
+    totalCost: number;
+    provider: string;
+    model: string;
+    messageCount: number;
+    toolCallCount: number;
+}
+
 export interface AIThread {
     threadId: string;
     graphKey: string;
     workspace: string;
     userId: string;
     agent: AIAgent;
+    metadata: ThreadMetadata;
     createdTime: number;
     lastUpdatedTime: number;
 }
@@ -33,15 +46,76 @@ export interface AIThreadDocument {
     graphKey: string;
     workspace: string;
     userId: string;
+    title: string;
     conversationHistory: object[];
     pendingInterrupt: object | null;
+    // ─── Metadata accumulées ─────
+    totalPromptTokens: number;
+    totalCompletionTokens: number;
+    totalTokens: number;
+    totalCost: number;
+    provider: string;
+    model: string;
+    messageCount: number;
+    toolCallCount: number;
+    // ─── Timestamps ──────────────
     createdTime: number;
     lastUpdatedTime: number;
+}
+
+/** Delta passed to updateMetadata to accumulate usage. */
+export interface ThreadMetadataDelta {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    cost?: number;
+    toolCallCount?: number;
+    provider?: string;
+    model?: string;
 }
 
 // ─── Collection name ────────────────────────────────────────────────
 
 const COLLECTION_NAME = "nodius_ai_threads";
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/** Extract a title from the first user message in conversation history, truncated to 80 chars. */
+function extractTitle(conversationHistory: object[]): string {
+    for (const msg of conversationHistory) {
+        const m = msg as { role?: string; content?: string };
+        if (m.role === "user" && m.content) {
+            const text = m.content.trim().replace(/\n/g, " ");
+            return text.length > 80 ? text.slice(0, 77) + "..." : text;
+        }
+    }
+    return "New conversation";
+}
+
+/** Count user + assistant messages in history. */
+function countMessages(conversationHistory: object[]): number {
+    let count = 0;
+    for (const msg of conversationHistory) {
+        const m = msg as { role?: string };
+        if (m.role === "user" || m.role === "assistant") count++;
+    }
+    return count;
+}
+
+/** Create a default (empty) ThreadMetadata. */
+function defaultMetadata(): ThreadMetadata {
+    return {
+        title: "New conversation",
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        totalCost: 0,
+        provider: "",
+        model: "",
+        messageCount: 0,
+        toolCallCount: 0,
+    };
+}
 
 // ─── Thread Store class ─────────────────────────────────────────────
 
@@ -173,6 +247,17 @@ export class ThreadStore {
             workspace: doc.workspace,
             userId: doc.userId,
             agent,
+            metadata: {
+                title: doc.title || extractTitle(doc.conversationHistory),
+                totalPromptTokens: doc.totalPromptTokens || 0,
+                totalCompletionTokens: doc.totalCompletionTokens || 0,
+                totalTokens: doc.totalTokens || 0,
+                totalCost: doc.totalCost || 0,
+                provider: doc.provider || "",
+                model: doc.model || "",
+                messageCount: doc.messageCount || countMessages(doc.conversationHistory),
+                toolCallCount: doc.toolCallCount || 0,
+            },
             createdTime: doc.createdTime,
             lastUpdatedTime: doc.lastUpdatedTime,
         };
@@ -207,12 +292,85 @@ export class ThreadStore {
         }
     }
 
-    /** List all thread documents for a given graph+workspace (from DB). */
-    async listByGraph(graphKey: string, workspace: string): Promise<AIThreadDocument[]> {
+    /**
+     * Accumulate usage metadata on a thread after a streaming completion.
+     * Updates both the in-memory cache and persists to DB.
+     */
+    async updateMetadata(threadId: string, delta: ThreadMetadataDelta): Promise<void> {
+        const thread = this.cache.get(threadId);
+        if (!thread) return;
+
+        const m = thread.metadata;
+        if (delta.promptTokens) m.totalPromptTokens += delta.promptTokens;
+        if (delta.completionTokens) m.totalCompletionTokens += delta.completionTokens;
+        if (delta.totalTokens) m.totalTokens += delta.totalTokens;
+        if (delta.cost) m.totalCost += delta.cost;
+        if (delta.toolCallCount) m.toolCallCount += delta.toolCallCount;
+        if (delta.provider) m.provider = delta.provider;
+        if (delta.model) m.model = delta.model;
+
+        // Recompute title and messageCount from conversation history
+        const history = thread.agent.getConversationHistory() as object[];
+        m.title = extractTitle(history);
+        m.messageCount = countMessages(history);
+
+        thread.lastUpdatedTime = Date.now();
+    }
+
+    /** List all thread documents for a given graph+workspace (from DB), optionally filtered by userId. */
+    async listByGraph(graphKey: string, workspace: string, userId?: string): Promise<AIThreadDocument[]> {
         // First, check cache
         const fromCache: AIThreadDocument[] = [];
         for (const thread of this.cache.values()) {
             if (thread.graphKey === graphKey && thread.workspace === workspace) {
+                if (!userId || thread.userId === userId) {
+                    fromCache.push(this.threadToDocument(thread));
+                }
+            }
+        }
+
+        if (!this.collection) return fromCache;
+
+        try {
+            const { db } = await import("../server.js");
+            let cursor;
+            if (userId) {
+                cursor = await db.query(aql`
+                    FOR doc IN ${this.collection}
+                        FILTER doc.graphKey == ${graphKey} AND doc.workspace == ${workspace} AND doc.userId == ${userId}
+                        SORT doc.lastUpdatedTime DESC
+                        RETURN doc
+                `);
+            } else {
+                cursor = await db.query(aql`
+                    FOR doc IN ${this.collection}
+                        FILTER doc.graphKey == ${graphKey} AND doc.workspace == ${workspace}
+                        SORT doc.lastUpdatedTime DESC
+                        RETURN doc
+                `);
+            }
+            const fromDb: AIThreadDocument[] = await cursor.all();
+
+            // Merge: cache takes precedence, add DB entries not in cache
+            const cacheKeys = new Set(fromCache.map(d => d._key));
+            for (const doc of fromDb) {
+                if (!cacheKeys.has(doc._key)) {
+                    fromCache.push(doc);
+                }
+            }
+
+            return fromCache.sort((a, b) => b.lastUpdatedTime - a.lastUpdatedTime);
+        } catch {
+            return fromCache;
+        }
+    }
+
+    /** List all threads for a user across all graphs, sorted by lastUpdatedTime DESC. */
+    async listByUser(workspace: string, userId: string): Promise<AIThreadDocument[]> {
+        // From cache
+        const fromCache: AIThreadDocument[] = [];
+        for (const thread of this.cache.values()) {
+            if (thread.workspace === workspace && thread.userId === userId) {
                 fromCache.push(this.threadToDocument(thread));
             }
         }
@@ -223,13 +381,12 @@ export class ThreadStore {
             const { db } = await import("../server.js");
             const cursor = await db.query(aql`
                 FOR doc IN ${this.collection}
-                    FILTER doc.graphKey == ${graphKey} AND doc.workspace == ${workspace}
+                    FILTER doc.workspace == ${workspace} AND doc.userId == ${userId}
                     SORT doc.lastUpdatedTime DESC
                     RETURN doc
             `);
             const fromDb: AIThreadDocument[] = await cursor.all();
 
-            // Merge: cache takes precedence, add DB entries not in cache
             const cacheKeys = new Set(fromCache.map(d => d._key));
             for (const doc of fromDb) {
                 if (!cacheKeys.has(doc._key)) {
@@ -256,13 +413,24 @@ export class ThreadStore {
     // ─── Private ────────────────────────────────────────────────────
 
     private threadToDocument(thread: AIThread): AIThreadDocument {
+        const history = thread.agent.getConversationHistory() as object[];
+        const m = thread.metadata;
         return {
             _key: thread.threadId,
             graphKey: thread.graphKey,
             workspace: thread.workspace,
             userId: thread.userId,
-            conversationHistory: thread.agent.getConversationHistory() as object[],
+            title: m.title || extractTitle(history),
+            conversationHistory: history,
             pendingInterrupt: thread.agent.getPendingInterrupt() as object | null,
+            totalPromptTokens: m.totalPromptTokens,
+            totalCompletionTokens: m.totalCompletionTokens,
+            totalTokens: m.totalTokens,
+            totalCost: m.totalCost,
+            provider: m.provider,
+            model: m.model,
+            messageCount: m.messageCount || countMessages(history),
+            toolCallCount: m.toolCallCount,
             createdTime: thread.createdTime,
             lastUpdatedTime: thread.lastUpdatedTime,
         };
@@ -293,3 +461,6 @@ export class ThreadStore {
  * Call `threadStore.init()` once during server startup.
  */
 export const threadStore = new ThreadStore();
+
+/** Helper to create a default ThreadMetadata object. */
+export { defaultMetadata };

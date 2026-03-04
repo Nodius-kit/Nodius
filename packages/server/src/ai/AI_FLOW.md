@@ -63,11 +63,22 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       │
       ├── ai:token (fragments de texte, accumules ~32ms)
       ├── ai:tool_start / ai:tool_result (si outils appeles)
+      ├── ai:tool_limit (si 5 rounds atteints, demande confirmation)
       ├── ai:complete { threadId, fullText }
       │
       ▼
+[7b] Rendu client
+      │
+      ├── renderMessageContent() — markdown + actions client {{action:params}}
+      ├── {{node:key}} → NodeRefLink (zoom + select)
+      ├── {{sheet:key}} → SheetLink (switch sheet)
+      ├── {{fitArea:...}} → FitAreaLink (zoom camera)
+      ├── {{graph:key}} → GraphLink (ouvrir autre graph)
+      │
+      ▼
 [8] Persistence
-      └── threadStore.save() → ArangoDB collection nodius_ai_threads
+      ├── threadStore.save() → ArangoDB collection nodius_ai_threads
+      └── threadStore.updateMetadata() → accumule tokens/cost/provider/model
 ```
 
 ---
@@ -205,13 +216,15 @@ const callbacks = this.buildCallbacks(ws, _id, thread.threadId, abort.signal);
 await thread.agent.chatStream(message, callbacks);
 ```
 
-Les `callbacks` sont 5 fonctions qui transforment les evenements internes en messages WebSocket :
+Les `callbacks` sont 7 fonctions qui transforment les evenements internes en messages WebSocket :
 
 | Callback | → Message WS |
 |----------|--------------|
 | `onToken(token)` | `{ type: "ai:token", _id, token }` |
 | `onToolStart(id, name)` | `{ type: "ai:tool_start", _id, toolCallId, toolName }` |
 | `onToolResult(id, result)` | `{ type: "ai:tool_result", _id, toolCallId, result }` |
+| `onUsage(usage)` | `{ type: "ai:usage", _id, usage }` |
+| `onToolLimit(info)` | `{ type: "ai:tool_limit", _id, roundsUsed, maxExtended }` |
 | `onComplete(fullText)` | `{ type: "ai:complete", _id, threadId, fullText }` |
 | `onError(error)` | `{ type: "ai:error", _id, error }` |
 
@@ -308,8 +321,9 @@ Contenu du prompt :
 - Permissions : editor → "Tu peux proposer des modifications"
 - 4 types built-in (starter, return, html, entryType) avec leurs handles
 - Types custom du workspace (api-call, filter, transform, log-node)
-- 7 regles strictes (pas d'AQL, outils obligatoires, etc.)
+- 8 regles strictes (pas d'AQL, outils obligatoires, actions client, etc.)
 - Conventions Nodius (localKeys, handles, process/data)
+- Format de reponse : markdown + actions client `{{action:params}}` (node, select, fitArea, sheet, graph, link)
 
 Ce message est ajoute a `conversationHistory` comme `role: "system"`.
 
@@ -404,12 +418,18 @@ Le stream est consomme chunk par chunk dans `streamOneLLMCall()` :
 
 ```
 Pour chaque chunk du stream :
-  ├── type "token"          → callbacks.onToken("Le node") → WS ai:token
+  ├── type "token"          → filterToolCallText() → callbacks.onToken("Le node") → WS ai:token
   ├── type "tool_call_start"→ callbacks.onToolStart(id, "read_node_detail")
   ├── type "tool_call_done" → accumule le tool call complet
   ├── type "usage"          → enregistre dans TokenTracker
-  └── type "done"           → fin du stream
+  └── type "done"           → flush heldBack restant → fin du stream
 ```
+
+**Filtre XML streaming** (`filterToolCallText`) : Certains LLM (DeepSeek) emettent des tool calls sous forme de texte XML (`<｜DSML｜...>`) dans le content au lieu du mecanisme standard. Le filtre utilise du **prefix buffering** :
+- Les tokens sont accumules dans `rawAccumulator`
+- `filterToolCallText()` retourne `{ safe, heldBack, markerFound }`
+- Seul le texte `safe` est emis au client ; `heldBack` retient tout suffixe qui pourrait etre le debut d'un marker XML
+- Apres fin du stream, le `heldBack` est flush s'il ne s'est pas transforme en marker complet
 
 Cote client, les tokens sont accumules dans un buffer (`pendingTextRef`) et flushes toutes les **~32ms** pour eviter les re-renders excessifs React.
 
@@ -449,7 +469,11 @@ LLM stream → tool_call_done  { id: "tc_1", name: "read_node_detail", arguments
 5. → Reboucle : nouvel appel LLM avec le resultat de l'outil dans le contexte
 ```
 
-La boucle peut tourner **jusqu'a 5 rounds** (configurable via `maxToolRounds`).
+La boucle peut tourner **jusqu'a 5 rounds** (INITIAL_TOOL_ROUNDS). Si le LLM a encore des tool calls a effectuer au round 5, l'agent **pause** et envoie un `ai:tool_limit` au client. L'utilisateur peut alors :
+- **Continuer** : 5 rounds supplementaires (EXTENDED_TOOL_ROUNDS = 10 total)
+- **Resumer** : forcer une reponse texte immediate avec les infos collectees
+
+Ce mecanisme evite les boucles infinies d'outils tout en permettant des analyses complexes.
 
 ### 6c. Cas 3 — Le LLM appelle un outil d'ecriture (HITL)
 
@@ -482,10 +506,16 @@ Les messages WebSocket sont recus et traites dans le switch du handler :
 | `ai:token { token: "Le " }` | `pendingTextRef += "Le "` → flush apres 32ms → met a jour le dernier message assistant |
 | `ai:tool_start { toolCallId, toolName }` | Ajoute un badge `toolCall` au dernier message assistant |
 | `ai:tool_result { toolCallId, result }` | Met a jour le `toolCall` avec le resultat |
+| `ai:usage { usage }` | Accumule les tokens (prompt + completion) sur le message assistant |
+| `ai:tool_limit { roundsUsed, maxExtended }` | Setter `toolLimitInfo` sur le dernier message → affiche `AIToolLimitBanner` |
 | `ai:complete { threadId, fullText }` | Flush final des tokens, `isStreaming = false`, `isTyping = false`, sauvegarde `threadId` |
-| `ai:error { error }` | Affiche l'erreur, `isTyping = false` |
+| `ai:error { error, code?, retryable? }` | Affiche l'erreur classifiee, `isTyping = false` |
 
-**Detection HITL :** A la reception de `ai:complete`, le hook tente de parser `fullText` comme JSON. S'il contient `{ type: "interrupt", proposedAction }`, le champ `proposedAction` est attache au message assistant → le composant `AIChatPanel` detecte le `proposedAction` et affiche le modal `AIInterruptModal`.
+**Detection HITL :** A la reception de `ai:complete`, le hook tente de parser `fullText` comme JSON. S'il contient `{ type: "interrupt", proposedAction }`, le champ `proposedAction` est attache au message assistant → `AIChatPanel` affiche le modal `AIInterruptModal`.
+
+**Detection tool_limit :** Si `fullText` est `{ type: "tool_limit" }`, le message est finalise sans ecraser le contenu ni le `toolLimitInfo` — `AIToolLimitBanner` affiche les boutons "Continue" / "Summarize now".
+
+**Rendu markdown + actions client :** Les messages assistant sont rendus par `renderMessageContent()` qui parse le markdown (bold, italic, listes, code blocks) et les actions client `{{action:params}}` en composants React interactifs (zoom, selection, navigation).
 
 ---
 
@@ -507,6 +537,7 @@ Le thread est persiste dans la collection ArangoDB `nodius_ai_threads` :
   "graphKey": "nba-workflow",
   "workspace": "default",
   "userId": "admin",
+  "title": "Que fait le node fetch-api ?",
   "conversationHistory": [
     { "role": "system", "content": "Tu es un assistant IA..." },
     { "role": "system", "content": "[Contexte RAG pour cette question]..." },
@@ -514,12 +545,27 @@ Le thread est persiste dans la collection ArangoDB `nodius_ai_threads` :
     { "role": "assistant", "content": "Le node fetch-api est de type api-call..." }
   ],
   "pendingInterrupt": null,
+  "totalPromptTokens": 1234,
+  "totalCompletionTokens": 567,
+  "totalTokens": 1801,
+  "totalCost": 0.000756,
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "messageCount": 2,
+  "toolCallCount": 0,
   "createdTime": 1709123456000,
   "lastUpdatedTime": 1709123489000
 }
 ```
 
 Cela permet le **thread roaming** : si le prochain message arrive sur un autre serveur du cluster, le thread est reconstruit depuis la DB.
+
+**Multi-conversations :** Chaque (userId, graphKey) peut avoir plusieurs threads. Le client peut lister, charger, creer et supprimer des threads via :
+- `POST /api/ai/threads { graphKey? }` — liste les threads (filtre par graphKey optionnel, toujours filtre par userId)
+- `GET /api/ai/thread/:threadId/messages` — charge l'historique d'un thread
+- `DELETE /api/ai/thread/:threadId` — supprime un thread
+
+Cote client, le hook `useAIChat` expose `threads`, `loadThread()`, `newThread()`, `deleteThread()`, `refreshThreads()`. Le composant `AIThreadList` affiche la liste dans le panel chat (toggle via bouton List dans le header).
 
 ---
 

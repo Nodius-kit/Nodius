@@ -7,7 +7,91 @@ import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks,
 import type { LLMProvider, LLMToolCall } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { getTokenTracker } from "./tokenTracker.js";
-import { logMalformedJSON, debugAI } from "./aiLogger.js";
+import { logMalformedJSON, debugAI, isAIDebugEnabled } from "./aiLogger.js";
+
+// ─── XML tool-call text filter ───────────────────────────────────────
+// Some providers (e.g. DeepSeek) emit tool calls as XML text in content
+// instead of using the standard tool_calls mechanism. We strip these.
+// DeepSeek uses full-width ｜ (U+FF5C) in its XML tags, e.g. <｜DSML｜function_calls>
+// The XML blocks are often incomplete (no closing tag), so we strip from
+// the FIRST marker onwards rather than trying to match open/close pairs.
+const TOOL_CALL_START_MARKERS = [
+    "<\uff5cDSML\uff5c",    // DeepSeek full-width: <｜DSML｜
+    "<|DSML|",               // ASCII variant
+    "<function_calls>",      // Generic
+    "<function_call>",
+    "<tool_call>",
+];
+
+/** Pre-computed max marker length for prefix buffering. */
+const MAX_MARKER_LENGTH = Math.max(...TOOL_CALL_START_MARKERS.map(m => m.length));
+
+/** Check if `text` is a prefix of any marker (e.g. "<" is a prefix of "<function_calls>"). */
+function isMarkerPrefix(text: string): boolean {
+    for (const marker of TOOL_CALL_START_MARKERS) {
+        if (marker.startsWith(text)) return true;
+    }
+    return false;
+}
+
+interface FilterResult {
+    /** Text safe to emit to the client. */
+    safe: string;
+    /** Suffix held back because it could be the start of a marker. */
+    heldBack: string;
+    /** Whether a full marker was found (everything from marker onward is stripped). */
+    markerFound: boolean;
+}
+
+/**
+ * Filter XML-encoded tool call text from LLM content, with prefix buffering.
+ * Holds back any trailing suffix that could be the beginning of a marker.
+ */
+function filterToolCallText(text: string): FilterResult {
+    // Check for a complete marker first
+    let earliest = -1;
+    for (const marker of TOOL_CALL_START_MARKERS) {
+        const idx = text.indexOf(marker);
+        if (idx !== -1 && (earliest === -1 || idx < earliest)) {
+            earliest = idx;
+        }
+    }
+    if (earliest !== -1) {
+        return { safe: text.slice(0, earliest).trimEnd(), heldBack: "", markerFound: true };
+    }
+
+    // No complete marker — check if a trailing suffix is a prefix of any marker
+    const searchStart = Math.max(0, text.length - MAX_MARKER_LENGTH);
+    for (let i = searchStart; i < text.length; i++) {
+        const suffix = text.slice(i);
+        if (isMarkerPrefix(suffix)) {
+            return { safe: text.slice(0, i), heldBack: suffix, markerFound: false };
+        }
+    }
+
+    return { safe: text, heldBack: "", markerFound: false };
+}
+
+// ─── Tool result truncation ─────────────────────────────────────────
+// After the LLM has processed a tool result in one round, truncate it in
+// history to reduce prompt tokens on subsequent rounds.
+const TOOL_RESULT_MAX_CHARS = 600;
+
+/**
+ * Truncate old tool result messages in conversation history to save tokens.
+ * Only truncates messages that are already in history before the current round.
+ */
+function truncateOldToolResults(history: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): void {
+    for (const msg of history) {
+        if (msg.role === "tool" && typeof msg.content === "string" && msg.content.length > TOOL_RESULT_MAX_CHARS) {
+            msg.content = msg.content.slice(0, TOOL_RESULT_MAX_CHARS) + `\n... [truncated, ${msg.content.length} chars total]`;
+        }
+    }
+}
+
+// ─── Tool round limits ──────────────────────────────────────────────
+const INITIAL_TOOL_ROUNDS = 5;
+const EXTENDED_TOOL_ROUNDS = 10;
 
 export interface AIAgentOptions {
     graphKey: string;
@@ -67,8 +151,9 @@ export class AIAgent {
     private retriever: GraphRAGRetriever;
     private llmProvider: LLMProvider;
 
-    /** Pending interrupt state — set when a propose_* tool is detected. */
+    /** Pending interrupt state — set when a propose_* tool or tool_limit is detected. */
     private pendingInterrupt: {
+        kind: "hitl" | "tool_limit";
         toolCallId: string;
         toolName: string;
         args: Record<string, unknown>;
@@ -76,6 +161,11 @@ export class AIAgent {
         toolCallLog: ToolCallEntry[];
         remainingToolCalls: LLMToolCall[];
     } | null = null;
+
+    /** Whether the user approved extending beyond INITIAL_TOOL_ROUNDS. */
+    private toolLimitExtended = false;
+    /** Current round index saved when tool_limit fires. */
+    private toolLimitRound = 0;
 
     constructor(options: AIAgentOptions) {
         this.graphKey = options.graphKey;
@@ -94,18 +184,22 @@ export class AIAgent {
 
         // Step 1: Retrieve context via GraphRAG
         const context = await this.retriever.retrieve(this.graphKey, userMessage);
+        debugAI("rag_context", { nodes: context.relevantNodes.length, edges: context.relevantEdges.length, nodeTypes: context.nodeTypeConfigs.length });
 
         // Step 2: Build system prompt (only on first message or refresh)
         if (this.conversationHistory.length === 0) {
+            const systemPrompt = buildSystemPrompt(context, this.role);
+            debugAI("system_prompt", { length: systemPrompt.length });
             this.conversationHistory.push({
                 role: "system",
-                content: buildSystemPrompt(context, this.role),
+                content: systemPrompt,
             });
         }
 
         // Step 3: Add context summary + user message
         const contextSummary = buildContextSummary(context);
         if (contextSummary) {
+            debugAI("rag_summary", { length: contextSummary.length });
             this.conversationHistory.push({
                 role: "system",
                 content: `[Contexte RAG pour cette question]\n${contextSummary}`,
@@ -116,6 +210,8 @@ export class AIAgent {
             role: "user",
             content: userMessage,
         });
+
+        debugAI("conversation_state", { historyLength: this.conversationHistory.length });
 
         // Step 4: Run the tool calling loop
         return this.runToolLoop(context);
@@ -173,6 +269,7 @@ export class AIAgent {
                 // Another propose_* in the same batch — interrupt again
                 const proposedAction = parseProposedAction(tc.function.name, tcArgs);
                 this.pendingInterrupt = {
+                    kind: "hitl",
                     toolCallId: tc.id,
                     toolName: tc.function.name,
                     args: tcArgs,
@@ -246,20 +343,26 @@ export class AIAgent {
      */
     async chatStream(userMessage: string, callbacks: StreamCallbacks): Promise<void> {
         try {
+            debugAI("stream_chat_start", { graphKey: this.graphKey, messageLength: userMessage.length });
+
             // Step 1: Retrieve context via GraphRAG
             const context = await this.retriever.retrieve(this.graphKey, userMessage);
+            debugAI("rag_context", { nodes: context.relevantNodes.length, edges: context.relevantEdges.length, nodeTypes: context.nodeTypeConfigs.length });
 
             // Step 2: Build system prompt (only on first message)
             if (this.conversationHistory.length === 0) {
+                const systemPrompt = buildSystemPrompt(context, this.role);
+                debugAI("system_prompt", { length: systemPrompt.length });
                 this.conversationHistory.push({
                     role: "system",
-                    content: buildSystemPrompt(context, this.role),
+                    content: systemPrompt,
                 });
             }
 
             // Step 3: Add context summary + user message
             const contextSummary = buildContextSummary(context);
             if (contextSummary) {
+                debugAI("rag_summary", { length: contextSummary.length });
                 this.conversationHistory.push({
                     role: "system",
                     content: `[Contexte RAG pour cette question]\n${contextSummary}`,
@@ -267,6 +370,7 @@ export class AIAgent {
             }
 
             this.conversationHistory.push({ role: "user", content: userMessage });
+            debugAI("conversation_state", { historyLength: this.conversationHistory.length });
 
             // Step 4: Run the streaming tool loop
             await this.runStreamToolLoop(callbacks);
@@ -276,7 +380,7 @@ export class AIAgent {
     }
 
     /**
-     * Resume a streaming conversation after HITL approval/rejection.
+     * Resume a streaming conversation after HITL approval/rejection or tool_limit decision.
      */
     async resumeConversationStream(
         approved: boolean,
@@ -289,7 +393,23 @@ export class AIAgent {
         }
 
         try {
-            // After HITL action, the graph may have changed — invalidate RAG cache
+            const { kind } = this.pendingInterrupt;
+
+            if (kind === "tool_limit") {
+                this.pendingInterrupt = null;
+
+                if (approved) {
+                    // User approved more rounds
+                    this.toolLimitExtended = true;
+                    await this.runStreamToolLoop(callbacks, this.toolLimitRound);
+                } else {
+                    // User wants a summary now
+                    await this.streamFinalAnswer(callbacks);
+                }
+                return;
+            }
+
+            // HITL interrupt — after action, the graph may have changed
             this.retriever.clearCache();
 
             const { toolCallId, toolName, args } = this.pendingInterrupt;
@@ -365,6 +485,7 @@ export class AIAgent {
 
                     // Save state for resumeConversation()
                     this.pendingInterrupt = {
+                        kind: "hitl",
                         toolCallId: tc.id,
                         toolName: tc.function.name,
                         args,
@@ -437,29 +558,42 @@ export class AIAgent {
 
     /**
      * Streaming tool loop: iterates LLM calls + tool executions with callbacks.
+     * @param callbacks Stream callbacks for token/tool/complete events.
+     * @param startRound Round to start from (used when resuming after tool_limit).
      */
-    private async runStreamToolLoop(callbacks: StreamCallbacks): Promise<void> {
+    private async runStreamToolLoop(callbacks: StreamCallbacks, startRound = 0): Promise<void> {
         const tools = this.getTools();
         const executeReadTool = createReadToolExecutor(this.dataSource, this.graphKey);
+        const maxRounds = this.toolLimitExtended ? EXTENDED_TOOL_ROUNDS : INITIAL_TOOL_ROUNDS;
 
-        for (let round = 0; round < this.maxToolRounds; round++) {
+        for (let round = startRound; round < maxRounds; round++) {
+            // Truncate old tool results to reduce prompt tokens on subsequent rounds
+            if (round > 0) {
+                truncateOldToolResults(this.conversationHistory);
+            }
+            debugAI("stream_round_start", { round, maxRounds });
             const { text, toolCalls, usage } = await this.streamOneLLMCall(tools, callbacks);
 
-            // Record usage in token tracker
+            // Record usage in token tracker and notify client
             if (usage) {
+                debugAI("llm_usage", { promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, totalTokens: usage.totalTokens });
                 getTokenTracker().record(
                     { prompt_tokens: usage.promptTokens, completion_tokens: usage.completionTokens, total_tokens: usage.totalTokens },
                     this.llmProvider!.getModel(),
                     "stream",
                 );
+                callbacks.onUsage?.(usage);
             }
 
             // No tool calls → final answer
             if (toolCalls.length === 0) {
+                debugAI("stream_final_answer", { textLength: text.length });
                 this.conversationHistory.push({ role: "assistant", content: text });
                 callbacks.onComplete(text);
                 return;
             }
+
+            debugAI("stream_tool_calls", { count: toolCalls.length, names: toolCalls.map(tc => tc.name).join(",") });
 
             // Push assistant message with tool calls into history
             this.conversationHistory.push({
@@ -473,6 +607,7 @@ export class AIAgent {
             } as OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam);
 
             // Execute each tool call
+            // Note: onToolStart is already called in streamOneLLMCall for each tool_call_start chunk
             for (const tc of toolCalls) {
                 let args: Record<string, unknown>;
                 try {
@@ -487,8 +622,10 @@ export class AIAgent {
 
                 // HITL: propose_* tool → interrupt (stop streaming)
                 if (isWriteTool(tc.name)) {
+                    debugAI("hitl_interrupt_stream", { toolName: tc.name });
                     const proposedAction = parseProposedAction(tc.name, args);
                     this.pendingInterrupt = {
+                        kind: "hitl",
                         toolCallId: tc.id,
                         toolName: tc.name,
                         args,
@@ -496,14 +633,13 @@ export class AIAgent {
                         toolCallLog: [],
                         remainingToolCalls: [],
                     };
-                    // Notify via onToolStart (the client will show the HITL UI)
-                    callbacks.onToolStart(tc.id, tc.name);
                     callbacks.onComplete(JSON.stringify({ type: "interrupt", proposedAction, toolCall: { id: tc.id, name: tc.name, args } }));
                     return;
                 }
 
-                callbacks.onToolStart(tc.id, tc.name);
+                debugAI("tool_execute", { toolName: tc.name, args });
                 const result = await executeReadTool(tc.name, args);
+                debugAI("tool_result", { toolName: tc.name, resultLen: result.length });
                 callbacks.onToolResult(tc.id, result);
 
                 this.conversationHistory.push({
@@ -512,16 +648,47 @@ export class AIAgent {
                     content: result,
                 });
             }
+
+            // Check if we've reached the initial limit and should ask the user
+            if (round === INITIAL_TOOL_ROUNDS - 1 && !this.toolLimitExtended) {
+                debugAI("tool_limit_reached", { round, maxRounds });
+                this.toolLimitRound = round + 1;
+                this.pendingInterrupt = {
+                    kind: "tool_limit",
+                    toolCallId: "",
+                    toolName: "",
+                    args: {},
+                    context: await this.retriever.retrieve(this.graphKey, ""),
+                    toolCallLog: [],
+                    remainingToolCalls: [],
+                };
+                callbacks.onToolLimit?.({ roundsUsed: INITIAL_TOOL_ROUNDS, maxExtended: EXTENDED_TOOL_ROUNDS });
+                callbacks.onComplete(JSON.stringify({ type: "tool_limit", roundsUsed: INITIAL_TOOL_ROUNDS, maxExtended: EXTENDED_TOOL_ROUNDS }));
+                return;
+            }
         }
 
         // Exhausted tool rounds — get a final streamed answer without tools
+        this.streamFinalAnswer(callbacks);
+    }
+
+    /** Stream a forced final answer (no tools) when tool rounds are exhausted. */
+    private async streamFinalAnswer(callbacks: StreamCallbacks): Promise<void> {
+        truncateOldToolResults(this.conversationHistory);
+        this.conversationHistory.push({
+            role: "system",
+            content: "Tu as atteint la limite de rounds d'outils. Reponds maintenant directement a l'utilisateur avec les informations que tu as deja collectees. N'essaie PAS d'appeler d'outils, reponds uniquement en texte.",
+        });
+        debugAI("stream_exhausted_rounds", { maxRounds: this.toolLimitExtended ? EXTENDED_TOOL_ROUNDS : INITIAL_TOOL_ROUNDS });
         const { text: finalText, usage: finalUsage } = await this.streamOneLLMCall([], callbacks);
         if (finalUsage) {
+            debugAI("llm_usage_final", { promptTokens: finalUsage.promptTokens, completionTokens: finalUsage.completionTokens, totalTokens: finalUsage.totalTokens });
             getTokenTracker().record(
                 { prompt_tokens: finalUsage.promptTokens, completion_tokens: finalUsage.completionTokens, total_tokens: finalUsage.totalTokens },
                 this.llmProvider!.getModel(),
                 "stream-final",
             );
+            callbacks.onUsage?.(finalUsage);
         }
         this.conversationHistory.push({ role: "assistant", content: finalText });
         callbacks.onComplete(finalText);
@@ -543,18 +710,47 @@ export class AIAgent {
         const toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
         let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
 
+        // Log full conversation being sent to LLM
+        debugAI("messages_to_llm", {
+            messageCount: this.conversationHistory.length,
+            toolCount: tools.length,
+            messages: this.conversationHistory.map((m, i) => {
+                const role = m.role;
+                const content = typeof (m as { content?: string | null }).content === "string"
+                    ? ((m as { content: string }).content.length > 500
+                        ? (m as { content: string }).content.slice(0, 500) + `... [${(m as { content: string }).content.length} chars]`
+                        : (m as { content: string }).content)
+                    : "(no content)";
+                const toolCalls = (m as { tool_calls?: unknown[] }).tool_calls;
+                return `[${i}] ${role}: ${content}${toolCalls ? ` +${toolCalls.length} tool_calls` : ""}`;
+            }).join("\n"),
+        });
+
         const stream = this.llmProvider!.streamCompletionWithTools(
             this.conversationHistory,
             tools,
             callbacks.signal ? { signal: callbacks.signal } : undefined,
         );
 
+        // Track how much clean text we've already sent to the client
+        let sentLength = 0;
+        let rawAccumulator = "";
+        let markerFound = false;
+
         for await (const chunk of stream) {
             switch (chunk.type) {
                 case "token":
-                    if (chunk.token) {
-                        text += chunk.token;
-                        callbacks.onToken(chunk.token);
+                    if (chunk.token && !markerFound) {
+                        rawAccumulator += chunk.token;
+                        const result = filterToolCallText(rawAccumulator);
+                        if (result.markerFound) markerFound = true;
+                        // Only emit the safe portion beyond what we've already sent
+                        if (result.safe.length > sentLength) {
+                            const delta = result.safe.slice(sentLength);
+                            sentLength = result.safe.length;
+                            text = result.safe;
+                            callbacks.onToken(delta);
+                        }
                     }
                     break;
                 case "tool_call_start":
@@ -574,6 +770,26 @@ export class AIAgent {
                     break;
             }
         }
+
+        // After stream ends, flush any held-back text that wasn't a marker
+        if (!markerFound && rawAccumulator.length > sentLength) {
+            // Re-run filter one last time — if heldBack remains and no marker was found, it's safe
+            const finalResult = filterToolCallText(rawAccumulator);
+            if (!finalResult.markerFound) {
+                const remaining = rawAccumulator.slice(sentLength);
+                if (remaining) {
+                    text = rawAccumulator;
+                    callbacks.onToken(remaining);
+                }
+            }
+        }
+
+        debugAI("llm_response", {
+            textLength: text.length,
+            text: text.length > 500 ? text.slice(0, 500) + `... [${text.length} chars]` : text,
+            toolCallCount: toolCalls.length,
+            toolCallNames: toolCalls.map(tc => tc.name).join(",") || "(none)",
+        });
 
         return { text, toolCalls, usage };
     }

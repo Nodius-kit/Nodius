@@ -14,12 +14,13 @@ import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "
 import type { LLMProvider } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { getAIConfig } from "./config/aiConfig.js";
-import { threadStore, type AIThread } from "./threadStore.js";
+import { threadStore, defaultMetadata, type AIThread } from "./threadStore.js";
 import type { StreamCallbacks } from "./types.js";
 import type { MemoryGraphProvider } from "./memoryAwareDataSource.js";
 import type { AuthenticatedClient } from "../cluster/webSocketManager.js";
 import { logLLMError, logClientDisconnect, logMalformedJSON, debugAI } from "./aiLogger.js";
 import { classifyLLMError, type ClassifiedError } from "./errorClassifier.js";
+import { getPricing } from "./tokenTracker.js";
 
 // ─── Zod schemas for incoming messages ───────────────────────────────
 
@@ -44,6 +45,22 @@ const AIInterruptSchema = z.object({
     _id: z.number(),
     threadId: z.string().min(1),
 }).strict();
+
+// ─── Usage accumulator ───────────────────────────────────────────────
+
+interface UsageAccumulator {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    toolCallCount: number;
+}
+
+/** Compute cost from accumulated usage and provider pricing. */
+function computeCost(acc: UsageAccumulator, provider: string): number {
+    const pricing = getPricing(provider);
+    return (acc.promptTokens / 1_000_000) * pricing.inputPerMillion
+         + (acc.completionTokens / 1_000_000) * pricing.outputPerMillion;
+}
 
 // ─── Controller ──────────────────────────────────────────────────────
 
@@ -163,6 +180,7 @@ export class WsAIController {
                 workspace,
                 userId,
                 agent,
+                metadata: defaultMetadata(),
                 createdTime: Date.now(),
                 lastUpdatedTime: Date.now(),
             };
@@ -176,12 +194,25 @@ export class WsAIController {
         this.activeSessions.set(_id, abort);
         this.trackSession(ws, _id);
 
-        const callbacks = this.buildCallbacks(ws, _id, thread.threadId, abort.signal);
+        // Usage accumulator
+        const usageAcc: UsageAccumulator = { promptTokens: 0, completionTokens: 0, totalTokens: 0, toolCallCount: 0 };
+        const callbacks = this.buildCallbacks(ws, _id, thread.threadId, abort.signal, usageAcc);
 
         try {
             debugAI("ws_chat", { threadId: thread.threadId, graphKey, messageLength: message.length });
             await thread.agent.chatStream(message, callbacks);
             // Persist conversation after completion
+            await threadStore.save(thread.threadId);
+            // Persist accumulated usage metadata
+            await threadStore.updateMetadata(thread.threadId, {
+                promptTokens: usageAcc.promptTokens,
+                completionTokens: usageAcc.completionTokens,
+                totalTokens: usageAcc.totalTokens,
+                cost: computeCost(usageAcc, this.llmProvider!.getProviderName()),
+                toolCallCount: usageAcc.toolCallCount,
+                provider: this.llmProvider!.getProviderName(),
+                model: this.llmProvider!.getModel(),
+            });
             await threadStore.save(thread.threadId);
         } catch (err) {
             if (!abort.signal.aborted) {
@@ -232,13 +263,28 @@ export class WsAIController {
         this.activeSessions.set(_id, abort);
         this.trackSession(ws, _id);
 
-        const callbacks = this.buildCallbacks(ws, _id, threadId, abort.signal);
+        // Usage accumulator
+        const usageAcc: UsageAccumulator = { promptTokens: 0, completionTokens: 0, totalTokens: 0, toolCallCount: 0 };
+        const callbacks = this.buildCallbacks(ws, _id, threadId, abort.signal, usageAcc);
 
         try {
             debugAI("ws_resume", { threadId, approved });
             await thread.agent.resumeConversationStream(approved, callbacks, feedback);
             // Persist conversation after completion
             await threadStore.save(threadId);
+            // Persist accumulated usage metadata
+            if (this.llmProvider) {
+                await threadStore.updateMetadata(threadId, {
+                    promptTokens: usageAcc.promptTokens,
+                    completionTokens: usageAcc.completionTokens,
+                    totalTokens: usageAcc.totalTokens,
+                    cost: computeCost(usageAcc, this.llmProvider.getProviderName()),
+                    toolCallCount: usageAcc.toolCallCount,
+                    provider: this.llmProvider.getProviderName(),
+                    model: this.llmProvider.getModel(),
+                });
+                await threadStore.save(threadId);
+            }
         } catch (err) {
             if (!abort.signal.aborted) {
                 this.handleStreamError(ws, _id, err, threadId);
@@ -306,7 +352,7 @@ export class WsAIController {
 
     // ─── Helpers ────────────────────────────────────────────────────
 
-    private buildCallbacks(ws: WebSocket, _id: number, threadId: string, signal: AbortSignal): StreamCallbacks {
+    private buildCallbacks(ws: WebSocket, _id: number, threadId: string, signal: AbortSignal, usageAcc: UsageAccumulator): StreamCallbacks {
         return {
             signal,
             onToken: (token: string) => {
@@ -315,14 +361,32 @@ export class WsAIController {
             },
             onToolStart: (toolCallId: string, toolName: string) => {
                 if (signal.aborted) return;
+                debugAI("ws_tool_start", { threadId, toolCallId, toolName });
+                usageAcc.toolCallCount++;
                 this.send(ws, { type: "ai:tool_start", _id, toolCallId, toolName });
             },
             onToolResult: (toolCallId: string, result: string) => {
                 if (signal.aborted) return;
+                debugAI("ws_tool_result", { threadId, toolCallId, resultLen: result.length });
                 this.send(ws, { type: "ai:tool_result", _id, toolCallId, result });
+            },
+            onUsage: (usage) => {
+                if (signal.aborted) return;
+                debugAI("ws_usage", { threadId, ...usage });
+                // Accumulate usage
+                usageAcc.promptTokens += usage.promptTokens;
+                usageAcc.completionTokens += usage.completionTokens;
+                usageAcc.totalTokens += usage.totalTokens;
+                this.send(ws, { type: "ai:usage", _id, usage });
+            },
+            onToolLimit: (info) => {
+                if (signal.aborted) return;
+                debugAI("ws_tool_limit", { threadId, ...info });
+                this.send(ws, { type: "ai:tool_limit", _id, ...info });
             },
             onComplete: (fullText: string) => {
                 if (signal.aborted) return;
+                debugAI("ws_complete", { threadId, textLength: fullText.length });
                 this.send(ws, { type: "ai:complete", _id, threadId, fullText });
             },
             onError: (error: Error) => {

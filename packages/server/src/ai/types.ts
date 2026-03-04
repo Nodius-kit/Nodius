@@ -131,6 +131,10 @@ export interface StreamCallbacks {
     onToolResult: (toolCallId: string, result: string) => void;
     onComplete: (fullText: string) => void;
     onError: (error: Error) => void;
+    /** Called with token usage after each LLM call completes. */
+    onUsage?: (usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void;
+    /** Called when tool round limit is reached, asking user whether to continue. */
+    onToolLimit?: (info: { roundsUsed: number; maxExtended: number }) => void;
     /** AbortSignal from the session's AbortController — used to cancel LLM streams. */
     signal?: AbortSignal;
 }
