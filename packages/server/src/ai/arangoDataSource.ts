@@ -173,7 +173,6 @@ export class ArangoGraphDataSource implements GraphDataSource {
                 LET searchText = LOWER(CONCAT_SEPARATOR(" ",
                     n._key,
                     n.type,
-                    n.process || "",
                     TO_STRING(n.data || ""),
                     configMatch.displayName || "",
                     configMatch.description || ""

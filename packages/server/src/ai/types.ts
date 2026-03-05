@@ -56,9 +56,9 @@ export interface GraphRAGContext {
 
 export interface CreateNodePayload {
     typeKey: string;
-    sheet: string;
-    posX: number;
-    posY: number;
+    sheet?: string;
+    posX?: number;
+    posY?: number;
     data?: unknown;
 }
 

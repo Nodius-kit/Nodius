@@ -16,7 +16,6 @@ export const ProposeUpdateNodeSchema = z.object({
     nodeKey: z.string().describe("localKey du node a modifier"),
     updates: z.object({
         name: z.string().optional().describe("Nouveau nom du node"),
-        process: z.string().optional().describe("Nouveau code JavaScript du node"),
         data: z.record(z.string(), z.unknown()).optional().describe("Nouvelles donnees du node"),
         description: z.string().optional().describe("Nouvelle description du node"),
     }).describe("Champs a modifier (au moins un)"),
@@ -41,32 +40,11 @@ export type ProposeDeleteEdgeArgs = z.infer<typeof ProposeDeleteEdgeSchema>;
 
 // ─── Zod Schemas ────────────────────────────────────────────────────
 
-/**
- * Handle structure matches Nodius Node.handles:
- *   Record<handleSide, { position: "separate"|"fix", point: NodePoint[] }>
- * Validated loosely here since the LLM rarely needs to specify handles
- * (they come from NodeTypeConfig defaults).
- */
-const HandlePointSchema = z.object({
-    id: z.string(),
-    type: z.enum(["in", "out"]),
-    accept: z.string(),
-    display: z.string().optional(),
-});
-
-const HandleSideSchema = z.object({
-    position: z.enum(["separate", "fix"]),
-    point: z.array(HandlePointSchema),
-});
-
 export const ProposeCreateNodeSchema = z.object({
     typeKey: z.string().describe("Type du node a creer (ex: 'api-call', 'filter', 'starter', 'html')"),
-    sheet: z.string().describe("ID du sheet ou placer le node (ex: '0')"),
-    posX: z.number().describe("Position X dans le canvas"),
-    posY: z.number().describe("Position Y dans le canvas"),
-    process: z.string().default("").describe("Code JavaScript du node (optionnel)"),
-    handles: z.record(z.string(), HandleSideSchema).optional()
-        .describe("Handles du node. Cles: T, D, R, L, 0. Optionnel si le type a des handles par defaut."),
+    sheet: z.string().optional().default("0").describe("ID du sheet ou placer le node (defaut: '0')"),
+    posX: z.number().optional().describe("Position X dans le canvas (defaut: depuis config)"),
+    posY: z.number().optional().describe("Position Y dans le canvas (defaut: depuis config)"),
     data: z.record(z.string(), z.unknown()).optional().describe("Donnees specifiques au type de node (optionnel)"),
     reason: z.string().describe("Explication de pourquoi ce node est necessaire"),
 }).strict();
@@ -132,37 +110,13 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
                     type: "object",
                     properties: {
                         typeKey: { type: "string", description: "Type du node (ex: 'api-call', 'filter', 'starter')" },
-                        sheet: { type: "string", description: "ID du sheet (ex: '0')" },
-                        posX: { type: "number", description: "Position X dans le canvas" },
-                        posY: { type: "number", description: "Position Y dans le canvas" },
-                        process: { type: "string", description: "Code JavaScript du node (optionnel)" },
-                        handles: {
-                            type: "object",
-                            description: "Handles du node (optionnel si le type a des handles par defaut)",
-                            additionalProperties: {
-                                type: "object",
-                                properties: {
-                                    position: { type: "string", enum: ["separate", "fix"] },
-                                    point: {
-                                        type: "array",
-                                        items: {
-                                            type: "object",
-                                            properties: {
-                                                id: { type: "string" },
-                                                type: { type: "string", enum: ["in", "out"] },
-                                                accept: { type: "string" },
-                                                display: { type: "string" },
-                                            },
-                                            required: ["id", "type", "accept"],
-                                        },
-                                    },
-                                },
-                            },
-                        },
+                        sheet: { type: "string", description: "ID du sheet (defaut: '0')" },
+                        posX: { type: "number", description: "Position X dans le canvas (optionnel, defaut depuis config)" },
+                        posY: { type: "number", description: "Position Y dans le canvas (optionnel, defaut depuis config)" },
                         data: { type: "object", description: "Donnees specifiques au type (optionnel)" },
                         reason: { type: "string", description: "Explication de la raison de cette creation" },
                     },
-                    required: ["typeKey", "sheet", "posX", "posY", "reason"],
+                    required: ["typeKey", "reason"],
                 },
             },
         },
@@ -205,7 +159,7 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
             type: "function",
             function: {
                 name: "propose_update_node",
-                description: "Proposer la modification de proprietes d'un node existant (nom, code process, data, description). L'action sera soumise a l'approbation de l'utilisateur.",
+                description: "Proposer la modification de proprietes d'un node existant (nom, data, description). L'action sera soumise a l'approbation de l'utilisateur.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -215,7 +169,6 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
                             description: "Champs a modifier (au moins un)",
                             properties: {
                                 name: { type: "string", description: "Nouveau nom du node" },
-                                process: { type: "string", description: "Nouveau code JavaScript du node" },
                                 data: { type: "object", description: "Nouvelles donnees du node" },
                                 description: { type: "string", description: "Nouvelle description du node" },
                             },

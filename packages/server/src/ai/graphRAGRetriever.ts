@@ -7,7 +7,6 @@ import { debugAI } from "./aiLogger.js";
 export interface GraphRAGOptions {
     maxNodes?: number;
     maxDepth?: number;
-    truncateProcess?: number;
     truncateData?: number;
     /** Cache TTL in ms. Default 120000 (2 min). Set to 0 to disable. */
     cacheTTLMs?: number;
@@ -16,8 +15,7 @@ export interface GraphRAGOptions {
 const DEFAULT_OPTIONS: Required<GraphRAGOptions> = {
     maxNodes: 20,
     maxDepth: 2,
-    truncateProcess: 500,
-    truncateData: 200,
+    truncateData: 2000,
     cacheTTLMs: 120_000,
 };
 

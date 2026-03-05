@@ -39,7 +39,7 @@ export const ListNodeEdgesSchema = z.object({
 
 export const ReadSubgraphSchema = z.object({
     nodeKeys: z.array(z.string()).describe("Array of node _key values to read"),
-    fields: z.array(z.string()).optional().describe("Fields to include per node. Default: [\"_key\", \"type\", \"sheet\", \"posX\", \"posY\"]. Optional extras: \"process\", \"handles\", \"data\", \"size\""),
+    fields: z.array(z.string()).optional().describe("Fields to include per node. Default: [\"_key\", \"type\", \"sheet\", \"posX\", \"posY\"]. Optional extras: \"handles\", \"data\", \"size\""),
     includeConfigs: z.boolean().default(true).describe("Also include nodeConfig for each node (default: true)"),
     includeEdges: z.boolean().default(true).describe("Also include edges connected to these nodes (default: true)"),
 });
@@ -98,7 +98,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_node_detail",
-                description: "Obtenir tous les details d'un node specifique : type, code process, data, handles, position",
+                description: "Obtenir tous les details d'un node specifique : type, data, handles, position",
                 parameters: {
                     type: "object",
                     properties: {
@@ -112,7 +112,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_node_config",
-                description: "Obtenir la definition d'un type de node custom : template HTML, handles, process",
+                description: "Obtenir la definition d'un type de node : code process (JS), handles, taille par defaut, description",
                 parameters: {
                     type: "object",
                     properties: {
@@ -152,7 +152,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_subgraph",
-                description: "Read info for multiple nodes at once. Default fields: _key, type, sheet, posX, posY (compact). Add \"process\", \"handles\", \"data\", \"size\" only when needed.",
+                description: "Read info for multiple nodes at once. Default fields: _key, type, sheet, posX, posY (compact). Add \"handles\", \"data\", \"size\" only when needed.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -164,7 +164,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
                         fields: {
                             type: "array",
                             items: { type: "string" },
-                            description: "Fields per node. Default: [\"_key\",\"type\",\"sheet\",\"posX\",\"posY\"]. Extras: \"process\",\"handles\",\"data\",\"size\"",
+                            description: "Fields per node. Default: [\"_key\",\"type\",\"sheet\",\"posX\",\"posY\"]. Extras: \"handles\",\"data\",\"size\"",
                         },
                         includeConfigs: {
                             type: "boolean",
@@ -319,6 +319,8 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                     category: config.category,
                     icon: config.icon,
                     handles: config.node?.handles ? summarizeHandles(config.node.handles) : [],
+                    process: config.node?.process ? truncate(config.node.process, 2000) : undefined,
+                    defaultSize: config.node?.size,
                 });
             }
 

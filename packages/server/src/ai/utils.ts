@@ -20,7 +20,7 @@ const EMBEDDING_TEXT_MAX_LEN = 15000;
 
 /**
  * Build a plain-text representation of a node for embedding generation.
- * Concatenates type, process code, and data into a single string.
+ * Concatenates type and data into a single string.
  * Truncated to EMBEDDING_TEXT_MAX_LEN to stay within model token limits.
  */
 export function createNodeEmbeddingText(node: Node<unknown>): string {

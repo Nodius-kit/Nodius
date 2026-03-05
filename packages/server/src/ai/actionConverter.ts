@@ -6,9 +6,9 @@
  * The client or WsAIController applies these via the standard sync pipeline.
  */
 
-import { InstructionBuilder } from "@nodius/utils";
+import { InstructionBuilder, createNodeFromConfig } from "@nodius/utils";
 import type { GraphInstructions } from "@nodius/utils";
-import type { Node, Edge } from "@nodius/utils";
+import type { Node, Edge, NodeTypeConfig } from "@nodius/utils";
 import type { ProposedAction } from "./types.js";
 
 // ─── Result type ────────────────────────────────────────────────────
@@ -57,11 +57,13 @@ function emptyResult(sheetId: string): ActionConversionResult {
  * @param action - The proposed action from the AI agent
  * @param graphKey - The graph key (used for node/edge creation)
  * @param defaultSheetId - Default sheet ID when the action doesn't specify one
+ * @param configs - Optional NodeTypeConfigs for create_node defaults
  */
 export function convertAction(
     action: ProposedAction,
     graphKey: string,
     defaultSheetId: string = "0",
+    configs?: NodeTypeConfig[],
 ): ActionConversionResult {
     switch (action.type) {
         case "move_node":
@@ -69,7 +71,7 @@ export function convertAction(
         case "update_node":
             return convertUpdateNode(action.payload, defaultSheetId);
         case "create_node":
-            return convertCreateNode(action.payload, graphKey);
+            return convertCreateNode(action.payload, graphKey, configs);
         case "delete_node":
             return convertDeleteNode(action.payload, defaultSheetId);
         case "create_edge":
@@ -77,7 +79,7 @@ export function convertAction(
         case "delete_edge":
             return convertDeleteEdge(action.payload, defaultSheetId);
         case "batch":
-            return convertBatch(action.payload.actions, graphKey, defaultSheetId);
+            return convertBatch(action.payload.actions, graphKey, defaultSheetId, configs);
     }
 }
 
@@ -133,24 +135,37 @@ function convertUpdateNode(
 }
 
 function convertCreateNode(
-    payload: { typeKey: string; sheet: string; posX: number; posY: number; data?: unknown },
+    payload: { typeKey: string; sheet?: string; posX?: number; posY?: number; data?: unknown },
     graphKey: string,
+    configs?: NodeTypeConfig[],
 ): ActionConversionResult {
-    const sheetId = payload.sheet;
+    const sheetId = payload.sheet ?? "0";
     const result = emptyResult(sheetId);
 
-    const node: Node<unknown> = {
-        _key: generateKey(),
-        graphKey,
-        sheet: payload.sheet,
-        type: payload.typeKey,
-        typeVersion: 1,
-        posX: payload.posX,
-        posY: payload.posY,
-        size: { width: 200, height: 100 },
-        handles: {},
-        data: payload.data ?? {},
-    };
+    // Try to use config-based creation for proper defaults (handles, size, data)
+    const config = configs?.find(c => c._key === payload.typeKey);
+    let node: Node<unknown>;
+
+    if (config) {
+        node = createNodeFromConfig(config, generateKey(), graphKey, sheetId);
+        if (payload.posX !== undefined) node.posX = payload.posX;
+        if (payload.posY !== undefined) node.posY = payload.posY;
+        if (payload.data !== undefined) node.data = payload.data;
+    } else {
+        // Fallback for built-in types or missing configs
+        node = {
+            _key: generateKey(),
+            graphKey,
+            sheet: sheetId,
+            type: payload.typeKey,
+            typeVersion: 1,
+            posX: payload.posX ?? 0,
+            posY: payload.posY ?? 0,
+            size: { width: 200, height: 100 },
+            handles: {},
+            data: payload.data ?? {},
+        };
+    }
 
     result.nodesToCreate.push(node);
     return result;
@@ -207,11 +222,12 @@ function convertBatch(
     actions: ProposedAction[],
     graphKey: string,
     defaultSheetId: string,
+    configs?: NodeTypeConfig[],
 ): ActionConversionResult {
     const merged = emptyResult(defaultSheetId);
 
     for (const action of actions) {
-        const sub = convertAction(action, graphKey, defaultSheetId);
+        const sub = convertAction(action, graphKey, defaultSheetId, configs);
 
         merged.instructions.push(...sub.instructions);
         merged.nodesToCreate.push(...sub.nodesToCreate);
