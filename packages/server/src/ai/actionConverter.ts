@@ -10,6 +10,7 @@ import { InstructionBuilder, createNodeFromConfig } from "@nodius/utils";
 import type { GraphInstructions } from "@nodius/utils";
 import type { Node, Edge, NodeTypeConfig } from "@nodius/utils";
 import type { ProposedAction } from "./types.js";
+import { createUniqueToken, ensureCollection } from "../utils/arangoUtils.js";
 
 // ─── Result type ────────────────────────────────────────────────────
 
@@ -30,8 +31,14 @@ export interface ActionConversionResult {
 
 // ─── Key generation ─────────────────────────────────────────────────
 
-function generateKey(): string {
-    return `ai_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+async function generateNodeKey(): Promise<string> {
+    const collection = await ensureCollection("nodius_nodes");
+    return createUniqueToken(collection);
+}
+
+async function generateEdgeKey(): Promise<string> {
+    const collection = await ensureCollection("nodius_edges");
+    return createUniqueToken(collection);
 }
 
 // ─── Empty result factory ───────────────────────────────────────────
@@ -52,19 +59,19 @@ function emptyResult(sheetId: string): ActionConversionResult {
 /**
  * Convert a ProposedAction into mutation commands for the Nodius sync pipeline.
  *
- * Pure/synchronous — no side effects, no network calls.
+ * Uses createUniqueToken (from arangoUtils) for collision-free key generation.
  *
  * @param action - The proposed action from the AI agent
  * @param graphKey - The graph key (used for node/edge creation)
  * @param defaultSheetId - Default sheet ID when the action doesn't specify one
  * @param configs - Optional NodeTypeConfigs for create_node defaults
  */
-export function convertAction(
+export async function convertAction(
     action: ProposedAction,
     graphKey: string,
     defaultSheetId: string = "0",
     configs?: NodeTypeConfig[],
-): ActionConversionResult {
+): Promise<ActionConversionResult> {
     switch (action.type) {
         case "move_node":
             return convertMoveNode(action.payload, defaultSheetId);
@@ -134,27 +141,29 @@ function convertUpdateNode(
     return result;
 }
 
-function convertCreateNode(
+async function convertCreateNode(
     payload: { typeKey: string; sheet?: string; posX?: number; posY?: number; data?: unknown },
     graphKey: string,
     configs?: NodeTypeConfig[],
-): ActionConversionResult {
+): Promise<ActionConversionResult> {
     const sheetId = payload.sheet ?? "0";
     const result = emptyResult(sheetId);
+
+    const nodeKey = await generateNodeKey();
 
     // Try to use config-based creation for proper defaults (handles, size, data)
     const config = configs?.find(c => c._key === payload.typeKey);
     let node: Node<unknown>;
 
     if (config) {
-        node = createNodeFromConfig(config, generateKey(), graphKey, sheetId);
+        node = createNodeFromConfig(config, nodeKey, graphKey, sheetId);
         if (payload.posX !== undefined) node.posX = payload.posX;
         if (payload.posY !== undefined) node.posY = payload.posY;
         if (payload.data !== undefined) node.data = payload.data;
     } else {
         // Fallback for built-in types or missing configs
         node = {
-            _key: generateKey(),
+            _key: nodeKey,
             graphKey,
             sheet: sheetId,
             type: payload.typeKey,
@@ -180,7 +189,7 @@ function convertDeleteNode(
     return result;
 }
 
-function convertCreateEdge(
+async function convertCreateEdge(
     payload: {
         sourceKey: string;
         sourceHandle: string;
@@ -190,12 +199,14 @@ function convertCreateEdge(
         label?: string;
     },
     graphKey: string,
-): ActionConversionResult {
+): Promise<ActionConversionResult> {
     const sheetId = payload.sheet;
     const result = emptyResult(sheetId);
 
+    const edgeKey = await generateEdgeKey();
+
     const edge: Edge = {
-        _key: generateKey(),
+        _key: edgeKey,
         graphKey,
         sheet: payload.sheet,
         source: payload.sourceKey,
@@ -218,16 +229,16 @@ function convertDeleteEdge(
     return result;
 }
 
-function convertBatch(
+async function convertBatch(
     actions: ProposedAction[],
     graphKey: string,
     defaultSheetId: string,
     configs?: NodeTypeConfig[],
-): ActionConversionResult {
+): Promise<ActionConversionResult> {
     const merged = emptyResult(defaultSheetId);
 
     for (const action of actions) {
-        const sub = convertAction(action, graphKey, defaultSheetId, configs);
+        const sub = await convertAction(action, graphKey, defaultSheetId, configs);
 
         merged.instructions.push(...sub.instructions);
         merged.nodesToCreate.push(...sub.nodesToCreate);

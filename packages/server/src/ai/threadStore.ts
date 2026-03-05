@@ -14,6 +14,7 @@ import { AIAgent } from "./aiAgent.js";
 import type { GraphDataSource } from "./types.js";
 import type { LLMProvider } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
+import { createUniqueToken, ensureCollection } from "../utils/arangoUtils.js";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -126,7 +127,6 @@ function defaultMetadata(): ThreadMetadata {
 export class ThreadStore {
     private cache = new Map<string, AIThread>();
     private collection: DocumentCollection | null = null;
-    private threadCounter = 0;
 
     /**
      * Initialize the store: ensure the ArangoDB collection exists.
@@ -152,9 +152,10 @@ export class ThreadStore {
         }
     }
 
-    /** Generate a unique thread ID. */
-    generateThreadId(): string {
-        return `ai_${Date.now()}_${++this.threadCounter}`;
+    /** Generate a unique thread ID using createUniqueToken (collision-free, crypto-secure). */
+    async generateThreadId(): Promise<string> {
+        const collection = this.collection ?? await ensureCollection(COLLECTION_NAME);
+        return createUniqueToken(collection);
     }
 
     /** Check if a thread exists in the cache. */

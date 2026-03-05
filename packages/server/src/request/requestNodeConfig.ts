@@ -50,7 +50,6 @@ import {
     api_node_config_create,
     api_node_config_delete,
     api_node_config_get,
-    api_node_config_get_batch,
     api_node_config_list,
     api_node_config_update,
     NodeTypeConfig,
@@ -120,76 +119,51 @@ export class RequestNodeConfig {
         });
 
         /**
-         * Get a specific node config by key
+         * Get node config(s) by key.
+         * - If `_key` (string) is provided: returns a single NodeTypeConfig (or 404)
+         * - If `_keys` (string[]) is provided: returns NodeTypeConfig[]
          */
         app.post("/api/nodeconfig/get", async (req: Request, res: Response) => {
             try {
                 const body: api_node_config_get = req.body;
-
-                if (!body._key) {
-                    return res.status(400).json({error: "Missing required fields"});
-                }
                 const { user, workspaces } = getUserWorkspace(req);
+                workspaces.push("root");
 
-                const query = workspaces.length > 0 ? aql`
-                  FOR doc IN nodius_node_config
-                  FILTER doc._key == ${escapeHTML(body._key)}
-                    AND doc.workspace IN ${workspaces}
-                  LIMIT 1
-                  RETURN doc
-                ` : aql`
-                  FOR doc IN nodius_node_config
-                  FILTER doc._key == ${escapeHTML(body._key)}
-                  LIMIT 1
-                  RETURN doc
-                `;
+                if (body._key) {
+                    // Single key mode
+                    const query = aql`
+                      FOR doc IN nodius_node_config
+                      FILTER doc._key == ${escapeHTML(body._key)}
+                        AND doc.workspace IN ${workspaces}
+                      LIMIT 1
+                      RETURN doc
+                    `;
+                    const cursor = await db.query(query);
+                    const nodeConfig = await cursor.next();
 
-                const cursor = await db.query(query);
-                const nodeConfig = await cursor.next();
-
-                if (!nodeConfig) {
-                    return res.status(404).json({error: "Node config not found"});
+                    if (!nodeConfig) {
+                        return res.status(404).json({error: "Node config not found"});
+                    }
+                    return res.status(200).json(nodeConfig);
                 }
 
-                return res.status(200).json(nodeConfig);
+                if (body._keys && Array.isArray(body._keys) && body._keys.length > 0) {
+                    // Batch mode
+                    const sanitizedKeys = body._keys.map(k => escapeHTML(k));
+                    const query = aql`
+                      FOR doc IN nodius_node_config
+                      FILTER doc._key IN ${sanitizedKeys}
+                        AND doc.workspace IN ${workspaces}
+                      RETURN doc
+                    `;
+                    const cursor = await db.query(query);
+                    const nodeConfigs = await cursor.all() as NodeTypeConfig[];
+                    return res.status(200).json(nodeConfigs);
+                }
+
+                return res.status(400).json({error: "Missing required field: _key (string) or _keys (string[])"});
             } catch (err) {
                 console.error("Error getting node config:", err);
-                return res.status(500).json({error: "Internal Server Error"});
-            }
-        });
-
-
-        /**
-         * Get multiple node configs by keys in a single request
-         */
-        app.post("/api/nodeconfig/get-batch", async (req: Request, res: Response) => {
-            try {
-                const body: api_node_config_get_batch = req.body;
-
-                if (!body._keys || !Array.isArray(body._keys) || body._keys.length === 0) {
-                    return res.status(400).json({error: "Missing required field _keys (non-empty array)"});
-                }
-
-                const sanitizedKeys = body._keys.map(k => escapeHTML(k));
-                const { user, workspaces } = getUserWorkspace(req);
-
-                const query = workspaces.length > 0 ? aql`
-                  FOR doc IN nodius_node_config
-                  FILTER doc._key IN ${sanitizedKeys}
-                    AND doc.workspace IN ${workspaces}
-                  RETURN doc
-                ` : aql`
-                  FOR doc IN nodius_node_config
-                  FILTER doc._key IN ${sanitizedKeys}
-                  RETURN doc
-                `;
-
-                const cursor = await db.query(query);
-                const nodeConfigs = await cursor.all() as NodeTypeConfig[];
-
-                return res.status(200).json(nodeConfigs);
-            } catch (err) {
-                console.error("Error getting node configs batch:", err);
                 return res.status(500).json({error: "Internal Server Error"});
             }
         });

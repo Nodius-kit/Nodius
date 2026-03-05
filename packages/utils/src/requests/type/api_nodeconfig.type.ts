@@ -35,13 +35,8 @@ export interface api_node_config_delete {
 }
 
 export interface api_node_config_get {
-    _key: string;
-    workspace?: string;
-}
-
-export interface api_node_config_get_batch {
-    _keys: string[];
-    workspace?: string;
+    _key?: string;      // single key → returns NodeTypeConfig | 404
+    _keys?: string[];   // multiple keys → returns NodeTypeConfig[]
 }
 
 // Category management

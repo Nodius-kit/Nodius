@@ -40,7 +40,7 @@ import {
     BeforeApplyInstructionWithContext, getInverseInstruction
 } from "@nodius/utils";
 import {DataTypeClass, EnumClass} from "@nodius/utils";
-import {api_node_config_get, api_node_config_get_batch} from "@nodius/utils";
+import {api_node_config_get} from "@nodius/utils";
 import {deepCopy} from "@nodius/utils";
 import {triggerNodeUpdateOption} from "../schema/SchemaDisplay";
 import {modalManager} from "@nodius/process";
@@ -127,7 +127,7 @@ export const useSocketSync = () => {
         batchAbortController.current = abortController;
 
         try {
-            const response = await fetch('/api/nodeconfig/get-batch', {
+            const response = await fetch('/api/nodeconfig/get', {
                 method: "POST",
                 signal: abortController.signal,
                 headers: {
@@ -135,8 +135,7 @@ export const useSocketSync = () => {
                 },
                 body: JSON.stringify({
                     _keys: keys,
-                    workspace: workspace
-                } as api_node_config_get_batch),
+                } as api_node_config_get),
             });
 
             if (response.status === 200) {

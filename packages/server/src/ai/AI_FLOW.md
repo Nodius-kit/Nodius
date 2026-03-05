@@ -56,7 +56,7 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       │
       ├── [6c] Si tool_calls detectes :
       │         ├── ReadTool (×8, incl. read_subgraph batch) → execution → resultat TOON → reboucle
-      │         └── WriteTool (×6, incl. update/move/delete_edge) → HITL interrupt → arret
+      │         └── WriteTool (×7, incl. update/move/delete_edge/batch) → HITL interrupt → arret
       │
       └── [6d] Pas de tool_calls → reponse finale → callbacks.onComplete()
       │
@@ -274,7 +274,7 @@ Deux strategies selon que l'embedding est disponible :
 | Strategie | Quand | Comment |
 |-----------|-------|---------|
 | **Vectorielle** | `queryEmbedding` fourni | `COSINE_SIMILARITY(n.embedding, queryEmbedding)` en ArangoDB, score > 0.3, tri DESC |
-| **Tokens** | Pas d'embedding ou en memoire | Tokenise la query ("que", "fait", "node", "fetch", "api"), score chaque node sur ses champs texte (_key, type, process, data, config.displayName, config.description) |
+| **Tokens** | Pas d'embedding ou en memoire | Tokenise la query ("que", "fait", "node", "fetch", "api"), score chaque node sur ses champs texte (_key, type, data, config.displayName, config.description) |
 
 Si aucun resultat → fallback : prend tous les nodes (max 20).
 
@@ -294,12 +294,12 @@ Pour les 5 meilleurs nodes trouves :
 
 **Etape 7 — Assemblage** :
 ```
-Tronque process a 500 chars, data a 200 chars
+Tronque data a 2000 chars
 Resout les noms de sheets (ID "0" → "main")
 → Retourne un GraphRAGContext :
 {
   graph: { _key, name, description, sheets, metadata },
-  relevantNodes: [ { _key, type, typeName, sheet, sheetName, process, handles, dataSummary } ],
+  relevantNodes: [ { _key, type, typeName, sheet, sheetName, handles, dataSummary } ],
   relevantEdges: [ { source, sourceHandle, target, targetHandle, label } ],
   nodeTypeConfigs: [ { _key, displayName, description, category, handlesSummary } ]
 }
@@ -324,7 +324,7 @@ Contenu du prompt :
 - 4 types built-in (starter, return, html, entryType) avec leurs handles
 - Types custom du workspace (api-call, filter, transform, log-node)
 - 8 regles strictes (pas d'AQL, outils obligatoires, actions client, etc.)
-- Conventions Nodius (localKeys, handles, process/data)
+- Conventions Nodius (localKeys, handles, data). Le process est dans le NodeTypeConfig.
 - Format de reponse : markdown + actions client `{{action:params}}` (node, select, fitArea, sheet, graph, link)
 
 Ce message est ajoute a `conversationHistory` comme `role: "system"`.
@@ -339,12 +339,12 @@ Le contexte est encode au format **TOON** (Token-Oriented Object Notation) — f
 
 ```
 NODES PERTINENTS :
-[5]{_key,type,sheet,process}:
-  fetch-api,api-call (API Call),main,"const response = await fetch('https://...')..."
-  filter-active,filter (Filter),main,"const players = incoming[0].data.filter(..."
-  root,starter,main,""
-  error-handler,log-node (Log Node),main,"console.error(incoming[0].error)..."
-  display-html,html,main,""
+[5]{_key,type,sheet}:
+  fetch-api,api-call (API Call),main
+  filter-active,filter (Filter),main
+  root,starter,main
+  error-handler,log-node (Log Node),main
+  display-html,html,main
 
 EDGES PERTINENTES :
 [4]{from,to,label}:
@@ -399,7 +399,7 @@ const stream = this.llmProvider.streamCompletionWithTools(
 - Les `role: "tool"` sont convertis en messages `role: "user"` avec blocks `tool_result`
 - Les outils sont convertis de `{ function: { name, description, parameters } }` vers `{ name, description, input_schema }`
 
-**Les outils transmis** (10 au total pour un `editor`) :
+**Les outils transmis** (15 au total pour un `editor`) :
 
 | Outil | Type | Description |
 |-------|------|-------------|
@@ -407,12 +407,17 @@ const stream = this.llmProvider.streamCompletionWithTools(
 | `search_nodes` | read | Recherche textuelle |
 | `explore_neighborhood` | read | BFS autour d'un node |
 | `read_node_detail` | read | Detail complet d'un node |
-| `read_node_config` | read | Definition d'un type |
+| `read_node_config` | read | Definition d'un type (process, handles, taille) |
 | `list_available_node_types` | read | Tous les types disponibles |
 | `list_node_edges` | read | Edges d'un node |
+| `read_subgraph` | read | Lecture batch de plusieurs nodes |
 | `propose_create_node` | write/HITL | Proposer la creation d'un node |
 | `propose_create_edge` | write/HITL | Proposer la creation d'une edge |
 | `propose_delete_node` | write/HITL | Proposer la suppression d'un node |
+| `propose_update_node` | write/HITL | Proposer la modification d'un node |
+| `propose_move_node` | write/HITL | Proposer le deplacement d'un node |
+| `propose_delete_edge` | write/HITL | Proposer la suppression d'une edge |
+| `propose_batch` | write/HITL | Proposer plusieurs modifications groupees |
 
 ### 6b. Streaming des tokens
 
@@ -465,7 +470,7 @@ LLM stream → tool_call_done  { id: "tc_1", name: "read_node_detail", arguments
 1. callbacks.onToolStart("tc_1", "read_node_detail") → WS ai:tool_start
 2. executeReadTool("read_node_detail", { nodeKey: "fetch-api" })
    → dataSource.getNodeByKey("nba-workflow", "fetch-api")
-   → Retourne le node complet (type, process, data, handles, position)
+   → Retourne le node complet (type, data, handles, position)
 3. callbacks.onToolResult("tc_1", resultJSON) → WS ai:tool_result
 4. Ajoute le resultat a conversationHistory comme role: "tool"
 5. → Reboucle : nouvel appel LLM avec le resultat de l'outil dans le contexte

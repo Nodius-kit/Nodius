@@ -116,7 +116,7 @@ export class RequestAI {
                 }
 
                 if (!thread) {
-                    const newThreadId = threadId || threadStore.generateThreadId();
+                    const newThreadId = threadId || await threadStore.generateThreadId();
                     const dataSource = await createDataSource(workspace);
                     const agent = new AIAgent({
                         graphKey,

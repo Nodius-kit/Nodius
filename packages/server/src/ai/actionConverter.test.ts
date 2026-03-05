@@ -1,21 +1,37 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { convertAction, type ActionConversionResult } from "./actionConverter.js";
 import type { ProposedAction } from "./types.js";
 import { OpType } from "@nodius/utils";
+
+// ─── Mock arangoUtils so tests don't need a real DB ──────────────────
+
+let keyCounter = 0;
+
+vi.mock("../utils/arangoUtils.js", () => ({
+    ensureCollection: vi.fn().mockResolvedValue({}),
+    createUniqueToken: vi.fn(async () => {
+        keyCounter++;
+        return `mock_key_${keyCounter.toString().padStart(4, "0")}`;
+    }),
+}));
 
 const GRAPH_KEY = "testgraph001";
 const DEFAULT_SHEET = "0";
 
 describe("convertAction", () => {
+    beforeEach(() => {
+        keyCounter = 0;
+    });
+
     // ─── move_node ──────────────────────────────────────────────────
 
-    it("move_node → 2 GraphInstructions with SET posX/posY and animatePos", () => {
+    it("move_node → 2 GraphInstructions with SET posX/posY and animatePos", async () => {
         const action: ProposedAction = {
             type: "move_node",
             payload: { nodeKey: "node1", posX: 300, posY: 400 },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.instructions).toHaveLength(2);
 
@@ -45,7 +61,7 @@ describe("convertAction", () => {
 
     // ─── update_node ────────────────────────────────────────────────
 
-    it("update_node → GraphInstructions for each change", () => {
+    it("update_node → GraphInstructions for each change", async () => {
         const action: ProposedAction = {
             type: "update_node",
             payload: {
@@ -54,7 +70,7 @@ describe("convertAction", () => {
             },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.instructions).toHaveLength(2);
 
@@ -71,7 +87,7 @@ describe("convertAction", () => {
         expect(labelInstr.i.v).toBe("My Node");
     });
 
-    it("update_node handles data.* nested paths correctly", () => {
+    it("update_node handles data.* nested paths correctly", async () => {
         const action: ProposedAction = {
             type: "update_node",
             payload: {
@@ -80,7 +96,7 @@ describe("convertAction", () => {
             },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.instructions).toHaveLength(2);
 
@@ -95,19 +111,19 @@ describe("convertAction", () => {
 
     // ─── create_node ────────────────────────────────────────────────
 
-    it("create_node → 1 Node in nodesToCreate with correct fields", () => {
+    it("create_node → 1 Node in nodesToCreate with correct fields", async () => {
         const action: ProposedAction = {
             type: "create_node",
             payload: { typeKey: "api-call", sheet: "0", posX: 500, posY: 200, data: { url: "https://example.com" } },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.nodesToCreate).toHaveLength(1);
         expect(result.instructions).toHaveLength(0);
 
         const node = result.nodesToCreate[0];
-        expect(node._key).toMatch(/^ai_/);
+        expect(node._key).toMatch(/^mock_key_/);
         expect(node.graphKey).toBe(GRAPH_KEY);
         expect(node.sheet).toBe("0");
         expect(node.type).toBe("api-call");
@@ -115,24 +131,23 @@ describe("convertAction", () => {
         expect(node.posX).toBe(500);
         expect(node.posY).toBe(200);
         expect(node.size).toEqual({ width: 200, height: 100 });
-        expect(node.process).toBe("");
         expect(node.handles).toEqual({});
         expect(node.data).toEqual({ url: "https://example.com" });
     });
 
-    it("create_node defaults data to {} when not provided", () => {
+    it("create_node defaults data to {} when not provided", async () => {
         const action: ProposedAction = {
             type: "create_node",
             payload: { typeKey: "starter", sheet: "1", posX: 0, posY: 0 },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
         expect(result.nodesToCreate[0].data).toEqual({});
     });
 
     // ─── create_edge ────────────────────────────────────────────────
 
-    it("create_edge → 1 Edge in edgesToCreate", () => {
+    it("create_edge → 1 Edge in edgesToCreate", async () => {
         const action: ProposedAction = {
             type: "create_edge",
             payload: {
@@ -145,13 +160,13 @@ describe("convertAction", () => {
             },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.edgesToCreate).toHaveLength(1);
         expect(result.instructions).toHaveLength(0);
 
         const edge = result.edgesToCreate[0];
-        expect(edge._key).toMatch(/^ai_/);
+        expect(edge._key).toMatch(/^mock_key_/);
         expect(edge.graphKey).toBe(GRAPH_KEY);
         expect(edge.sheet).toBe("0");
         expect(edge.source).toBe("node1");
@@ -163,13 +178,13 @@ describe("convertAction", () => {
 
     // ─── delete_node ────────────────────────────────────────────────
 
-    it("delete_node → nodeKeysToDelete contains the key", () => {
+    it("delete_node → nodeKeysToDelete contains the key", async () => {
         const action: ProposedAction = {
             type: "delete_node",
             payload: { nodeKey: "node-to-remove" },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.nodeKeysToDelete).toEqual(["node-to-remove"]);
         expect(result.instructions).toHaveLength(0);
@@ -180,13 +195,13 @@ describe("convertAction", () => {
 
     // ─── delete_edge ────────────────────────────────────────────────
 
-    it("delete_edge → edgeKeysToDelete contains the key", () => {
+    it("delete_edge → edgeKeysToDelete contains the key", async () => {
         const action: ProposedAction = {
             type: "delete_edge",
             payload: { edgeKey: "edge-to-remove" },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.edgeKeysToDelete).toEqual(["edge-to-remove"]);
         expect(result.instructions).toHaveLength(0);
@@ -197,7 +212,7 @@ describe("convertAction", () => {
 
     // ─── batch ──────────────────────────────────────────────────────
 
-    it("batch merges results from sub-actions", () => {
+    it("batch merges results from sub-actions", async () => {
         const action: ProposedAction = {
             type: "batch",
             payload: {
@@ -211,7 +226,7 @@ describe("convertAction", () => {
             },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         expect(result.nodesToCreate).toHaveLength(1);
         expect(result.edgesToCreate).toHaveLength(1);
@@ -220,16 +235,16 @@ describe("convertAction", () => {
         expect(result.edgeKeysToDelete).toEqual(["old-edge"]);
     });
 
-    // ─── Purity ─────────────────────────────────────────────────────
+    // ─── Deterministic structure ─────────────────────────────────────
 
-    it("is pure — no side effects, deterministic structure", () => {
+    it("produces deterministic structure for same action", async () => {
         const action: ProposedAction = {
             type: "move_node",
             payload: { nodeKey: "n1", posX: 10, posY: 20 },
         };
 
-        const r1 = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
-        const r2 = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const r1 = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const r2 = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
 
         // Same structure (though not identical objects)
         expect(r1.instructions).toHaveLength(r2.instructions.length);
@@ -239,23 +254,23 @@ describe("convertAction", () => {
 
     // ─── Default sheetId ────────────────────────────────────────────
 
-    it("uses defaultSheetId for actions without sheet field", () => {
+    it("uses defaultSheetId for actions without sheet field", async () => {
         const action: ProposedAction = {
             type: "delete_node",
             payload: { nodeKey: "x" },
         };
 
-        const result = convertAction(action, GRAPH_KEY, "custom-sheet");
+        const result = await convertAction(action, GRAPH_KEY, "custom-sheet");
         expect(result.sheetId).toBe("custom-sheet");
     });
 
-    it("uses action sheet for create_node/create_edge", () => {
+    it("uses action sheet for create_node/create_edge", async () => {
         const action: ProposedAction = {
             type: "create_node",
             payload: { typeKey: "t", sheet: "sheet-2", posX: 0, posY: 0 },
         };
 
-        const result = convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
+        const result = await convertAction(action, GRAPH_KEY, DEFAULT_SHEET);
         expect(result.sheetId).toBe("sheet-2");
     });
 });

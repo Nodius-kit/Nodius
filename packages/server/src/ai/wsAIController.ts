@@ -166,7 +166,7 @@ export class WsAIController {
         }
 
         if (!thread) {
-            const newThreadId = threadId || threadStore.generateThreadId();
+            const newThreadId = threadId || await threadStore.generateThreadId();
             const dataSource = this.createDataSource(workspace);
             const agent = new AIAgent({
                 graphKey,
