@@ -25,7 +25,7 @@ import {ThemeContext} from "../../../hooks/contexts/ThemeContext";
 import {useDynamicClass} from "../../../hooks/useDynamicClass";
 import {EditedCodeContext, ProjectContext} from "../../../hooks/contexts/ProjectContext";
 import {useStableProjectRef} from "../../../hooks/useStableProjectRef";
-import {GraphInstructions} from "@nodius/utils";
+import {GraphInstructions, Node} from "@nodius/utils";
 import {workflowNodeEditorDefinitions} from "../codeEditorVariableDefinitions";
 import {setSearchParam} from "../../../utils/urlHelper";
 
@@ -143,7 +143,7 @@ export const LeftPanelMenu = memo((
                                                 return output.status;
                                             }
                                         },
-                                        retrieveText: (node) => node.process,
+                                        retrieveText: (node) => (node as Node<any> & {process:string}).process,
                                         variableDefinitions: workflowNodeEditorDefinitions
                                     } as EditedCodeContext
                                 ]

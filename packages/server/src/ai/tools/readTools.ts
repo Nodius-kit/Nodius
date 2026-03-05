@@ -39,6 +39,7 @@ export const ListNodeEdgesSchema = z.object({
 
 export const ReadSubgraphSchema = z.object({
     nodeKeys: z.array(z.string()).describe("Array of node _key values to read"),
+    fields: z.array(z.string()).optional().describe("Fields to include per node. Default: [\"_key\", \"type\", \"sheet\", \"posX\", \"posY\"]. Optional extras: \"process\", \"handles\", \"data\", \"size\""),
     includeConfigs: z.boolean().default(true).describe("Also include nodeConfig for each node (default: true)"),
     includeEdges: z.boolean().default(true).describe("Also include edges connected to these nodes (default: true)"),
 });
@@ -151,7 +152,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_subgraph",
-                description: "Read detailed info for multiple nodes at once. Use this instead of calling read_node_detail multiple times. Returns node details, configs, and edges for all requested nodes.",
+                description: "Read info for multiple nodes at once. Default fields: _key, type, sheet, posX, posY (compact). Add \"process\", \"handles\", \"data\", \"size\" only when needed.",
                 parameters: {
                     type: "object",
                     properties: {
@@ -159,6 +160,11 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
                             type: "array",
                             items: { type: "string" },
                             description: "Array of node _key values to read",
+                        },
+                        fields: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Fields per node. Default: [\"_key\",\"type\",\"sheet\",\"posX\",\"posY\"]. Extras: \"process\",\"handles\",\"data\",\"size\"",
                         },
                         includeConfigs: {
                             type: "boolean",
@@ -176,9 +182,40 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
     ];
 }
 
+// ─── Type/Sheet resolvers ────────────────────────────────────────────
+
+type NodeTypeConfig = Awaited<ReturnType<GraphDataSource["getNodeConfigs"]>>[number];
+type GraphInfo = NonNullable<Awaited<ReturnType<GraphDataSource["getGraph"]>>>;
+
+interface ResolverCache {
+    configs: NodeTypeConfig[] | null;
+    graph: GraphInfo | null;
+}
+
+function resolveType(typeKey: string, configs: NodeTypeConfig[]): string {
+    const config = configs.find(c => c._key === typeKey);
+    return config?.displayName ? `${typeKey} (${config.displayName})` : typeKey;
+}
+
+function resolveSheet(sheetId: string, graph: GraphInfo): string {
+    const name = graph.sheets[sheetId];
+    return name ? `${sheetId} (${name})` : sheetId;
+}
+
+const DEFAULT_SUBGRAPH_FIELDS = ["_key", "type", "sheet", "posX", "posY"];
+
 // ─── Tool executor ──────────────────────────────────────────────────
 
 export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: string) {
+    // Cache for type/sheet resolution — loaded lazily on first use
+    const cache: ResolverCache = { configs: null, graph: null };
+
+    async function ensureCache(): Promise<{ configs: NodeTypeConfig[]; graph: GraphInfo }> {
+        if (!cache.configs) cache.configs = await dataSource.getNodeConfigs(graphKey);
+        if (!cache.graph) cache.graph = await dataSource.getGraph(graphKey) ?? undefined as unknown as GraphInfo;
+        return { configs: cache.configs, graph: cache.graph };
+    }
+
     return async function executeReadTool(toolName: string, args: Record<string, unknown>): Promise<string> {
         switch (toolName) {
             case "read_graph_overview": {
@@ -210,6 +247,7 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
             case "search_nodes": {
                 const parsed = SearchNodesSchema.parse(args);
+                const { configs, graph } = await ensureCache();
                 const results = await dataSource.searchNodes(graphKey, parsed.query, parsed.maxResults);
 
                 const filtered = parsed.sheetId
@@ -218,15 +256,15 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
                 return encode(filtered.map(n => ({
                     _key: n._key,
-                    type: n.type,
-                    sheet: n.sheet,
-                    process: truncate(n.process, 200),
+                    type: resolveType(n.type, configs),
+                    sheet: graph ? resolveSheet(n.sheet, graph) : n.sheet,
                     dataSummary: n.data ? truncate(JSON.stringify(n.data), 200) : undefined,
                 })));
             }
 
             case "explore_neighborhood": {
                 const parsed = ExploreNeighborhoodSchema.parse(args);
+                const { configs, graph } = await ensureCache();
                 const result = await dataSource.getNeighborhood(
                     graphKey,
                     parsed.nodeKey,
@@ -237,9 +275,8 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
                 return encode({
                     nodes: result.nodes.map(n => ({
                         _key: n._key,
-                        type: n.type,
-                        sheet: n.sheet,
-                        process: truncate(n.process, 300),
+                        type: resolveType(n.type, configs),
+                        sheet: graph ? resolveSheet(n.sheet, graph) : n.sheet,
                     })),
                     edges: result.edges.map(e => ({
                         source: e.source,
@@ -253,17 +290,17 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
             case "read_node_detail": {
                 const parsed = ReadNodeDetailSchema.parse(args);
+                const { configs, graph } = await ensureCache();
                 const node = await dataSource.getNodeByKey(graphKey, parsed.nodeKey);
                 if (!node) return encode({ error: "Node not found" });
 
                 return encode({
                     _key: node._key,
-                    type: node.type,
-                    sheet: node.sheet,
+                    type: resolveType(node.type, configs),
+                    sheet: graph ? resolveSheet(node.sheet, graph) : node.sheet,
                     posX: node.posX,
                     posY: node.posY,
                     size: node.size,
-                    process: node.process,
                     handles: summarizeHandles(node.handles),
                     data: node.data ? truncate(JSON.stringify(node.data), 500) : undefined,
                 });
@@ -328,8 +365,10 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
             case "read_subgraph": {
                 const parsed = ReadSubgraphSchema.parse(args);
+                const { configs, graph } = await ensureCache();
                 const includeConfigs = parsed.includeConfigs ?? true;
                 const includeEdges = parsed.includeEdges ?? true;
+                const fields = new Set(parsed.fields ?? DEFAULT_SUBGRAPH_FIELDS);
 
                 // Fetch all nodes in parallel
                 const nodeResults = await Promise.all(
@@ -338,17 +377,18 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
                 const nodes = nodeResults
                     .filter((n): n is NonNullable<typeof n> => n !== null)
-                    .map(n => ({
-                        _key: n._key,
-                        type: n.type,
-                        sheet: n.sheet,
-                        posX: n.posX,
-                        posY: n.posY,
-                        size: n.size,
-                        process: n.process,
-                        handles: summarizeHandles(n.handles),
-                        data: n.data ? truncate(JSON.stringify(n.data), 500) : undefined,
-                    }));
+                    .map(n => {
+                        const entry: Record<string, unknown> = {};
+                        if (fields.has("_key")) entry._key = n._key;
+                        if (fields.has("type")) entry.type = resolveType(n.type, configs);
+                        if (fields.has("sheet")) entry.sheet = graph ? resolveSheet(n.sheet, graph) : n.sheet;
+                        if (fields.has("posX")) entry.posX = n.posX;
+                        if (fields.has("posY")) entry.posY = n.posY;
+                        if (fields.has("size")) entry.size = n.size;
+                        if (fields.has("handles")) entry.handles = summarizeHandles(n.handles);
+                        if (fields.has("data")) entry.data = n.data ? truncate(JSON.stringify(n.data), 500) : undefined;
+                        return entry;
+                    });
 
                 const result: Record<string, unknown> = { nodes };
 

@@ -120,7 +120,6 @@ export class MemoryAwareDataSource implements GraphDataSource {
             const searchText = [
                 node._key,
                 node.type,
-                node.process || "",
                 JSON.stringify(node.data ?? ""),
             ].join(" ").toLowerCase();
 

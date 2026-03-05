@@ -2,7 +2,7 @@
  * Shared utilities for the AI module.
  */
 
-import type { Node } from "@nodius/utils";
+import {deepEqual, type Node } from "@nodius/utils";
 import type { HandleSummary } from "./types.js";
 
 /**
@@ -16,7 +16,7 @@ export function truncate(str: string, maxLen: number): string {
 // ─── Embedding helpers ───────────────────────────────────────────────
 
 /** Maximum characters for embedding input text. */
-const EMBEDDING_TEXT_MAX_LEN = 8000;
+const EMBEDDING_TEXT_MAX_LEN = 15000;
 
 /**
  * Build a plain-text representation of a node for embedding generation.
@@ -29,11 +29,6 @@ export function createNodeEmbeddingText(node: Node<unknown>): string {
     // Node type (e.g. "html", "starter", custom types)
     if (node.type) {
         parts.push(`type: ${node.type}`);
-    }
-
-    // Process code (JavaScript executed by the workflow engine)
-    if (node.process && node.process.trim().length > 0) {
-        parts.push(`process: ${node.process.trim()}`);
     }
 
     // Data payload (arbitrary JSON attached to the node)
@@ -58,9 +53,8 @@ export function createNodeEmbeddingText(node: Node<unknown>): string {
 export function hasNodeContentChanged(original: Node<unknown>, current: Node<unknown>): boolean {
     // Compare the fields that affect semantic meaning
     if (original.type !== current.type) return true;
-    if (original.process !== current.process) return true;
-    if (JSON.stringify(original.data) !== JSON.stringify(current.data)) return true;
-    if (JSON.stringify(original.handles) !== JSON.stringify(current.handles)) return true;
+    if(!deepEqual(original.data, current.data)) return true;
+    if(!deepEqual(original.handles, current.handles)) return true;
     return false;
 }
 

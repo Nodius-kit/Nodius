@@ -50,7 +50,6 @@ export interface Node<T> {
     },
     posX: number,
     posY: number,
-    process:string,
     handles: Partial<Record<handleSide, {
         position: "separate" | "fix",
         point: Array<NodePoint>
@@ -89,7 +88,6 @@ export function cleanNode<T>(obj: any): Node<T> {
     return pickKeys<Node<T>>(obj, [
         "_key",
         "graphKey",
-        "process",
         "type",
         "sheet",
         "size",
@@ -163,7 +161,7 @@ export interface NodeTypeConfig {
     content: HtmlObject,
     category: string,
     alwaysRendered: boolean,
-    node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "typeVersion">,
+    node: Omit<Node<any>, "graphKey" | "sheet" | "_key" | "typeVersion"> & { process:string },
     border: NodeTypeConfigBorder,
     lastUpdatedTime: number,
     createdTime: number,
@@ -291,7 +289,7 @@ export const NodeTypeReturnConfig:NodeTypeConfig = {
         type: "return",
         posY: 0,
         posX: 0,
-        process: ``,
+        process: "",
         handles: {
             "L": {
                 position: "separate",
@@ -382,7 +380,7 @@ export const NodeTypeStarterConfig:NodeTypeConfig = {
         type: "starter",
         posY: 0,
         posX: 0,
-        process: ``,
+        process: "",
         handles: {
             0: {
                 position: "fix",
@@ -1053,9 +1051,9 @@ export const NodeTypeEntryTypeConfig:NodeTypeConfig = {
 
     node: {
         type: "entryType",
-        process: "",
         posX: 0,
         posY: 0,
+        process: "",
         handles: {
             0: {
                 position: "fix",

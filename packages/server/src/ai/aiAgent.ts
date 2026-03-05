@@ -6,6 +6,7 @@ import { buildSystemPrompt, buildContextSummary } from "./prompts/systemPrompt.j
 import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks, LLMStreamChunk } from "./types.js";
 import type { LLMProvider, LLMToolCall } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
+import { encode } from "@toon-format/toon";
 import { getTokenTracker } from "./tokenTracker.js";
 import { logMalformedJSON, debugAI, isAIDebugEnabled } from "./aiLogger.js";
 
@@ -75,7 +76,7 @@ function filterToolCallText(text: string): FilterResult {
 // ─── Tool result truncation ─────────────────────────────────────────
 // After the LLM has processed a tool result in one round, truncate it in
 // history to reduce prompt tokens on subsequent rounds.
-const TOOL_RESULT_MAX_CHARS = 600;
+const TOOL_RESULT_MAX_CHARS = 2000;
 
 /**
  * Truncate old tool result messages in conversation history to save tokens.
@@ -238,9 +239,10 @@ export class AIAgent {
         this.pendingInterrupt = null;
 
         // Build the tool result message
-        const toolResult = approved
-            ? JSON.stringify({ status: "approved", message: resultMessage ?? "Action approuvee et executee." })
-            : JSON.stringify({ status: "rejected", message: resultMessage ?? "Action refusee par l'utilisateur." });
+        const toolResult = encode({
+            status: approved ? "approved" : "rejected",
+            message: resultMessage ?? (approved ? "Action approuvee et executee." : "Action refusee par l'utilisateur."),
+        });
 
         // Log this tool call
         toolCallLog.push({ name: toolName, args, result: toolResult });
@@ -421,9 +423,10 @@ export class AIAgent {
             const { toolCallId, toolName, args } = this.pendingInterrupt;
             this.pendingInterrupt = null;
 
-            const toolResult = approved
-                ? JSON.stringify({ status: "approved", message: resultMessage ?? "Action approuvee et executee." })
-                : JSON.stringify({ status: "rejected", message: resultMessage ?? "Action refusee par l'utilisateur." });
+            const toolResult = encode({
+                status: approved ? "approved" : "rejected",
+                message: resultMessage ?? (approved ? "Action approuvee et executee." : "Action refusee par l'utilisateur."),
+            });
 
             this.conversationHistory.push({
                 role: "tool",

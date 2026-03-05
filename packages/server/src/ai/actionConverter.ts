@@ -148,7 +148,6 @@ function convertCreateNode(
         posX: payload.posX,
         posY: payload.posY,
         size: { width: 200, height: 100 },
-        process: "",
         handles: {},
         data: payload.data ?? {},
     };

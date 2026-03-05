@@ -18,7 +18,6 @@ export interface RelevantNode {
     typeName?: string;
     sheet: string;
     sheetName: string;
-    process: string;
     handles: HandleSummary[];
     dataSummary?: string;
 }

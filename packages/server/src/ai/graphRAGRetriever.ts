@@ -173,7 +173,6 @@ export class GraphRAGRetriever {
             typeName: config?.displayName,
             sheet: node.sheet,
             sheetName: sheets[node.sheet] ?? node.sheet,
-            process: truncate(node.process, this.options.truncateProcess),
             handles: summarizeHandles(node.handles as Record<string, { position: string; point: Array<{ id: string; type: "in" | "out"; accept: string; display?: string }> }>),
             dataSummary: node.data ? truncate(JSON.stringify(node.data), this.options.truncateData) : undefined,
         };

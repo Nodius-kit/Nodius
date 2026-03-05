@@ -512,9 +512,20 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
             .then(data => {
                 if (data?.conversationHistory) {
                     const converted: AIChatMessage[] = [];
+                    let pendingAssistant: AIChatMessage | null = null;
+
+                    const flushPending = () => {
+                        if (pendingAssistant) {
+                            converted.push(pendingAssistant);
+                            pendingAssistant = null;
+                        }
+                    };
+
                     for (const msg of data.conversationHistory) {
                         const m = msg as { role?: string; content?: string; tool_calls?: any[] };
+
                         if (m.role === "user" && m.content) {
+                            flushPending();
                             converted.push({
                                 id: `hist_user_${converted.length}`,
                                 role: "user",
@@ -526,14 +537,47 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                                 name: tc.function?.name ?? tc.name ?? "unknown",
                                 result: "done",
                             }));
-                            converted.push({
-                                id: `hist_asst_${converted.length}`,
-                                role: "assistant",
-                                content: m.content || "",
-                                toolCalls: toolCalls?.length ? toolCalls : undefined,
-                            });
+                            const hasContent = !!(m.content && m.content.trim());
+                            const hasToolCalls = !!(toolCalls && toolCalls.length > 0);
+
+                            if (!hasContent && hasToolCalls) {
+                                // Tool-only message — merge into pending
+                                if (!pendingAssistant) {
+                                    pendingAssistant = {
+                                        id: `hist_asst_${converted.length}`,
+                                        role: "assistant",
+                                        content: "",
+                                        toolCalls: toolCalls,
+                                    };
+                                } else {
+                                    pendingAssistant.toolCalls = [
+                                        ...(pendingAssistant.toolCalls ?? []),
+                                        ...toolCalls,
+                                    ];
+                                }
+                            } else if (hasContent) {
+                                // Content message — merge with pending and flush
+                                if (pendingAssistant) {
+                                    pendingAssistant.content = m.content!;
+                                    if (hasToolCalls) {
+                                        pendingAssistant.toolCalls = [
+                                            ...(pendingAssistant.toolCalls ?? []),
+                                            ...toolCalls!,
+                                        ];
+                                    }
+                                    flushPending();
+                                } else {
+                                    converted.push({
+                                        id: `hist_asst_${converted.length}`,
+                                        role: "assistant",
+                                        content: m.content!,
+                                        toolCalls: hasToolCalls ? toolCalls : undefined,
+                                    });
+                                }
+                            }
                         }
                     }
+                    flushPending();
                     setMessages(converted);
                 }
             })

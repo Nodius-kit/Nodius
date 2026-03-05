@@ -796,7 +796,6 @@ export const useSocketSync = () => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                workspace: baseNodeConfig.workspace,
                 _key: baseNodeConfig._key
 
             } as api_node_config_get),
@@ -872,7 +871,10 @@ export const useSocketSync = () => {
 
         const selectedSheetId = "main"
 
-        const baseNode:Node<any> = createNodeFromConfig(nodeConfig, "0", "0", "main");
+        const baseNode:(Node<any> & {process:string}) = {
+            ...createNodeFromConfig(nodeConfig, "0", "0", "main"),
+            process: nodeConfig.node.process
+        }
         graph.sheets["main"].nodeMap.set("0", baseNode);
 
         // Build WebSocket URL based on server info

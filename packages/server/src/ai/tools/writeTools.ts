@@ -86,6 +86,33 @@ export const ProposeDeleteNodeSchema = z.object({
     reason: z.string().describe("Explication de pourquoi ce node doit etre supprime"),
 }).strict();
 
+const BatchActionSchema = z.discriminatedUnion("type", [
+    z.object({
+        type: z.literal("move_node"),
+        nodeKey: z.string(),
+        posX: z.number(),
+        posY: z.number(),
+    }),
+    z.object({
+        type: z.literal("update_node"),
+        nodeKey: z.string(),
+        updates: z.record(z.string(), z.unknown()),
+    }),
+    z.object({
+        type: z.literal("delete_node"),
+        nodeKey: z.string(),
+    }),
+    z.object({
+        type: z.literal("delete_edge"),
+        edgeKey: z.string(),
+    }),
+]);
+
+export const ProposeBatchSchema = z.object({
+    actions: z.array(BatchActionSchema).min(1).describe("Array of actions to execute as a batch"),
+    reason: z.string().describe("Explication de pourquoi ces modifications sont necessaires"),
+}).strict();
+
 // ─── Types for parsed proposals ──────────────────────────────────────
 
 export type ProposeCreateNodeArgs = z.infer<typeof ProposeCreateNodeSchema>;
@@ -231,6 +258,36 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
                 },
             },
         },
+        {
+            type: "function",
+            function: {
+                name: "propose_batch",
+                description: "Proposer plusieurs modifications en une seule action (ex: reorganiser le layout de plusieurs nodes). Soumis a approbation.",
+                parameters: {
+                    type: "object",
+                    properties: {
+                        actions: {
+                            type: "array",
+                            description: "Array of actions",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    type: { type: "string", enum: ["move_node", "update_node", "delete_node", "delete_edge"], description: "Type of action" },
+                                    nodeKey: { type: "string", description: "Node key (for move_node, update_node, delete_node)" },
+                                    posX: { type: "number", description: "New X position (for move_node)" },
+                                    posY: { type: "number", description: "New Y position (for move_node)" },
+                                    updates: { type: "object", description: "Fields to update (for update_node)" },
+                                    edgeKey: { type: "string", description: "Edge key (for delete_edge)" },
+                                },
+                                required: ["type"],
+                            },
+                        },
+                        reason: { type: "string", description: "Explication de la raison de ces modifications" },
+                    },
+                    required: ["actions", "reason"],
+                },
+            },
+        },
     ];
 }
 
@@ -298,6 +355,22 @@ export function parseProposedAction(toolName: string, args: Record<string, unkno
                 type: "delete_edge",
                 payload: { edgeKey: parsed.edgeKey },
             };
+        }
+        case "propose_batch": {
+            const parsed = ProposeBatchSchema.parse(args);
+            const subActions: ProposedAction[] = parsed.actions.map(a => {
+                switch (a.type) {
+                    case "move_node":
+                        return { type: "move_node", payload: { nodeKey: a.nodeKey, posX: a.posX, posY: a.posY } };
+                    case "update_node":
+                        return { type: "update_node", payload: { nodeKey: a.nodeKey, changes: a.updates as Record<string, unknown> } };
+                    case "delete_node":
+                        return { type: "delete_node", payload: { nodeKey: a.nodeKey } };
+                    case "delete_edge":
+                        return { type: "delete_edge", payload: { edgeKey: a.edgeKey } };
+                }
+            });
+            return { type: "batch", payload: { actions: subActions } };
         }
         default:
             throw new Error(`Unknown write tool: ${toolName}`);
