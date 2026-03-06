@@ -601,6 +601,7 @@ export const AIChatPanel = memo(({
             {pendingInterrupt && threadId && (
                 <AIInterruptModal
                     proposedAction={pendingInterrupt.proposedAction as Record<string, unknown>}
+                    codeDiffs={pendingInterrupt.codeDiffs}
                     threadId={threadId}
                     onResume={onResume}
                 />

@@ -88,6 +88,24 @@ export interface CreateNodeWithEdgesPayload {
     edges: EdgeConnectionPayload[];
 }
 
+export interface CodePatchEntry {
+    /** Exact string to find in the existing code. */
+    search: string;
+    /** Replacement string. */
+    replace: string;
+}
+
+export interface CodeDiffInfo {
+    /** Field name that was patched (e.g. "process"). */
+    field: string;
+    /** Original code before patches. */
+    original: string;
+    /** Modified code after patches. */
+    modified: string;
+    /** The patches that were applied. */
+    patches: CodePatchEntry[];
+}
+
 export interface ConfigureNodeTypePayload {
     mode: "create" | "update";
     typeKey?: string;
@@ -96,6 +114,8 @@ export interface ConfigureNodeTypePayload {
     category?: string;
     icon?: string;
     process?: string;
+    /** Surgical code patches for the process field (alternative to full process rewrite). */
+    processPatches?: CodePatchEntry[];
     border?: {
         radius?: number;
         width?: number;

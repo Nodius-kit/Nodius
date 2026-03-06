@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import type OpenAI from "openai";
-import type { ProposedAction, CreateNodePayload, CreateEdgePayload, CreateNodeWithEdgesPayload, ConfigureNodeTypePayload, ReorganizeLayoutPayload, EdgeConnectionPayload } from "../types.js";
+import type { ProposedAction, CreateNodePayload, CreateEdgePayload, CreateNodeWithEdgesPayload, ConfigureNodeTypePayload, ReorganizeLayoutPayload, EdgeConnectionPayload, CodePatchEntry } from "../types.js";
 
 // ─── New Zod Schemas ────────────────────────────────────────────────
 
@@ -86,6 +86,11 @@ export const ProposeCreateNodeWithEdgesSchema = z.object({
     reason: z.string().describe("Explication"),
 }).strict();
 
+const CodePatchSchema = z.object({
+    search: z.string().describe("Chaine exacte a rechercher dans le code existant"),
+    replace: z.string().describe("Chaine de remplacement"),
+});
+
 export const ProposeConfigureNodeTypeSchema = z.object({
     mode: z.enum(["create", "update"]).describe("'create' pour un nouveau type, 'update' pour modifier un existant"),
     typeKey: z.string().optional().describe("_key du type a modifier (requis pour update)"),
@@ -93,7 +98,8 @@ export const ProposeConfigureNodeTypeSchema = z.object({
     description: z.string().optional().describe("Description du type"),
     category: z.string().optional().describe("Categorie (ex: 'custom', 'data', 'control')"),
     icon: z.string().optional().describe("Icone lucide (ex: 'zap', 'filter', 'code')"),
-    process: z.string().optional().describe("Code JavaScript d'execution du node. Variables disponibles: node, nodeMap, edgeMap, incoming, global, next(), branch(), log(). Pour HTML: initHtml(), getHtmlRenderWithId(), HtmlRender."),
+    process: z.string().optional().describe("Code JavaScript COMPLET du node (utiliser seulement pour mode='create' ou remplacement total). Pour les modifications partielles, utiliser processPatches a la place."),
+    processPatches: z.array(CodePatchSchema).optional().describe("Modifications chirurgicales du code process existant. Chaque patch contient {search, replace}. PREFERE a 'process' pour mode='update' car plus economique en tokens. Le search doit etre une chaine EXACTE presente dans le code actuel."),
     border: z.object({
         radius: z.number().optional().describe("Border radius en px (defaut: 10)"),
         width: z.number().optional().describe("Border width en px (defaut: 1)"),
@@ -376,7 +382,19 @@ export function getWriteToolDefinitions(): OpenAI.Chat.Completions.ChatCompletio
                         description: { type: "string", description: "Description du type" },
                         category: { type: "string", description: "Categorie (ex: 'custom', 'data')" },
                         icon: { type: "string", description: "Icone lucide (ex: 'zap', 'filter')" },
-                        process: { type: "string", description: "Code JS d'execution. Variables: node, nodeMap, edgeMap, incoming, global, next(), branch(), log(). HTML: initHtml(), HtmlRender." },
+                        process: { type: "string", description: "Code JS COMPLET (seulement pour mode='create' ou remplacement total). Pour mode='update', preferer processPatches." },
+                        processPatches: {
+                            type: "array",
+                            description: "Modifications chirurgicales du code process (PREFERE pour mode='update'). Chaque element: {search: 'code exact a trouver', replace: 'nouveau code'}. Economise des tokens vs renvoi complet.",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    search: { type: "string", description: "Chaine exacte a trouver dans le code actuel" },
+                                    replace: { type: "string", description: "Chaine de remplacement" },
+                                },
+                                required: ["search", "replace"],
+                            },
+                        },
                         border: {
                             type: "object",
                             properties: {
@@ -570,6 +588,7 @@ export function parseProposedAction(toolName: string, args: Record<string, unkno
                     category: parsed.category,
                     icon: parsed.icon,
                     process: parsed.process,
+                    processPatches: parsed.processPatches as CodePatchEntry[] | undefined,
                     border: parsed.border,
                     handles: parsed.handles as ConfigureNodeTypePayload["handles"],
                     size: parsed.size,

@@ -4,28 +4,59 @@
  * @module component/ai
  *
  * Shows the proposed action details and provides Approve/Reject buttons
- * with an optional feedback text field.
+ * with an optional feedback text field. Displays visual diffs for code changes.
  */
 
-import { memo, useState, useContext, useCallback } from "react";
+import { memo, useState, useContext, useCallback, useMemo } from "react";
 import { Check, X, AlertTriangle, Loader } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import { UserContext } from "../../hooks/contexts/UserContext";
+import { CodeDiffView } from "./CodeDiffView";
+
+interface CodeDiffInfo {
+    field: string;
+    original: string;
+    modified: string;
+    patches: Array<{ search: string; replace: string }>;
+}
 
 interface AIInterruptModalProps {
     /** The proposed action from the AI agent. */
     proposedAction: Record<string, unknown>;
     /** Thread ID to resume. */
     threadId: string;
+    /** Code diffs to display (from server preprocessing). */
+    codeDiffs?: CodeDiffInfo[];
     /** Called when the user approves or rejects the action. */
     onResume: (threadId: string, approved: boolean, feedback?: string) => void;
     /** Called to dismiss the modal without action. */
     onDismiss?: () => void;
 }
 
+/**
+ * Build a display payload that excludes code fields already shown as diffs,
+ * to avoid redundant display.
+ */
+function buildDisplayPayload(
+    payload: Record<string, unknown> | undefined,
+    codeDiffs?: CodeDiffInfo[],
+): Record<string, unknown> | undefined {
+    if (!payload || !codeDiffs || codeDiffs.length === 0) return payload;
+
+    const diffFields = new Set(codeDiffs.map(d => d.field));
+    const filtered: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(payload)) {
+        if (!diffFields.has(key)) {
+            filtered[key] = value;
+        }
+    }
+    return filtered;
+}
+
 export const AIInterruptModal = memo(({
     proposedAction,
     threadId,
+    codeDiffs,
     onResume,
     onDismiss,
 }: AIInterruptModalProps) => {
@@ -35,6 +66,12 @@ export const AIInterruptModal = memo(({
 
     const actionType = (proposedAction.type as string) ?? "unknown";
     const actionPayload = proposedAction.payload as Record<string, unknown> | undefined;
+
+    // Filter out code fields from JSON display when diffs are shown
+    const displayPayload = useMemo(
+        () => buildDisplayPayload(actionPayload, codeDiffs),
+        [actionPayload, codeDiffs],
+    );
 
     const handleApprove = useCallback(async () => {
         // For create_graph actions, call the API first
@@ -113,7 +150,7 @@ export const AIInterruptModal = memo(({
             background: var(--nodius-background-paper);
             border-radius: 12px;
             box-shadow: var(--nodius-shadow-4);
-            max-width: 480px;
+            max-width: ${codeDiffs && codeDiffs.length > 0 ? "640px" : "480px"};
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
@@ -226,6 +263,9 @@ export const AIInterruptModal = memo(({
         }
     `);
 
+    // Check if there are non-diff fields to display as JSON
+    const hasNonDiffPayload = displayPayload && Object.keys(displayPayload).length > 0;
+
     return (
         <div className={overlayClass} onClick={onDismiss}>
             <div className={modalClass} onClick={e => e.stopPropagation()}>
@@ -243,9 +283,29 @@ export const AIInterruptModal = memo(({
                         The AI wants to perform the following action. Please review and approve or reject.
                     </div>
 
-                    <div className={codeBlockClass}>
-                        {JSON.stringify(actionPayload ?? proposedAction, null, 2)}
-                    </div>
+                    {/* Code diffs (visual git-style) */}
+                    {codeDiffs && codeDiffs.map((diff, idx) => (
+                        <CodeDiffView
+                            key={idx}
+                            field={diff.field}
+                            original={diff.original}
+                            modified={diff.modified}
+                        />
+                    ))}
+
+                    {/* Non-code payload as JSON */}
+                    {hasNonDiffPayload && (
+                        <div className={codeBlockClass}>
+                            {JSON.stringify(displayPayload, null, 2)}
+                        </div>
+                    )}
+
+                    {/* Fallback: full payload if no diffs and no display payload */}
+                    {!codeDiffs && !hasNonDiffPayload && (
+                        <div className={codeBlockClass}>
+                            {JSON.stringify(actionPayload ?? proposedAction, null, 2)}
+                        </div>
+                    )}
 
                     <input
                         className={feedbackInputClass}

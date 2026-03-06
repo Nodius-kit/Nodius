@@ -245,6 +245,45 @@ un unique message `[Conversation summary]`. Les 6 derniers messages sont toujour
     **`propose_update_node`**, **`propose_move_node`**, **`propose_delete_edge`**,
     **`propose_batch`**, **`propose_create_node_with_edges`**, **`propose_configure_node_type`**, **`propose_reorganize_layout`**
 
+### Etape 4b — Edition chirurgicale du code (Code Patching)
+
+Quand le LLM modifie du code process existant (`propose_configure_node_type` en mode `update`),
+il utilise `processPatches` au lieu de `process` pour envoyer uniquement les modifications.
+
+```
+processPatches: [
+  { search: "const res = await fetch(url);",
+    replace: "const res = await fetch(url, { method: 'POST' });" },
+  { search: "next(data);",
+    replace: "log('Done');\nnext(data);" }
+]
+```
+
+**Pipeline de resolution :**
+
+```
+1. LLM appelle propose_configure_node_type avec processPatches
+2. preprocessConfigureNodeTypeArgs() dans aiAgent.ts :
+   a. Fetch la NodeTypeConfig existante via dataSource
+   b. Recupere le code process actuel
+   c. Applique les patches sequentiellement (applyPatches())
+   d. Remplace processPatches par le process resolu
+   e. Retourne un CodeDiffInfo { field, original, modified, patches }
+3. Le CodeDiffInfo est inclus dans l'AgentInterrupt → envoye au client
+4. Le client affiche un diff visuel (CodeDiffView) dans le HITL modal
+5. Si approuve, l'actionConverter utilise le process resolu normalement
+```
+
+**Avantages :**
+- Economie de tokens : le LLM n'envoie que les fragments modifies
+- Diff visuel : l'utilisateur voit exactement ce qui change (vert = ajoute, rouge = supprime)
+- Precision : modifications chirurgicales sans risque de casser le code non modifie
+
+**Fichiers cles :**
+- `tools/codePatch.ts` : `applyPatches()`, `computeLineDiff()`, types `CodePatch`, `DiffLine`
+- `tools/codeDetector.ts` : `isCodeString()`, `isKnownCodeField()`, `isCodeValue()`
+- `types.ts` : `CodePatchEntry`, `CodeDiffInfo`, champ `processPatches` dans `ConfigureNodeTypePayload`
+
 ### Etape 5 — Resume apres validation (HITL)
 
 Quand le client envoie `POST /api/ai/resume { threadId, approved: true/false }` :

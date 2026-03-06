@@ -5,7 +5,8 @@ import { getHomeReadToolDefinitions, getHomeWriteToolDefinitions, createHomeRead
 import { GraphRAGRetriever } from "./data/graphRAGRetriever.js";
 import { buildSystemPrompt, buildContextSummary } from "./prompts/systemPrompt.js";
 import { buildHomeSystemPrompt } from "./prompts/homePrompt.js";
-import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks, LLMStreamChunk } from "./types.js";
+import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks, LLMStreamChunk, CodeDiffInfo } from "./types.js";
+import { applyPatches } from "./tools/codePatch.js";
 import type { LLMProvider, LLMToolCall } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { encode } from "@toon-format/toon";
@@ -231,6 +232,58 @@ function preprocessUpdateNodeArgs(args: Record<string, unknown>): void {
     }
 }
 
+/**
+ * Preprocess propose_configure_node_type args: resolve processPatches into final process.
+ * When processPatches is present, fetches the existing NodeTypeConfig to get current
+ * process code, applies patches sequentially, and stores the resolved code + diff info.
+ */
+async function preprocessConfigureNodeTypeArgs(
+    args: Record<string, unknown>,
+    dataSource: GraphDataSource,
+    graphKey: string,
+): Promise<CodeDiffInfo | null> {
+    const patches = args.processPatches as Array<{ search: string; replace: string }> | undefined;
+    if (!patches || patches.length === 0) return null;
+
+    const typeKey = args.typeKey as string | undefined;
+    if (!typeKey) {
+        debugAI("patch_error", { error: "processPatches requires typeKey for existing config lookup" });
+        return null;
+    }
+
+    try {
+        // Fetch existing config to get current process code
+        const configs = await dataSource.getNodeConfigs(graphKey);
+        const existingConfig = configs.find(c => c._key === typeKey);
+        const originalProcess = existingConfig?.node?.process ?? "";
+
+        // Apply patches to get final code
+        const modifiedProcess = applyPatches(originalProcess, patches);
+
+        // Replace processPatches with resolved process in args
+        args.process = modifiedProcess;
+        delete args.processPatches;
+
+        debugAI("patch_resolved", {
+            typeKey,
+            originalLen: originalProcess.length,
+            modifiedLen: modifiedProcess.length,
+            patchCount: patches.length,
+        });
+
+        return {
+            field: "process",
+            original: originalProcess,
+            modified: modifiedProcess,
+            patches,
+        };
+    } catch (err) {
+        debugAI("patch_error", { error: String(err), typeKey });
+        // Leave processPatches as-is — the HITL will show raw data
+        return null;
+    }
+}
+
 // ─── Tool round limits ──────────────────────────────────────────────
 const INITIAL_TOOL_ROUNDS = 5;
 const EXTENDED_TOOL_ROUNDS = 10;
@@ -265,6 +318,8 @@ export interface AgentInterrupt {
     type: "interrupt";
     /** The proposed action parsed from the tool call. */
     proposedAction: ProposedAction;
+    /** Code diffs for visual display (populated when processPatches are resolved). */
+    codeDiffs?: CodeDiffInfo[];
     /** Raw tool call info (name, args, reason). */
     toolCall: { id: string; name: string; args: Record<string, unknown> };
     /** Explanation from the LLM (content before the tool call, if any). */
@@ -766,6 +821,13 @@ export class AIAgent {
                     preprocessUpdateNodeArgs(args);
                 }
 
+                // Preprocess propose_configure_node_type: resolve processPatches
+                let codeDiffs: CodeDiffInfo[] | undefined;
+                if (tc.function.name === "propose_configure_node_type" && args.processPatches) {
+                    const diff = await preprocessConfigureNodeTypeArgs(args, this.dataSource, this.graphKey);
+                    if (diff) codeDiffs = [diff];
+                }
+
                 // HITL: if it's a propose_* tool, interrupt
                 if (isWriteTool(tc.function.name) || isHomeWriteTool(tc.function.name)) {
                     debugAI("hitl_interrupt", { toolName: tc.function.name, actionType: args.action ?? "unknown" });
@@ -791,6 +853,7 @@ export class AIAgent {
                     return {
                         type: "interrupt",
                         proposedAction,
+                        codeDiffs,
                         toolCall: { id: tc.id, name: tc.function.name, args },
                         message: assistantMsg,
                         toolCalls: toolCallLog,
@@ -924,6 +987,13 @@ export class AIAgent {
                     preprocessUpdateNodeArgs(args);
                 }
 
+                // Preprocess propose_configure_node_type: resolve processPatches
+                let codeDiffs: CodeDiffInfo[] | undefined;
+                if (tc.name === "propose_configure_node_type" && args.processPatches) {
+                    const diff = await preprocessConfigureNodeTypeArgs(args, this.dataSource, this.graphKey);
+                    if (diff) codeDiffs = [diff];
+                }
+
                 // HITL: propose_* tool → interrupt (stop streaming)
                 if (isWriteTool(tc.name) || isHomeWriteTool(tc.name)) {
                     debugAI("hitl_interrupt_stream", { toolName: tc.name });
@@ -939,7 +1009,7 @@ export class AIAgent {
                         toolCallLog: [],
                         remainingToolCalls: [],
                     };
-                    callbacks.onComplete(JSON.stringify({ type: "interrupt", proposedAction, toolCall: { id: tc.id, name: tc.name, args } }));
+                    callbacks.onComplete(JSON.stringify({ type: "interrupt", proposedAction, codeDiffs, toolCall: { id: tc.id, name: tc.name, args } }));
                     return;
                 }
 

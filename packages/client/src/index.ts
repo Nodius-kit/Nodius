@@ -6,6 +6,7 @@ export * from './component/ai/AIChatPanel';
 export * from './component/ai/AIInterruptModal';
 export * from './component/ai/AIThreadList';
 export * from './component/ai/AIToolLimitBanner';
+export * from './component/ai/CodeDiffView';
 export * from './component/ai/renderMessageContent';
 export * from './component/animate/Collapse';
 export * from './component/animate/Fade';

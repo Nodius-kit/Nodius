@@ -20,6 +20,8 @@ export interface AIChatMessage {
     isStreaming?: boolean;
     toolCalls?: Array<{ id: string; name: string; result?: string }>;
     proposedAction?: unknown;
+    /** Code diffs for visual display when the action modifies code. */
+    codeDiffs?: Array<{ field: string; original: string; modified: string; patches: Array<{ search: string; replace: string }> }>;
     /** Accumulated token usage for this message. */
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
     /** Set when tool round limit is reached, waiting for user decision. */
@@ -263,11 +265,15 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
 
                 // Check if the complete message contains a HITL interrupt or tool_limit
                 let proposedAction: unknown = undefined;
+                let codeDiffs: AIChatMessage["codeDiffs"] = undefined;
                 let isToolLimit = false;
                 try {
                     const parsed = JSON.parse(fullText);
                     if (parsed?.type === "interrupt" && parsed.proposedAction) {
                         proposedAction = parsed.proposedAction;
+                        if (Array.isArray(parsed.codeDiffs) && parsed.codeDiffs.length > 0) {
+                            codeDiffs = parsed.codeDiffs;
+                        }
                     } else if (parsed?.type === "tool_limit") {
                         isToolLimit = true;
                     }
@@ -286,7 +292,7 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
                         const finalContent = proposedAction ? (last.content || fullText) : last.content;
                         return [
                             ...prev.slice(0, -1),
-                            { ...last, content: finalContent, isStreaming: false, proposedAction },
+                            { ...last, content: finalContent, isStreaming: false, proposedAction, codeDiffs },
                         ];
                     }
                     return prev;

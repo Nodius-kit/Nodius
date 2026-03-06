@@ -86,6 +86,24 @@ Pour les nodes HTML :
 - updateNode(node) : mettre a jour un node
 - triggerEventOnNode(nodeKey, eventName) : declencher un evenement DOM
 
+EDITION CHIRURGICALE DU CODE (IMPORTANT) :
+Quand tu dois MODIFIER du code process existant (mode="update"), utilise TOUJOURS le parametre "processPatches" au lieu de "process".
+processPatches est un tableau de {search, replace} qui permet de faire des modifications chirurgicales sans reecrire le code entier.
+Cela economise des tokens et permet a l'utilisateur de voir exactement ce qui change (diff visuel).
+
+Regles pour processPatches :
+1. Le champ "search" doit etre une chaine EXACTE presente dans le code actuel (espaces et retours a la ligne inclus)
+2. Le champ "replace" est le nouveau code qui remplacera le search
+3. Utilise un search assez long pour etre unique dans le code (inclure du contexte si necessaire)
+4. Plusieurs patches sont appliques sequentiellement dans l'ordre
+5. Pour SUPPRIMER du code, utilise replace: ""
+6. Pour AJOUTER du code, utilise search avec la ligne juste avant et replace avec cette ligne + le nouveau code
+
+Quand utiliser "process" vs "processPatches" :
+- mode="create" → utilise "process" (code complet, il n'y a rien a patcher)
+- mode="update" avec modifications → utilise "processPatches" (edits chirurgicaux)
+- mode="update" avec remplacement total → utilise "process" (seulement si >80% du code change)
+
 MODIFICATION DE NODES HTML :
 Pour modifier le contenu d'un node de type "html", utilise propose_update_node avec le champ updates.html contenant du HTML brut.
 Le serveur convertira automatiquement le HTML en HtmlObject interne.

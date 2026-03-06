@@ -17,6 +17,8 @@ export * from './ai/threadStore';
 export * from './ai/tokenTracker';
 export * from './ai/tools/actionConverter';
 export * from './ai/tools/autoLayout';
+export * from './ai/tools/codeDetector';
+export * from './ai/tools/codePatch';
 export * from './ai/tools/homeTools';
 export * from './ai/tools/htmlToHtmlObject';
 export * from './ai/tools/readTools';
