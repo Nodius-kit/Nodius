@@ -1,14 +1,17 @@
 import type OpenAI from "openai";
 import { getReadToolDefinitions, createReadToolExecutor } from "./tools/readTools.js";
 import { getWriteToolDefinitions, isWriteTool, parseProposedAction } from "./tools/writeTools.js";
+import { getHomeReadToolDefinitions, getHomeWriteToolDefinitions, createHomeReadToolExecutor, isHomeWriteTool, parseHomeProposedAction } from "./tools/homeTools.js";
 import { GraphRAGRetriever } from "./graphRAGRetriever.js";
 import { buildSystemPrompt, buildContextSummary } from "./prompts/systemPrompt.js";
+import { buildHomeSystemPrompt } from "./prompts/homePrompt.js";
 import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks, LLMStreamChunk } from "./types.js";
 import type { LLMProvider, LLMToolCall } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { encode } from "@toon-format/toon";
 import { getTokenTracker } from "./tokenTracker.js";
 import { logMalformedJSON, debugAI, isAIDebugEnabled } from "./aiLogger.js";
+import { htmlToHtmlObject } from "./htmlToHtmlObject.js";
 
 // ─── XML tool-call text filter ───────────────────────────────────────
 // Some providers (e.g. DeepSeek) emit tool calls as XML text in content
@@ -90,6 +93,144 @@ function truncateOldToolResults(history: OpenAI.Chat.Completions.ChatCompletionM
     }
 }
 
+// ─── JSON repair for truncated tool arguments ──────────────────────
+/**
+ * Attempt to repair truncated JSON from LLM output that was cut off
+ * due to max_tokens limits. Closes unclosed brackets/braces/strings.
+ */
+function repairTruncatedJSON(raw: string): string | null {
+    // Already valid?
+    try { JSON.parse(raw); return raw; } catch { /* needs repair */ }
+
+    let s = raw.trimEnd();
+    // Remove trailing ellipsis/unicode characters that indicate truncation (anywhere at end)
+    s = s.replace(/[…\u2026]+\s*$/, "").replace(/\.{3,}\s*$/, "").trimEnd();
+
+    // Remove any trailing incomplete unicode escape sequence
+    s = s.replace(/\\u[0-9a-fA-F]{0,3}$/, "");
+
+    // Remove trailing comma
+    s = s.replace(/,\s*$/, "");
+
+    // Track open structures
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (escaped) { escaped = false; continue; }
+        if (ch === "\\") { escaped = true; continue; }
+
+        if (inString) {
+            if (ch === '"') inString = false;
+            continue;
+        }
+
+        switch (ch) {
+            case '"': inString = true; break;
+            case '{': stack.push('}'); break;
+            case '[': stack.push(']'); break;
+            case '}':
+            case ']':
+                if (stack.length > 0 && stack[stack.length - 1] === ch) stack.pop();
+                break;
+        }
+    }
+
+    // If we're still inside a string, close it
+    if (inString) s += '"';
+
+    // Remove any trailing partial key-value (e.g. `"key": ` or `"key":`)
+    s = s.replace(/,?\s*"[^"]*":\s*$/, "");
+
+    // Remove trailing comma again after cleanup
+    s = s.replace(/,\s*$/, "");
+
+    // Close remaining brackets/braces in reverse order
+    while (stack.length > 0) {
+        s += stack.pop();
+    }
+
+    // Also remove trailing commas before closing brackets (LLM quirk)
+    s = s.replace(/,\s*([}\]])/g, "$1");
+
+    try {
+        JSON.parse(s);
+        return s;
+    } catch (e) {
+        // Log repair failure details for debugging
+        debugAI("json_repair_failed", {
+            rawLength: raw.length,
+            repairedLength: s.length,
+            last100: s.slice(-100),
+            error: String(e),
+            stackDepth: 0,
+        });
+        return null;
+    }
+}
+
+// ─── HtmlObject normalizer ─────────────────────────────────────────
+/**
+ * Fix common LLM mistakes in generated HtmlObject:
+ * - type:"block" with array content → type:"list"
+ * - type:"list" with non-array content → type:"block"
+ * - Missing required fields (css, domEvents)
+ */
+function normalizeHtmlObject(obj: unknown): unknown {
+    if (obj == null || typeof obj !== "object") return obj;
+    const o = obj as Record<string, unknown>;
+
+    // Ensure required array fields
+    if (!Array.isArray(o.css)) o.css = [];
+    if (!Array.isArray(o.domEvents)) o.domEvents = [];
+
+    // Fix block/list confusion
+    if (o.type === "block" && Array.isArray(o.content)) {
+        o.type = "list";
+    } else if (o.type === "list" && o.content != null && !Array.isArray(o.content)) {
+        o.type = "block";
+    }
+
+    // Recurse into children
+    if (Array.isArray(o.content)) {
+        o.content = (o.content as unknown[]).map(c => normalizeHtmlObject(c));
+    } else if (o.content != null && typeof o.content === "object" && "type" in (o.content as object)) {
+        o.content = normalizeHtmlObject(o.content);
+    }
+
+    return o;
+}
+
+/**
+ * Preprocess propose_update_node args: convert HTML→HtmlObject when html field is present.
+ * Also normalizes any HtmlObject data that was provided directly.
+ */
+function preprocessUpdateNodeArgs(args: Record<string, unknown>): void {
+    const updates = args.updates as Record<string, unknown> | undefined;
+    if (!updates) return;
+
+    // If html field is provided, convert to HtmlObject
+    if (typeof updates.html === "string" && updates.html.trim()) {
+        const htmlStr = updates.html;
+        try {
+            const htmlObject = htmlToHtmlObject(htmlStr);
+            updates.data = htmlObject;
+            delete updates.html;
+            debugAI("html_to_htmlobject", { htmlLength: htmlStr.length, success: true });
+        } catch (err) {
+            debugAI("html_to_htmlobject_error", { error: String(err), htmlLength: htmlStr.length });
+            // Leave html as-is, the HITL will show the raw data
+        }
+    }
+
+    // Normalize any HtmlObject in data (fix block/list confusion etc.)
+    if (updates.data && typeof updates.data === "object" && "type" in (updates.data as object)) {
+        updates.data = normalizeHtmlObject(updates.data);
+    }
+}
+
 // ─── Tool round limits ──────────────────────────────────────────────
 const INITIAL_TOOL_ROUNDS = 5;
 const EXTENDED_TOOL_ROUNDS = 10;
@@ -103,6 +244,8 @@ export interface AIAgentOptions {
     llmProvider: LLMProvider;
     /** Optional embedding provider for vector search. Falls back to token search if null. */
     embeddingProvider?: EmbeddingProvider | null;
+    /** Workspace (needed for home mode to list graphs/classes). */
+    workspace?: string;
 }
 
 export interface ToolCallEntry {
@@ -151,6 +294,12 @@ export class AIAgent {
     private conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
     private retriever: GraphRAGRetriever;
     private llmProvider: LLMProvider;
+    private workspace: string;
+
+    /** Whether this agent operates in home mode (no graph open). */
+    private get isHomeMode(): boolean {
+        return this.graphKey === "home";
+    }
 
     /** Pending interrupt state — set when a propose_* tool or tool_limit is detected. */
     private pendingInterrupt: {
@@ -174,6 +323,7 @@ export class AIAgent {
         this.role = options.role ?? "editor";
         this.maxToolRounds = options.maxToolRounds ?? 5;
         this.llmProvider = options.llmProvider;
+        this.workspace = options.workspace ?? "root";
         this.retriever = new GraphRAGRetriever(this.dataSource, undefined, options.embeddingProvider ?? null);
     }
 
@@ -185,6 +335,19 @@ export class AIAgent {
 
         // Step 0: Compact history if needed
         await this.maybeCompactHistory();
+
+        if (this.isHomeMode) {
+            // Home mode: no RAG, use home prompt
+            const emptyContext: GraphRAGContext = { graph: { _key: "home", name: "Home", sheets: {} }, relevantNodes: [], relevantEdges: [], nodeTypeConfigs: [] };
+            if (this.conversationHistory.length === 0) {
+                const systemPrompt = buildHomeSystemPrompt(this.role);
+                debugAI("system_prompt", { length: systemPrompt.length, mode: "home" });
+                this.conversationHistory.push({ role: "system", content: systemPrompt });
+            }
+            this.conversationHistory.push({ role: "user", content: userMessage });
+            debugAI("conversation_state", { historyLength: this.conversationHistory.length });
+            return this.runToolLoop(emptyContext);
+        }
 
         // Step 1: Retrieve context via GraphRAG
         const context = await this.retriever.retrieve(this.graphKey, userMessage);
@@ -200,14 +363,11 @@ export class AIAgent {
             });
         }
 
-        // Step 3: Add context summary + user message
+        // Step 3: Replace previous RAG context + add user message
         const contextSummary = buildContextSummary(context);
         if (contextSummary) {
             debugAI("rag_summary", { length: contextSummary.length });
-            this.conversationHistory.push({
-                role: "system",
-                content: `[Contexte RAG pour cette question]\n${contextSummary}`,
-            });
+            this.replaceRAGContext(contextSummary);
         }
 
         this.conversationHistory.push({
@@ -263,16 +423,24 @@ export class AIAgent {
             try {
                 tcArgs = JSON.parse(tc.function.arguments);
             } catch {
-                logMalformedJSON({ raw: tc.function.arguments, context: `resumeConversation tool=${tc.function.name}` });
-                const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.function.arguments });
-                toolCallLog.push({ name: tc.function.name, args: {}, result: errorResult });
-                this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
-                continue;
+                const repaired = repairTruncatedJSON(tc.function.arguments);
+                if (repaired) {
+                    logMalformedJSON({ raw: tc.function.arguments, corrected: repaired, context: `resumeConversation tool=${tc.function.name} (repaired)` });
+                    tcArgs = JSON.parse(repaired);
+                } else {
+                    logMalformedJSON({ raw: tc.function.arguments, context: `resumeConversation tool=${tc.function.name}` });
+                    const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.function.arguments });
+                    toolCallLog.push({ name: tc.function.name, args: {}, result: errorResult });
+                    this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
+                    continue;
+                }
             }
 
-            if (isWriteTool(tc.function.name)) {
+            if (isWriteTool(tc.function.name) || isHomeWriteTool(tc.function.name)) {
                 // Another propose_* in the same batch — interrupt again
-                const proposedAction = parseProposedAction(tc.function.name, tcArgs);
+                const proposedAction = isHomeWriteTool(tc.function.name)
+                    ? parseHomeProposedAction(tc.function.name, tcArgs)
+                    : parseProposedAction(tc.function.name, tcArgs);
                 this.pendingInterrupt = {
                     kind: "hitl",
                     toolCallId: tc.id,
@@ -353,6 +521,19 @@ export class AIAgent {
             // Step 0: Compact history if needed
             await this.maybeCompactHistory();
 
+            if (this.isHomeMode) {
+                // Home mode: no RAG, use home prompt
+                if (this.conversationHistory.length === 0) {
+                    const systemPrompt = buildHomeSystemPrompt(this.role);
+                    debugAI("system_prompt", { length: systemPrompt.length, mode: "home" });
+                    this.conversationHistory.push({ role: "system", content: systemPrompt });
+                }
+                this.conversationHistory.push({ role: "user", content: userMessage });
+                debugAI("conversation_state", { historyLength: this.conversationHistory.length });
+                await this.runStreamToolLoop(callbacks);
+                return;
+            }
+
             // Step 1: Retrieve context via GraphRAG
             const context = await this.retriever.retrieve(this.graphKey, userMessage);
             debugAI("rag_context", { nodes: context.relevantNodes.length, edges: context.relevantEdges.length, nodeTypes: context.nodeTypeConfigs.length });
@@ -367,14 +548,11 @@ export class AIAgent {
                 });
             }
 
-            // Step 3: Add context summary + user message
+            // Step 3: Replace previous RAG context + add user message
             const contextSummary = buildContextSummary(context);
             if (contextSummary) {
                 debugAI("rag_summary", { length: contextSummary.length });
-                this.conversationHistory.push({
-                    role: "system",
-                    content: `[Contexte RAG pour cette question]\n${contextSummary}`,
-                });
+                this.replaceRAGContext(contextSummary);
             }
 
             this.conversationHistory.push({ role: "user", content: userMessage });
@@ -442,6 +620,33 @@ export class AIAgent {
 
     // ─── Private ─────────────────────────────────────────────────────
 
+    private static readonly RAG_CONTEXT_PREFIX = "[Contexte RAG pour cette question]";
+
+    /**
+     * Replace the previous RAG context system message instead of accumulating.
+     * On multi-turn conversations, each turn gets fresh RAG context — only keep the latest.
+     */
+    private replaceRAGContext(contextSummary: string): void {
+        if (!contextSummary) return;
+
+        const newContent = `${AIAgent.RAG_CONTEXT_PREFIX}\n${contextSummary}`;
+
+        // Find the last RAG context message and replace it
+        for (let i = this.conversationHistory.length - 1; i >= 0; i--) {
+            const msg = this.conversationHistory[i];
+            if (msg.role === "system" && typeof (msg as { content?: string }).content === "string"
+                && (msg as { content: string }).content.startsWith(AIAgent.RAG_CONTEXT_PREFIX)) {
+                (msg as { content: string }).content = newContent;
+                debugAI("rag_context_replaced", { index: i, length: newContent.length });
+                return;
+            }
+        }
+
+        // No previous RAG context — add new one
+        this.conversationHistory.push({ role: "system", content: newContent });
+        debugAI("rag_context_added", { length: newContent.length });
+    }
+
     /**
      * Compact conversation history when it grows too large, by summarizing
      * older messages into a single summary message to reduce prompt tokens.
@@ -497,6 +702,13 @@ export class AIAgent {
     }
 
     private getTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
+        if (this.isHomeMode) {
+            const tools = [...getHomeReadToolDefinitions()];
+            if (this.role === "editor" || this.role === "admin") {
+                tools.push(...getHomeWriteToolDefinitions());
+            }
+            return tools;
+        }
         const tools = [...getReadToolDefinitions()];
         if (this.role === "editor" || this.role === "admin") {
             tools.push(...getWriteToolDefinitions());
@@ -506,7 +718,9 @@ export class AIAgent {
 
     private async runToolLoop(context: GraphRAGContext, existingLog?: ToolCallEntry[]): Promise<AgentResult> {
         const tools = this.getTools();
-        const executeReadTool = createReadToolExecutor(this.dataSource, this.graphKey);
+        const executeReadTool = this.isHomeMode
+            ? createHomeReadToolExecutor(this.dataSource, this.workspace)
+            : createReadToolExecutor(this.dataSource, this.graphKey);
         const toolCallLog: ToolCallEntry[] = existingLog ?? [];
 
         for (let round = 0; round < this.maxToolRounds; round++) {
@@ -534,17 +748,30 @@ export class AIAgent {
                 try {
                     args = JSON.parse(tc.function.arguments);
                 } catch {
-                    logMalformedJSON({ raw: tc.function.arguments, context: `runToolLoop tool=${tc.function.name}` });
-                    const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.function.arguments });
-                    toolCallLog.push({ name: tc.function.name, args: {}, result: errorResult });
-                    this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
-                    continue;
+                    const repaired = repairTruncatedJSON(tc.function.arguments);
+                    if (repaired) {
+                        logMalformedJSON({ raw: tc.function.arguments, corrected: repaired, context: `runToolLoop tool=${tc.function.name} (repaired)` });
+                        args = JSON.parse(repaired);
+                    } else {
+                        logMalformedJSON({ raw: tc.function.arguments, context: `runToolLoop tool=${tc.function.name}` });
+                        const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.function.arguments });
+                        toolCallLog.push({ name: tc.function.name, args: {}, result: errorResult });
+                        this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
+                        continue;
+                    }
+                }
+
+                // Preprocess propose_update_node: HTML→HtmlObject conversion + normalization
+                if (tc.function.name === "propose_update_node") {
+                    preprocessUpdateNodeArgs(args);
                 }
 
                 // HITL: if it's a propose_* tool, interrupt
-                if (isWriteTool(tc.function.name)) {
+                if (isWriteTool(tc.function.name) || isHomeWriteTool(tc.function.name)) {
                     debugAI("hitl_interrupt", { toolName: tc.function.name, actionType: args.action ?? "unknown" });
-                    const proposedAction = parseProposedAction(tc.function.name, args);
+                    const proposedAction = isHomeWriteTool(tc.function.name)
+                        ? parseHomeProposedAction(tc.function.name, args)
+                        : parseProposedAction(tc.function.name, args);
 
                     // Save state for resumeConversation()
                     this.pendingInterrupt = {
@@ -626,7 +853,9 @@ export class AIAgent {
      */
     private async runStreamToolLoop(callbacks: StreamCallbacks, startRound = 0): Promise<void> {
         const tools = this.getTools();
-        const executeReadTool = createReadToolExecutor(this.dataSource, this.graphKey);
+        const executeReadTool = this.isHomeMode
+            ? createHomeReadToolExecutor(this.dataSource, this.workspace)
+            : createReadToolExecutor(this.dataSource, this.graphKey);
         const maxRounds = this.toolLimitExtended ? EXTENDED_TOOL_ROUNDS : INITIAL_TOOL_ROUNDS;
 
         for (let round = startRound; round < maxRounds; round++) {
@@ -676,17 +905,31 @@ export class AIAgent {
                 try {
                     args = JSON.parse(tc.arguments);
                 } catch {
-                    logMalformedJSON({ raw: tc.arguments, context: `streamToolLoop tool=${tc.name}` });
-                    const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.arguments });
-                    callbacks.onToolResult(tc.id, errorResult);
-                    this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
-                    continue;
+                    // Attempt to repair truncated JSON
+                    const repaired = repairTruncatedJSON(tc.arguments);
+                    if (repaired) {
+                        logMalformedJSON({ raw: tc.arguments, corrected: repaired, context: `streamToolLoop tool=${tc.name} (repaired)` });
+                        args = JSON.parse(repaired);
+                    } else {
+                        logMalformedJSON({ raw: tc.arguments, context: `streamToolLoop tool=${tc.name}` });
+                        const errorResult = JSON.stringify({ error: "Invalid JSON in tool arguments", raw: tc.arguments });
+                        callbacks.onToolResult(tc.id, errorResult);
+                        this.conversationHistory.push({ role: "tool", tool_call_id: tc.id, content: errorResult });
+                        continue;
+                    }
+                }
+
+                // Preprocess propose_update_node: HTML→HtmlObject conversion + normalization
+                if (tc.name === "propose_update_node") {
+                    preprocessUpdateNodeArgs(args);
                 }
 
                 // HITL: propose_* tool → interrupt (stop streaming)
-                if (isWriteTool(tc.name)) {
+                if (isWriteTool(tc.name) || isHomeWriteTool(tc.name)) {
                     debugAI("hitl_interrupt_stream", { toolName: tc.name });
-                    const proposedAction = parseProposedAction(tc.name, args);
+                    const proposedAction = isHomeWriteTool(tc.name)
+                        ? parseHomeProposedAction(tc.name, args)
+                        : parseProposedAction(tc.name, args);
                     this.pendingInterrupt = {
                         kind: "hitl",
                         toolCallId: tc.id,
@@ -852,7 +1095,7 @@ export class AIAgent {
         const stream = this.llmProvider!.streamCompletionWithTools(
             this.conversationHistory,
             tools,
-            callbacks.signal ? { signal: callbacks.signal } : undefined,
+            { maxTokens: 8192, ...(callbacks.signal ? { signal: callbacks.signal } : {}) },
         );
 
         // Track how much clean text we've already sent to the client

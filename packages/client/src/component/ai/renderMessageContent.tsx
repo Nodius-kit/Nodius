@@ -19,7 +19,7 @@
 
 import React, { memo } from "react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import { MapPin, MousePointerClick, Maximize2, Layers, Network, ExternalLink } from "lucide-react";
+import { MapPin, MousePointerClick, Maximize2, Layers, Network, ExternalLink, FileCode, Settings } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -34,6 +34,10 @@ export interface ClientActionHandlers {
     onChangeSheet?: (sheetKey: string) => void;
     /** Open another graph. */
     onOpenGraph?: (graphKey: string) => void;
+    /** Open an HTML class. */
+    onOpenHtml?: (htmlKey: string) => void;
+    /** Open a node config. */
+    onOpenNodeConfig?: (configKey: string) => void;
 }
 
 export interface RenderOptions extends ClientActionHandlers {
@@ -43,6 +47,10 @@ export interface RenderOptions extends ClientActionHandlers {
     sheetDisplayNames?: Map<string, string>;
     /** Map of graphKey → display name. */
     graphDisplayNames?: Map<string, string>;
+    /** Map of htmlKey → display name. */
+    htmlDisplayNames?: Map<string, string>;
+    /** Map of configKey → display name. */
+    nodeConfigDisplayNames?: Map<string, string>;
 }
 
 // ─── Action Components ──────────────────────────────────────────────
@@ -136,6 +144,34 @@ const GraphLink = memo(({ graphKey, displayName, onClick }: {
 });
 GraphLink.displayName = "GraphLink";
 
+const HtmlLink = memo(({ htmlKey, displayName, onClick }: {
+    htmlKey: string;
+    displayName: string;
+    onClick?: (key: string) => void;
+}) => {
+    const cls = useDynamicClass(actionLinkStyle);
+    return (
+        <span className={cls} onClick={() => onClick?.(htmlKey)} title={`Open HTML class: ${htmlKey}`}>
+            <FileCode size={11} />{displayName}
+        </span>
+    );
+});
+HtmlLink.displayName = "HtmlLink";
+
+const NodeConfigLink = memo(({ configKey, displayName, onClick }: {
+    configKey: string;
+    displayName: string;
+    onClick?: (key: string) => void;
+}) => {
+    const cls = useDynamicClass(actionLinkStyle);
+    return (
+        <span className={cls} onClick={() => onClick?.(configKey)} title={`Open node config: ${configKey}`}>
+            <Settings size={11} />{displayName}
+        </span>
+    );
+});
+NodeConfigLink.displayName = "NodeConfigLink";
+
 const ExternalLinkComp = memo(({ url, label }: { url: string; label: string }) => {
     const cls = useDynamicClass(actionLinkStyle);
     return (
@@ -208,6 +244,18 @@ function renderAction(action: string, params: string, key: string, options?: Ren
             if (!graphKey) return null;
             const displayName = options?.graphDisplayNames?.get(graphKey) ?? graphKey;
             return <GraphLink key={key} graphKey={graphKey} displayName={displayName} onClick={options?.onOpenGraph} />;
+        }
+        case "html": {
+            const htmlKey = params.trim();
+            if (!htmlKey) return null;
+            const displayName = options?.htmlDisplayNames?.get(htmlKey) ?? htmlKey;
+            return <HtmlLink key={key} htmlKey={htmlKey} displayName={displayName} onClick={options?.onOpenHtml} />;
+        }
+        case "nodeConfig": {
+            const configKey = params.trim();
+            if (!configKey) return null;
+            const displayName = options?.nodeConfigDisplayNames?.get(configKey) ?? configKey;
+            return <NodeConfigLink key={key} configKey={configKey} displayName={displayName} onClick={options?.onOpenNodeConfig} />;
         }
         case "link": {
             const pipeIdx = params.indexOf("|");

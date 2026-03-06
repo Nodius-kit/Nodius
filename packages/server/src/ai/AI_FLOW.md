@@ -56,7 +56,7 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       │
       ├── [6c] Si tool_calls detectes :
       │         ├── ReadTool (×8, incl. read_subgraph batch) → execution → resultat TOON → reboucle
-      │         └── WriteTool (×7, incl. update/move/delete_edge/batch) → HITL interrupt → arret
+      │         └── WriteTool (×10, incl. update/move/batch/create_node_with_edges/configure_node_type) → HITL interrupt → arret
       │
       └── [6d] Pas de tool_calls → reponse finale → callbacks.onComplete()
       │
@@ -382,7 +382,7 @@ this.conversationHistory.push({ role: "user", content: "Que fait le node fetch-a
 ```typescript
 const stream = this.llmProvider.streamCompletionWithTools(
     this.conversationHistory,   // les 3 messages ci-dessus
-    tools,                      // 7 read tools + 3 write tools (si editor)
+    tools,                      // 8 read tools + 10 write tools (si editor)
 );
 ```
 
@@ -391,7 +391,7 @@ const stream = this.llmProvider.streamCompletionWithTools(
 | Provider | SDK | Appel |
 |----------|-----|-------|
 | DeepSeek / OpenAI | `openai` | `client.chat.completions.create({ stream: true, stream_options: { include_usage: true } })` |
-| Anthropic (Claude) | `@anthropic-ai/sdk` | `client.messages.stream({ max_tokens: 4096 })` apres conversion via `convertMessagesToAnthropic()` et `convertToolsToAnthropic()` |
+| Anthropic (Claude) | `@anthropic-ai/sdk` | `client.messages.stream({ max_tokens: 8192 })` apres conversion via `convertMessagesToAnthropic()` et `convertToolsToAnthropic()` |
 
 **Pour Anthropic**, les conversions suivantes sont appliquees avant l'appel :
 - Les messages `role: "system"` sont extraits et concatenes dans le parametre `system` (racine, pas dans messages)
@@ -399,7 +399,7 @@ const stream = this.llmProvider.streamCompletionWithTools(
 - Les `role: "tool"` sont convertis en messages `role: "user"` avec blocks `tool_result`
 - Les outils sont convertis de `{ function: { name, description, parameters } }` vers `{ name, description, input_schema }`
 
-**Les outils transmis** (15 au total pour un `editor`) :
+**Les outils transmis** (18 au total pour un `editor`) :
 
 | Outil | Type | Description |
 |-------|------|-------------|
@@ -414,10 +414,13 @@ const stream = this.llmProvider.streamCompletionWithTools(
 | `propose_create_node` | write/HITL | Proposer la creation d'un node |
 | `propose_create_edge` | write/HITL | Proposer la creation d'une edge |
 | `propose_delete_node` | write/HITL | Proposer la suppression d'un node |
-| `propose_update_node` | write/HITL | Proposer la modification d'un node |
+| `propose_update_node` | write/HITL | Proposer la modification d'un node (supporte `updates.html` pour les nodes HTML — conversion auto en HtmlObject) |
 | `propose_move_node` | write/HITL | Proposer le deplacement d'un node |
 | `propose_delete_edge` | write/HITL | Proposer la suppression d'une edge |
 | `propose_batch` | write/HITL | Proposer plusieurs modifications groupees |
+| `propose_create_node_with_edges` | write/HITL | Creer un node avec ses connexions en un seul appel |
+| `propose_configure_node_type` | write/HITL | Creer ou modifier un NodeTypeConfig (type, handles, process, bordure) |
+| `propose_reorganize_layout` | write/HITL | Reorganiser automatiquement le positionnement de nodes |
 
 ### 6b. Streaming des tokens
 
@@ -492,11 +495,19 @@ LLM stream → tool_call_done { name: "propose_create_node", arguments: '{"typeK
 
 ```
 1. Detecte que "propose_create_node" est un WriteTool (commence par "propose_")
+1b. JSON repair : repairTruncatedJSON() si JSON.parse echoue (ferme accolades/crochets tronques)
+1c. Si propose_update_node : preprocessUpdateNodeArgs() convertit updates.html → HtmlObject via htmlToHtmlObject()
 2. Parse les arguments avec Zod .strict() → ProposedAction
 3. Sauvegarde l'etat dans pendingInterrupt
 4. callbacks.onComplete(JSON.stringify({ type: "interrupt", proposedAction, toolCall }))
 5. → ARRET de la boucle
 ```
+
+**Preprocessing HTML (etape 1c) :** Quand le LLM appelle `propose_update_node` avec `updates.html` (string HTML brute), le serveur :
+1. Convertit le HTML en HtmlObject via `htmlToHtmlObject()` (extraction CSS, events, structure)
+2. Normalise le resultat via `normalizeHtmlObject()` (correction block/list)
+3. Remplace `updates.html` par `updates.data` (HtmlObject) avant la validation Zod
+Cette approche HTML-first est necessaire car les LLM generent du JSON invalide pour les structures HtmlObject profondement imbriquees.
 
 Le client recoit un `ai:complete` avec un JSON `interrupt` → affiche le modal `AIInterruptModal` pour approbation.
 
@@ -596,3 +607,44 @@ Cote client, le hook `useAIChat` expose `threads`, `loadThread()`, `newThread()`
 
 **Total typique pour une question simple :** ~3-5 secondes (dont ~80% est le temps de reponse du LLM).
 **Avec cache RAG (2eme question dans la meme conversation) :** les etapes 5a sont quasi-instantanees.
+
+---
+
+## Mode Home (pas de graph ouvert)
+
+Quand `graphKey === "home"`, l'agent bascule en mode Home :
+
+**Differences avec le mode Graph :**
+- Pas de RAG (pas de graph a explorer)
+- Prompt systeme dedie (`homePrompt.ts`) axe sur la gestion du workspace
+- Outils differents (`homeTools.ts`) :
+  - Lecture : `list_user_graphs`, `list_user_html_classes`, `list_node_configs`
+  - Ecriture HITL : `propose_create_graph`, `propose_create_html_class`
+
+**Flux de creation (HITL) :**
+
+```
+AI appelle propose_create_graph({name, reason})
+    │
+    ▼
+pendingInterrupt sauvegarde → client recoit ai:complete avec proposedAction
+    │
+    ▼
+AIInterruptModal affiche la proposition → utilisateur Approve/Reject
+    │
+    ├── Approve :
+    │   ├── Client appelle POST /api/graph/create (graph ou htmlClass)
+    │   ├── Serveur cree graph + nodes par defaut (Starter+Return ou HTML root)
+    │   ├── Client recoit _key du graph cree
+    │   └── Client envoie ai:resume { approved: true, feedback: "created:graph:KEY" }
+    │       └── AI recoit le feedback, repond avec {{graph:KEY}} lien cliquable
+    │
+    └── Reject :
+        └── Client envoie ai:resume { approved: false }
+            └── AI repond que l'action a ete refusee
+```
+
+**Liens interactifs Home :**
+- `{{graph:KEY}}` → navigue vers `?graph=KEY`
+- `{{html:KEY}}` → navigue vers `?html=KEY`
+- `{{nodeConfig:KEY}}` → navigue vers `?nodeConfig=KEY`

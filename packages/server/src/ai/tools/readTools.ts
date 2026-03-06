@@ -308,6 +308,26 @@ export function createReadToolExecutor(dataSource: GraphDataSource, graphKey: st
 
             case "read_node_config": {
                 const parsed = ReadNodeConfigSchema.parse(args);
+
+                // Handle built-in types that don't have a NodeTypeConfig in DB
+                const builtInTypes: Record<string, { displayName: string; description: string; handles: string }> = {
+                    starter: { displayName: "Starter", description: "Point d'entree du workflow. Declenche l'execution.", handles: "R:out(any), 0:in(entryType)" },
+                    return: { displayName: "Return", description: "Point de sortie du workflow. Retourne le resultat.", handles: "L:in(any)" },
+                    html: { displayName: "Html Editor", description: "Editeur HTML WYSIWYG. Affiche du contenu HTML avec support de templates et evenements DOM.", handles: "0:out(event[]), 0:in(entryType), R:out(HtmlEvent)" },
+                    entryType: { displayName: "Entry Data Type", description: "Formulaire de saisie de donnees. Fournit les donnees d'entree au workflow.", handles: "0:out(entryType)" },
+                };
+                const builtIn = builtInTypes[parsed.typeKey];
+                if (builtIn) {
+                    return encode({
+                        _key: parsed.typeKey,
+                        displayName: builtIn.displayName,
+                        description: builtIn.description,
+                        category: "built-in",
+                        handles: builtIn.handles,
+                        process: "(built-in, no custom process code)",
+                    });
+                }
+
                 const configs = await dataSource.getNodeConfigs(graphKey);
                 const config = configs.find(c => c._key === parsed.typeKey);
                 if (!config) return encode({ error: "NodeTypeConfig not found" });

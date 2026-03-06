@@ -21,6 +21,12 @@ import type { AuthenticatedClient } from "../cluster/webSocketManager.js";
 import { logLLMError, logClientDisconnect, logMalformedJSON, debugAI } from "./aiLogger.js";
 import { classifyLLMError, type ClassifiedError } from "./errorClassifier.js";
 import { getPricing } from "./tokenTracker.js";
+import { convertAction } from "./actionConverter.js";
+import { parseProposedAction, isWriteTool } from "./tools/writeTools.js";
+import { parseHomeProposedAction, isHomeWriteTool } from "./tools/homeTools.js";
+import { computeAutoLayout } from "./autoLayout.js";
+import { InstructionBuilder } from "@nodius/utils";
+import { ensureCollection, createUniqueToken } from "../utils/arangoUtils.js";
 
 // ─── Zod schemas for incoming messages ───────────────────────────────
 
@@ -174,6 +180,7 @@ export class WsAIController {
                 role,
                 llmProvider: this.llmProvider,
                 embeddingProvider: this.embeddingProvider,
+                workspace,
             });
 
             thread = {
@@ -272,6 +279,12 @@ export class WsAIController {
 
         try {
             debugAI("ws_resume", { threadId, approved });
+
+            // If approved and HITL, compute mutations and send to client BEFORE resuming LLM
+            if (approved) {
+                await this.convertAndSendAction(ws, _id, thread, workspace);
+            }
+
             await thread.agent.resumeConversationStream(approved, callbacks, feedback);
             // Persist conversation after completion
             await threadStore.save(threadId);
@@ -307,6 +320,113 @@ export class WsAIController {
         for (const [sessionId, abort] of this.activeSessions) {
             abort.abort();
             this.activeSessions.delete(sessionId);
+        }
+    }
+
+    // ─── HITL Action Conversion ─────────────────────────────────────
+
+    /**
+     * Convert an approved HITL action into mutations and send to the client.
+     * Called BEFORE resuming the LLM stream so the client can apply changes first.
+     */
+    private async convertAndSendAction(ws: WebSocket, _id: number, thread: AIThread, workspace: string): Promise<void> {
+        const interrupt = thread.agent.getPendingInterrupt();
+        if (!interrupt || interrupt.kind !== "hitl") return;
+
+        const { toolName, args } = interrupt;
+
+        try {
+            const proposedAction = isHomeWriteTool(toolName)
+                ? parseHomeProposedAction(toolName, args)
+                : parseProposedAction(toolName, args);
+
+            // create_graph is handled client-side in AIInterruptModal
+            if (proposedAction.type === "create_graph") return;
+
+            const dataSource = this.createDataSource(workspace);
+            const configs = await dataSource.getNodeConfigs(thread.graphKey);
+            const result = await convertAction(proposedAction, thread.graphKey, "0", configs);
+
+            // Expand reorganize_layout: fetch nodes/edges, compute layout, generate move instructions
+            if (result.nodeKeysToReorganize.length > 0) {
+                const nodes = await dataSource.getNodes(thread.graphKey);
+                const edges = await dataSource.getEdges(thread.graphKey);
+                const targetNodes = nodes.filter(n => result.nodeKeysToReorganize.includes(n._key));
+                const strategy = proposedAction.type === "reorganize_layout"
+                    ? proposedAction.payload.strategy
+                    : undefined;
+                const layoutResult = computeAutoLayout(targetNodes, edges, strategy);
+
+                for (const pos of layoutResult) {
+                    const targetNode = targetNodes.find(n => n._key === pos.nodeKey);
+                    const sheetId = targetNode?.sheet ?? result.sheetId;
+                    result.instructions.push(
+                        { i: new InstructionBuilder().key("posX").set(pos.posX), sheetId, nodeId: pos.nodeKey, animatePos: true },
+                        { i: new InstructionBuilder().key("posY").set(pos.posY), sheetId, nodeId: pos.nodeKey, animatePos: true },
+                    );
+                }
+            }
+
+            // Save nodeConfigsToUpsert directly to DB
+            if (result.nodeConfigsToUpsert.length > 0) {
+                await this.saveNodeConfigs(result.nodeConfigsToUpsert, workspace);
+            }
+
+            // Send mutations to client for application via sync pipeline
+            const hasChanges = result.instructions.length > 0
+                || result.nodesToCreate.length > 0
+                || result.edgesToCreate.length > 0
+                || result.nodeKeysToDelete.length > 0
+                || result.edgeKeysToDelete.length > 0;
+
+            if (hasChanges) {
+                this.send(ws, {
+                    type: "ai:apply_action",
+                    _id,
+                    action: {
+                        instructions: result.instructions,
+                        nodesToCreate: result.nodesToCreate,
+                        edgesToCreate: result.edgesToCreate,
+                        nodeKeysToDelete: result.nodeKeysToDelete,
+                        edgeKeysToDelete: result.edgeKeysToDelete,
+                        sheetId: result.sheetId,
+                    },
+                });
+            }
+
+            debugAI("action_sent", {
+                type: proposedAction.type,
+                instructions: result.instructions.length,
+                creates: result.nodesToCreate.length + result.edgesToCreate.length,
+                deletes: result.nodeKeysToDelete.length + result.edgeKeysToDelete.length,
+                configs: result.nodeConfigsToUpsert.length,
+            });
+        } catch (err) {
+            debugAI("action_conversion_error", { error: String(err) });
+        }
+    }
+
+    /**
+     * Persist nodeTypeConfigs to ArangoDB (for configure_node_type actions).
+     */
+    private async saveNodeConfigs(configs: any[], workspace: string): Promise<void> {
+        const collection = await ensureCollection("nodius_node_configs") as any;
+        for (const config of configs) {
+            config.workspace = workspace;
+            if (!config._key) {
+                config._key = await createUniqueToken(collection);
+                config.node.type = config._key;
+            }
+            try {
+                await collection.save(config, { overwriteMode: "replace" });
+            } catch {
+                // If save fails (e.g. duplicate), try update
+                try {
+                    await collection.update(config._key, config);
+                } catch (err) {
+                    debugAI("nodeconfig_save_error", { key: config._key, error: String(err) });
+                }
+            }
         }
     }
 

@@ -71,6 +71,62 @@ export interface CreateEdgePayload {
     label?: string;
 }
 
+export interface EdgeConnectionPayload {
+    direction: "in" | "out";
+    handleId: string;
+    targetNodeKey: string;
+    targetHandleId: string;
+    label?: string;
+}
+
+export interface CreateNodeWithEdgesPayload {
+    typeKey: string;
+    sheet?: string;
+    posX?: number;
+    posY?: number;
+    data?: unknown;
+    edges: EdgeConnectionPayload[];
+}
+
+export interface ConfigureNodeTypePayload {
+    mode: "create" | "update";
+    typeKey?: string;
+    displayName: string;
+    description?: string;
+    category?: string;
+    icon?: string;
+    process?: string;
+    border?: {
+        radius?: number;
+        width?: number;
+        type?: string;
+        normalColor?: string;
+        hoverColor?: string;
+    };
+    handles?: Record<string, {
+        position: "separate" | "fix";
+        point: Array<{
+            id: string;
+            type: "in" | "out";
+            accept: string;
+            display?: string;
+        }>;
+    }>;
+    size?: { width: number; height: number; dynamic?: boolean };
+    content?: unknown;
+}
+
+export interface ReorganizeLayoutPayload {
+    nodeKeys: string[];
+    strategy?: string;
+}
+
+export interface CreateGraphPayload {
+    name: string;
+    type: "graph" | "htmlClass";
+    description?: string;
+}
+
 export type ProposedAction =
     | { type: "create_node"; payload: CreateNodePayload }
     | { type: "delete_node"; payload: { nodeKey: string } }
@@ -78,7 +134,11 @@ export type ProposedAction =
     | { type: "create_edge"; payload: CreateEdgePayload }
     | { type: "delete_edge"; payload: { edgeKey: string } }
     | { type: "move_node"; payload: { nodeKey: string; posX: number; posY: number } }
-    | { type: "batch"; payload: { actions: ProposedAction[] } };
+    | { type: "batch"; payload: { actions: ProposedAction[] } }
+    | { type: "create_node_with_edges"; payload: CreateNodeWithEdgesPayload }
+    | { type: "configure_node_type"; payload: ConfigureNodeTypePayload }
+    | { type: "reorganize_layout"; payload: ReorganizeLayoutPayload }
+    | { type: "create_graph"; payload: CreateGraphPayload };
 
 // ─── AI Chat Messages ───────────────────────────────────────────────
 
@@ -105,6 +165,29 @@ export interface AIToolDefinition {
 
 // ─── Data source interface (for mock / real implementations) ────────
 
+export interface GraphSummary {
+    _key: string;
+    name: string;
+    category: string;
+    workspace: string;
+    nodeCount?: number;
+    sheetCount?: number;
+    createdTime?: number;
+    lastUpdatedTime?: number;
+    htmlKeyLinked?: string;
+}
+
+export interface HtmlClassSummary {
+    _key: string;
+    name: string;
+    description?: string;
+    category: string;
+    workspace: string;
+    graphKeyLinked: string;
+    createdTime?: number;
+    lastUpdatedTime?: number;
+}
+
 export interface GraphDataSource {
     getGraph(graphKey: string): Promise<GraphRAGContext["graph"] | null>;
     getNodes(graphKey: string, sheetId?: string): Promise<Node<unknown>[]>;
@@ -113,6 +196,10 @@ export interface GraphDataSource {
     getNodeConfigs(graphKey: string): Promise<NodeTypeConfig[]>;
     searchNodes(graphKey: string, query: string, maxResults?: number, queryEmbedding?: number[]): Promise<Node<unknown>[]>;
     getNeighborhood(graphKey: string, nodeKey: string, maxDepth?: number, direction?: "inbound" | "outbound" | "any"): Promise<{ nodes: Node<unknown>[]; edges: Edge[] }>;
+    /** List all workflow graphs for a workspace. Used by Home assistant. */
+    listGraphs?(workspace: string): Promise<GraphSummary[]>;
+    /** List all HTML classes for a workspace. Used by Home assistant. */
+    listHtmlClasses?(workspace: string): Promise<HtmlClassSummary[]>;
 }
 
 // ─── LLM Streaming ──────────────────────────────────────────────────

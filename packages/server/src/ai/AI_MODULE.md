@@ -48,7 +48,7 @@ Client React
 │  │          │◀───▶│ ReadTools (×8)   │ ← outils lecture (exec auto)  │
 │  │          │     │ (results: TOON)  │   incl. read_subgraph batch   │
 │  │          │     ├──────────────────┤                               │
-│  │          │◀───▶│ WriteTools (×6)  │ ← outils ecriture (HITL)     │
+│  │          │◀───▶│ WriteTools (×10) │ ← outils ecriture (HITL)     │
 │  │          │     └──────────────────┘                               │
 │  │          │                                                        │
 │  │          │──── TokenTracker ──── suivi couts/tokens                │
@@ -240,9 +240,10 @@ un unique message `[Conversation summary]`. Les 6 derniers messages sont toujour
 - **ReadTools** (×8) : executes automatiquement, le resultat est renvoye au LLM
   - `read_graph_overview`, `search_nodes`, `explore_neighborhood`, `read_node_detail`,
     `read_node_config`, `list_available_node_types`, `list_node_edges`, **`read_subgraph`** (batch)
-- **WriteTools** (×6) : l'execution est **interrompue**, le client recoit un `AgentInterrupt` avec la `ProposedAction` a valider
+- **WriteTools** (×10) : l'execution est **interrompue**, le client recoit un `AgentInterrupt` avec la `ProposedAction` a valider
   - `propose_create_node`, `propose_create_edge`, `propose_delete_node`,
-    **`propose_update_node`**, **`propose_move_node`**, **`propose_delete_edge`**
+    **`propose_update_node`**, **`propose_move_node`**, **`propose_delete_edge`**,
+    **`propose_batch`**, **`propose_create_node_with_edges`**, **`propose_configure_node_type`**, **`propose_reorganize_layout`**
 
 ### Etape 5 — Resume apres validation (HITL)
 
@@ -282,7 +283,7 @@ de string dans les requetes AQL.
 ### Validation des entrees
 
 - **Request bodies** : 3 schemas Zod `.strict()` dans `requestAI.ts` (`ChatBodySchema`, `ResumeBodySchema`, `ThreadsBodySchema`). Les cles inattendues sont rejetees.
-- **WriteTools schemas** : 6 schemas Zod `.strict()` (`ProposeCreateNodeSchema`, `ProposeCreateEdgeSchema`, `ProposeDeleteNodeSchema`, `ProposeUpdateNodeSchema`, `ProposeMoveNodeSchema`, `ProposeDeleteEdgeSchema`). Les cles hallucinées par le LLM sont rejetees.
+- **WriteTools schemas** : 10 schemas Zod `.strict()` (`ProposeCreateNodeSchema`, `ProposeCreateEdgeSchema`, `ProposeDeleteNodeSchema`, `ProposeUpdateNodeSchema`, `ProposeMoveNodeSchema`, `ProposeDeleteEdgeSchema`, `ProposeBatchSchema`, `ProposeCreateNodeWithEdgesSchema`, `ProposeConfigureNodeTypeSchema`, `ProposeReorganizeLayoutSchema`). Les cles hallucinées par le LLM sont rejetees.
 - **ReadTools schemas** : validation Zod standard (sans `.strict()` car lecture seule, pas de risque de mutation)
 
 ### Robustesse JSON
@@ -361,9 +362,12 @@ Quand `AI_DEBUG=true`, `debugAI()` emet des logs structurés a chaque etape :
 
 | Type | Description |
 |------|-------------|
-| `ProposedAction` | Union discriminee : create_node, delete_node, update_node, create_edge, delete_edge, move_node, batch |
+| `ProposedAction` | Union discriminee : create_node, delete_node, update_node, create_edge, delete_edge, move_node, batch, create_node_with_edges, configure_node_type, reorganize_layout |
 | `CreateNodePayload` | typeKey, sheet?, posX?, posY?, data? |
 | `CreateEdgePayload` | sourceKey, sourceHandle, targetKey, targetHandle, sheet, label? |
+| `CreateNodeWithEdgesPayload` | typeKey, sheet?, posX?, posY?, data?, edges: EdgeConnectionPayload[] |
+| `ConfigureNodeTypePayload` | mode (create/update), typeKey?, displayName, description?, category?, icon?, process?, border?, handles?, size?, content? |
+| `ReorganizeLayoutPayload` | nodeKeys: string[], strategy? |
 
 **Interfaces de streaming :**
 
@@ -390,6 +394,25 @@ Fonctions utilitaires extraites pour eviter la duplication entre `graphRAGRetrie
 - **`summarizeHandles(handles)`** — Convertit les handles bruts en `HandleSummary[]` compact
 - **`createNodeEmbeddingText(node)`** — Construit un texte semantique a partir d'un node pour la generation d'embedding (concatene `type` et `data`). Tronque a 15000 caracteres. Utilise par le write-path (auto-save) et le script de migration.
 - **`hasNodeContentChanged(original, current)`** — Compare deux versions d'un node et retourne `true` uniquement si le contenu semantique a change (`type`, `data`, `handles`). Ignore les changements de position (`posX`, `posY`) et de taille (`size`). Utilise par le write-path pour eviter de regenerer un embedding lors d'un simple deplacement.
+
+### `htmlToHtmlObject.ts` — Convertisseur HTML → HtmlObject
+
+Convertit du HTML brut (string) en arbre HtmlObject (`@nodius/utils`). Utilise par `aiAgent.ts` dans `preprocessUpdateNodeArgs()` pour permettre au LLM de generer du HTML lisible au lieu du JSON HtmlObject profondement imbrique.
+
+**Fonctionnement :**
+1. Parse le HTML via `node-html-parser`
+2. Extrait les regles CSS des balises `<style>` et des styles inline (`style="..."`)
+3. Extrait les events DOM (`onclick`, `onchange`, `onfocus`, `onblur`, `onsubmit`, `data-event-*`)
+4. Construit un arbre HtmlObject recursif avec detection de types speciaux :
+   - `img` → type `"image"`, `a` → type `"link"`, elements Lucide icons → type `"icon"`, elements texte-seul → type `"text"`
+   - Elements avec enfants multiples → type `"list"`, enfant unique → type `"block"`
+5. Fusionne les regles CSS des selecteurs (`.className`, `#id`, `tag`) avec les styles inline
+
+**Pourquoi cette approche :** Les LLM (notamment DeepSeek) generent du JSON syntaxiquement invalide pour les structures HtmlObject profondement imbriquees (erreurs a partir de ~4000 caracteres). Le HTML brut est un format que les LLM maitrisent nativement.
+
+### `autoLayout.ts` — Stub auto-layout
+
+Fonction `computeAutoLayout(nodes, edges, strategy)` → `LayoutResult[]`. Stub a remplir avec un algorithme de positionnement. Utilise par `propose_reorganize_layout`.
 
 ### `graphRAGRetriever.ts` — Moteur RAG
 
@@ -660,7 +683,7 @@ recordEmbedding(inputTokens, model, pricingPerMillion) → cout =
 ### `prompts/systemPrompt.ts` — Prompt systeme + contexte TOON
 
 Deux fonctions :
-- **`buildSystemPrompt(context, role)`** — Prompt complet en francais avec contexte, 8 regles, types, conventions, format de reponse. Inclut la documentation des actions client `{{action:params}}` (node, select, fitArea, sheet, graph, link) pour que le LLM puisse generer des elements interactifs dans ses reponses.
+- **`buildSystemPrompt(context, role)`** — Prompt complet en francais avec contexte, 10 regles, types, conventions, format de reponse. Inclut la documentation des actions client `{{action:params}}` (node, select, fitArea, sheet, graph, link), la section CODE PROCESS (variables sandbox), et la section MODIFICATION DE NODES HTML (approche HTML-first : le LLM genere du HTML brut, le serveur convertit en HtmlObject via `htmlToHtmlObject()`).
 - **`buildContextSummary(context)`** — Encode les nodes/edges pertinents en format TOON tabulaire via `@toon-format/toon`. Chaque node est reduit a 3 colonnes (`_key, type, sheet`), chaque edge a 3 colonnes (`from, to, label`).
 
 ### `tools/readTools.ts` — 8 outils de lecture
@@ -684,7 +707,7 @@ Executes automatiquement par l'AIAgent, resultats renvoyes au LLM.
 - Chaque outil tronque les champs longs (data) pour economiser les tokens
 - Utilise `truncate()` et `summarizeHandles()` de `utils.ts`
 
-### `tools/writeTools.ts` — 7 outils d'ecriture (HITL)
+### `tools/writeTools.ts` — 10 outils d'ecriture (HITL)
 
 **Ces outils ne s'executent PAS.** Quand le LLM les appelle, l'AIAgent interrompt la boucle
 et retourne un `AgentInterrupt` au client pour validation humaine.
@@ -694,13 +717,16 @@ et retourne un `AgentInterrupt` au client pour validation humaine.
 | `propose_create_node` | `{ typeKey, sheet?, posX?, posY?, data?, reason }` | `{ type: "create_node", payload: CreateNodePayload }` |
 | `propose_create_edge` | `{ sourceKey, sourceHandle, targetKey, targetHandle, sheet, label?, reason }` | `{ type: "create_edge", payload: CreateEdgePayload }` |
 | `propose_delete_node` | `{ nodeKey, reason }` | `{ type: "delete_node", payload: { nodeKey } }` |
-| `propose_update_node` | `{ nodeKey, updates: { name?, data?, description? }, reason }` | `{ type: "update_node", payload: { nodeKey, changes } }` |
+| `propose_update_node` | `{ nodeKey, updates: { name?, data?, html?, description?, size? }, reason }` | `{ type: "update_node", payload: { nodeKey, changes } }` |
 | `propose_move_node` | `{ nodeKey, posX, posY, reason }` | `{ type: "move_node", payload: { nodeKey, posX, posY } }` |
 | `propose_delete_edge` | `{ edgeKey, reason }` | `{ type: "delete_edge", payload: { edgeKey } }` |
 | `propose_batch` | `{ actions: [...], reason }` | `{ type: "batch", payload: { actions } }` |
+| `propose_create_node_with_edges` | `{ typeKey, sheet?, posX?, posY?, data?, edges: [{direction, handleId, targetNodeKey, targetHandleId, label?}], reason }` | `{ type: "create_node_with_edges", payload: CreateNodeWithEdgesPayload }` |
+| `propose_configure_node_type` | `{ mode, typeKey?, displayName, description?, category?, icon?, process?, border?, handles?, size?, content?, reason }` | `{ type: "configure_node_type", payload: ConfigureNodeTypePayload }` |
+| `propose_reorganize_layout` | `{ nodeKeys: [...], strategy?, reason }` | `{ type: "reorganize_layout", payload: ReorganizeLayoutPayload }` |
 
 Helpers :
-- `getWriteToolDefinitions()` → 7 outils au format OpenAI function calling
+- `getWriteToolDefinitions()` → 10 outils au format OpenAI function calling
 - `isWriteTool(name)` → `true` si le nom commence par `propose_`
 - `parseProposedAction(toolName, args)` → parse + valide Zod `.strict()` → retourne `ProposedAction`
 
@@ -805,9 +831,16 @@ chatStream(userMessage, callbacks) :
 - Le system prompt n'est injecte qu'au premier message
 - Le contexte RAG est mis en cache par le `GraphRAGRetriever` (TTL 2 min). Le cache est invalide dans `resumeConversation()` et `resumeConversationStream()` apres chaque action HITL
 
-**Robustesse :** Les appels `JSON.parse(tc.function.arguments)` sont proteges par try/catch
-(mode classique ET streaming). En cas de JSON malformed du LLM, une erreur structuree est
-renvoyee comme tool result pour permettre au LLM de corriger son appel.
+**Robustesse JSON :** Les appels `JSON.parse(tc.function.arguments)` sont proteges par un double mecanisme :
+1. **`repairTruncatedJSON()`** — tente de reparer le JSON tronque (fermeture des accolades/crochets/strings non fermes)
+2. **Fallback erreur** — si la reparation echoue, une erreur structuree est renvoyee comme tool result pour permettre au LLM de corriger son appel.
+Applique aux 3 sites de parsing JSON (streaming, non-streaming, resume).
+
+**Preprocessing HTML (`preprocessUpdateNodeArgs`)** : Quand le LLM appelle `propose_update_node` avec un champ `updates.html` (string HTML brute), la fonction convertit automatiquement le HTML en HtmlObject via `htmlToHtmlObject()` puis normalise le resultat via `normalizeHtmlObject()`. Le champ `html` est remplace par `data` avant la validation Zod. Cela permet au LLM de generer du HTML lisible plutot que du JSON HtmlObject profondement imbrique (que les LLM ne savent pas produire sans erreurs de syntaxe).
+
+**`normalizeHtmlObject()`** : Corrige les confusions block/list dans les HtmlObject (un `block` avec un tableau `children` → converti en `list`, un `list` avec un child non-tableau → converti en `block`). S'assure que les champs `css` et `domEvents` existent.
+
+**Max tokens** : Les appels LLM en streaming utilisent `maxTokens: 8192` (au lieu du defaut 4096) pour eviter la troncation des reponses longues (ex: generation de HTML complexe).
 
 ---
 
@@ -1585,6 +1618,8 @@ packages/server/
 
 - [x] **Multi-conversations persistees** — `AIThreadDocument` enrichi avec metadata (title, totalPromptTokens, totalCompletionTokens, totalTokens, totalCost, provider, model, messageCount, toolCallCount). `updateMetadata()` accumule les tokens/couts apres chaque completion. `listByUser()` pour la vue home. `listByGraph()` avec filtre userId optionnel. Indexes ArangoDB `[userId, graphKey]` et `[userId, lastUpdatedTime]`.
 - [x] **Multi-thread client** — `useAIChat` expose `threads`, `loadThread()`, `newThread()`, `deleteThread()`, `refreshThreads()`. `AIThreadList` pour l'historique. `AIChatPanel` avec boutons New/List dans le header. `GET /api/ai/thread/:threadId/messages` pour charger l'historique.
+
+- [x] **Home Assistant** — Mode sans graph ouvert (`graphKey === "home"`). Prompt dedie (`homePrompt.ts`), outils specifiques (`homeTools.ts`) : `list_user_graphs`, `list_user_html_classes`, `list_node_configs` (lecture), `propose_create_graph`, `propose_create_html_class` (ecriture HITL). `ArangoGraphDataSource` etendu avec `listGraphs()` et `listHtmlClasses()`. Client: liens interactifs `{{html:KEY}}` et `{{nodeConfig:KEY}}` dans `renderMessageContent`, navigation URL via `handleOpenHtml`/`handleOpenNodeConfig`. `AIInterruptModal` gere `create_graph` en appelant `POST /api/graph/create` avant le resume.
 
 ### A faire
 - [ ] Supprimer les re-export shims (`llmProvider.ts`, `llmProviderFactory.ts`, `embeddingProvider.ts`) quand tous les consommateurs externes sont migres

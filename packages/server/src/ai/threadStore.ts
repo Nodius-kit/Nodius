@@ -213,6 +213,7 @@ export class ThreadStore {
         llmProvider: LLMProvider,
         role: "viewer" | "editor" | "admin" = "editor",
         embeddingProvider?: EmbeddingProvider | null,
+        workspace?: string,
     ): Promise<AIThread | null> {
         // Cache-first (in case it was loaded between the has() check and now)
         const cached = this.cache.get(threadId);
@@ -229,6 +230,7 @@ export class ThreadStore {
             role,
             llmProvider,
             embeddingProvider: embeddingProvider ?? null,
+            workspace: workspace ?? doc.workspace,
         });
 
         // Restore conversation history

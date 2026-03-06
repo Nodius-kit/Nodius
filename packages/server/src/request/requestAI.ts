@@ -124,6 +124,7 @@ export class RequestAI {
                         role,
                         llmProvider,
                         embeddingProvider,
+                        workspace,
                     });
 
                     thread = {

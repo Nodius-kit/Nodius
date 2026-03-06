@@ -8,9 +8,9 @@
  */
 
 import { memo, useState, useContext, useCallback } from "react";
-import { Check, X, AlertTriangle } from "lucide-react";
+import { Check, X, AlertTriangle, Loader } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import { ThemeContext } from "../../hooks/contexts/ThemeContext";
+import { UserContext } from "../../hooks/contexts/UserContext";
 
 interface AIInterruptModalProps {
     /** The proposed action from the AI agent. */
@@ -29,19 +29,72 @@ export const AIInterruptModal = memo(({
     onResume,
     onDismiss,
 }: AIInterruptModalProps) => {
-    const Theme = useContext(ThemeContext);
+    const { user } = useContext(UserContext);
     const [feedback, setFeedback] = useState("");
+    const [isCreating, setIsCreating] = useState(false);
 
-    const handleApprove = useCallback(() => {
+    const actionType = (proposedAction.type as string) ?? "unknown";
+    const actionPayload = proposedAction.payload as Record<string, unknown> | undefined;
+
+    const handleApprove = useCallback(async () => {
+        // For create_graph actions, call the API first
+        if (actionType === "create_graph" && actionPayload) {
+            setIsCreating(true);
+            try {
+                const payload = actionPayload as { name: string; type: string; description?: string };
+                const workspace = user?.workspaces?.[0] || user?.userId || "";
+                let body: Record<string, unknown>;
+
+                if (payload.type === "htmlClass") {
+                    body = {
+                        htmlClass: {
+                            name: payload.name,
+                            description: payload.description || "",
+                            category: "default",
+                            workspace,
+                            permission: 0,
+                            object: {},
+                        },
+                    };
+                } else {
+                    body = {
+                        graph: {
+                            name: payload.name,
+                            workspace,
+                        },
+                    };
+                }
+
+                const res = await fetch("/api/graph/create", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: "Creation failed" }));
+                    setIsCreating(false);
+                    onResume(threadId, false, `Creation failed: ${err.error || res.statusText}`);
+                    return;
+                }
+
+                const created = await res.json();
+                const createdKey = created._key as string;
+                const createdType = payload.type === "htmlClass" ? "html" : "graph";
+                onResume(threadId, true, `created:${createdType}:${createdKey}`);
+            } catch (err) {
+                setIsCreating(false);
+                onResume(threadId, false, `Creation error: ${err}`);
+            }
+            return;
+        }
+
         onResume(threadId, true, feedback || undefined);
-    }, [threadId, feedback, onResume]);
+    }, [threadId, feedback, onResume, actionType, actionPayload, user]);
 
     const handleReject = useCallback(() => {
         onResume(threadId, false, feedback || undefined);
     }, [threadId, feedback, onResume]);
-
-    const actionType = (proposedAction.type as string) ?? "unknown";
-    const actionPayload = proposedAction.payload as Record<string, unknown> | undefined;
 
     const overlayClass = useDynamicClass(`
         & {
@@ -204,13 +257,13 @@ export const AIInterruptModal = memo(({
 
                 {/* Footer */}
                 <div className={footerClass}>
-                    <button className={`${btnBase} ${rejectClass}`} onClick={handleReject}>
+                    <button className={`${btnBase} ${rejectClass}`} onClick={handleReject} disabled={isCreating}>
                         <X size={14} />
                         Reject
                     </button>
-                    <button className={`${btnBase} ${approveClass}`} onClick={handleApprove}>
-                        <Check size={14} />
-                        Approve
+                    <button className={`${btnBase} ${approveClass}`} onClick={handleApprove} disabled={isCreating}>
+                        {isCreating ? <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Check size={14} />}
+                        {isCreating ? "Creating..." : "Approve"}
                     </button>
                 </div>
             </div>

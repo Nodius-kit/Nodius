@@ -15,12 +15,15 @@ import { Bot, X } from "lucide-react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
 import { useResizablePanel } from "../../hooks/useResizablePanel";
 import { ProjectContext } from "../../hooks/contexts/ProjectContext";
-import { useAIChat, type AIContextType } from "../../hooks/useAIChat";
+import { useStableProjectRef } from "../../hooks/useStableProjectRef";
+import { useAIChat, type AIContextType, type AIApplyAction } from "../../hooks/useAIChat";
 import { AIChatPanel } from "./AIChatPanel";
 import { Fade } from "../animate/Fade";
+import type { GraphInstructions, Node, Edge } from "@nodius/utils";
 
 export const AIChatFloating = memo(() => {
     const Project = useContext(ProjectContext);
+    const projectRef = useStableProjectRef();
     const [open, setOpen] = useState(false);
 
     // Derive contextType and contextKey from current editing state
@@ -31,6 +34,34 @@ export const AIChatFloating = memo(() => {
         if (Project.state.editedHtml) return { contextType: "htmlClass", contextKey: graph._key };
         return { contextType: "graph", contextKey: graph._key };
     }, [Project.state.graph, Project.state.editedNodeConfig, Project.state.editedHtml]);
+
+    // Apply AI-approved mutations via the standard sync pipeline
+    const handleApplyAction = useCallback(async (action: AIApplyAction) => {
+        const state = projectRef.current.state;
+
+        // 1. Apply graph instructions (move, update)
+        if (action.instructions.length > 0) {
+            await state.updateGraph?.(action.instructions as GraphInstructions[]);
+        }
+
+        // 2. Create new nodes/edges
+        if (action.nodesToCreate.length > 0 || action.edgesToCreate.length > 0) {
+            await state.batchCreateElements?.(
+                action.nodesToCreate as Node<unknown>[],
+                action.edgesToCreate as Edge[],
+                action.sheetId,
+            );
+        }
+
+        // 3. Delete nodes/edges
+        if (action.nodeKeysToDelete.length > 0 || action.edgeKeysToDelete.length > 0) {
+            await state.batchDeleteElements?.(
+                action.nodeKeysToDelete,
+                action.edgeKeysToDelete,
+                action.sheetId,
+            );
+        }
+    }, []);
 
     const {
         messages,
@@ -52,6 +83,7 @@ export const AIChatFloating = memo(() => {
         contextType,
         serverInfo: Project.state.serverInfo ?? null,
         autoConnect: false,
+        onApplyAction: handleApplyAction,
     });
 
     const handleToggle = useCallback(() => {

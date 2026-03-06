@@ -43,11 +43,30 @@ export interface AIThreadSummary {
     lastUpdatedTime: number;
 }
 
+/** Mutation payload sent by the server when an approved HITL action is converted. */
+export interface AIApplyAction {
+    instructions: Array<{
+        i: unknown;
+        sheetId: string;
+        nodeId?: string;
+        edgeId?: string;
+        animatePos?: boolean;
+        triggerHtmlRender?: boolean;
+    }>;
+    nodesToCreate: unknown[];
+    edgesToCreate: unknown[];
+    nodeKeysToDelete: string[];
+    edgeKeysToDelete: string[];
+    sheetId: string;
+}
+
 export interface UseAIChatOptions {
     graphKey: string;
     contextType?: AIContextType;
     serverInfo: api_sync_info | null;
     autoConnect?: boolean;
+    /** Called when the server sends mutations to apply (approved HITL action). */
+    onApplyAction?: (action: AIApplyAction) => void;
 }
 
 export interface UseAIChatReturn {
@@ -75,7 +94,7 @@ const FLUSH_INTERVAL_MS = 32;
 // ─── Hook ───────────────────────────────────────────────────────────
 
 export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
-    const { graphKey, contextType = "graph", serverInfo, autoConnect = false } = options;
+    const { graphKey, contextType = "graph", serverInfo, autoConnect = false, onApplyAction } = options;
 
     // ── State ───────────────────────────────────────────────────────
     const [messages, setMessages] = useState<AIChatMessage[]>([]);
@@ -93,6 +112,8 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
     graphKeyRef.current = graphKey;
     const contextTypeRef = useRef(contextType);
     contextTypeRef.current = contextType;
+    const onApplyActionRef = useRef(onApplyAction);
+    onApplyActionRef.current = onApplyAction;
 
     // Expose threadId as state-like via a derived value
     const [threadId, setThreadId] = useState<string | null>(null);
@@ -277,6 +298,14 @@ export function useAIChat(options: UseAIChatOptions): UseAIChatReturn {
 
                 // Refresh threads list after each completion
                 refreshThreads();
+                break;
+            }
+
+            case "ai:apply_action": {
+                const action = data.action as AIApplyAction;
+                if (action) {
+                    onApplyActionRef.current?.(action);
+                }
                 break;
             }
 

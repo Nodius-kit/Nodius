@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@nodius/layouting": "^0.1.0",
     "@toon-format/toon": "^2.1.0",
     "arangojs": "^10.2.2",
     "bcrypt": "^6.0.0",
@@ -59,6 +60,7 @@
     "escape-html": "^1.0.3",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.0",
+    "node-html-parser": "^7.1.0",
     "openai": "^6.25.0",
     "selfsigned": "^5.5.0",
     "sharp": "^0.34.5",

@@ -12,7 +12,7 @@
 import { aql } from "arangojs";
 import { cleanNode, cleanEdge } from "@nodius/utils";
 import type { Edge, Node, NodeTypeConfig } from "@nodius/utils";
-import type { GraphDataSource, GraphRAGContext } from "./types.js";
+import type { GraphDataSource, GraphRAGContext, GraphSummary, HtmlClassSummary } from "./types.js";
 import { db } from "../server.js";
 
 export class ArangoGraphDataSource implements GraphDataSource {
@@ -93,9 +93,10 @@ export class ArangoGraphDataSource implements GraphDataSource {
     }
 
     async getNodeConfigs(graphKey: string): Promise<NodeTypeConfig[]> {
+        const workspaces = [this.workspace, "root"];
         const cursor = await db.query(aql`
             FOR c IN nodius_node_config
-                FILTER c.workspace == ${this.workspace}
+                FILTER c.workspace IN ${workspaces}
                 RETURN c
         `);
         return await cursor.all();
@@ -251,6 +252,48 @@ export class ArangoGraphDataSource implements GraphDataSource {
             .map((e) => this.toLocalEdge(e, graphKey));
 
         return { nodes, edges };
+    }
+
+    async listGraphs(workspace: string): Promise<GraphSummary[]> {
+        const workspaces = [workspace, "root"];
+        const cursor = await db.query(aql`
+            FOR g IN nodius_graphs
+                FILTER g.workspace IN ${workspaces}
+                LET nodeCount = LENGTH(FOR n IN nodius_nodes FILTER n.graphKey == g._key RETURN 1)
+                SORT g.lastUpdatedTime DESC
+                RETURN {
+                    _key: g._key,
+                    name: g.name,
+                    category: g.category || "default",
+                    workspace: g.workspace,
+                    nodeCount: nodeCount,
+                    sheetCount: LENGTH(ATTRIBUTES(g.sheetsList || {})),
+                    createdTime: g.createdTime,
+                    lastUpdatedTime: g.lastUpdatedTime,
+                    htmlKeyLinked: g.htmlKeyLinked
+                }
+        `);
+        return await cursor.all();
+    }
+
+    async listHtmlClasses(workspace: string): Promise<HtmlClassSummary[]> {
+        const workspaces = [workspace, "root"];
+        const cursor = await db.query(aql`
+            FOR h IN nodius_htmlclass
+                FILTER h.workspace IN ${workspaces}
+                SORT h.lastUpdatedTime DESC
+                RETURN {
+                    _key: h._key,
+                    name: h.name,
+                    description: h.description,
+                    category: h.category || "default",
+                    workspace: h.workspace,
+                    graphKeyLinked: h.graphKeyLinked,
+                    createdTime: h.createdTime,
+                    lastUpdatedTime: h.lastUpdatedTime
+                }
+        `);
+        return await cursor.all();
     }
 
     // ─── Private helpers ─────────────────────────────────────────────

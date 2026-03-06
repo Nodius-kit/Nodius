@@ -218,8 +218,19 @@ export const AIChatPanel = memo(({
 
     // ── Client action handlers (no useCallback needed — projectRef is stable) ──
     const handleNodeClick = (nodeKey: string) => {
-        const motor = projectRef.current.state.getMotor();
-        motor?.smoothFitToNode?.(nodeKey, { padding: 150 });
+        const state = projectRef.current.state;
+        const motor = state.getMotor();
+        const sheet = state.graph?.sheets[state.selectedSheetId!];
+        const node = sheet?.nodeMap.get(nodeKey);
+        if (node && motor) {
+            const size = typeof node.size === "string" ? { width: 200, height: 100 } : node.size;
+            motor.smoothFitToArea({
+                minX: node.posX,
+                minY: node.posY,
+                maxX: node.posX + size.width,
+                maxY: node.posY + size.height,
+            }, { padding: 150 });
+        }
         projectRef.current.dispatch({ field: "selectedNode", value: [nodeKey] });
     };
 
@@ -239,6 +250,30 @@ export const AIChatPanel = memo(({
     const handleOpenGraph = (graphKey: string) => {
         const url = new URL(window.location.href);
         url.searchParams.set("graph", graphKey);
+        url.searchParams.delete("sheet");
+        url.searchParams.delete("node");
+        url.searchParams.delete("html");
+        url.searchParams.delete("nodeConfig");
+        window.history.pushState({}, "", url.toString());
+        window.dispatchEvent(new PopStateEvent("popstate"));
+    };
+
+    const handleOpenHtml = (htmlKey: string) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("html", htmlKey);
+        url.searchParams.delete("graph");
+        url.searchParams.delete("sheet");
+        url.searchParams.delete("node");
+        url.searchParams.delete("nodeConfig");
+        window.history.pushState({}, "", url.toString());
+        window.dispatchEvent(new PopStateEvent("popstate"));
+    };
+
+    const handleOpenNodeConfig = (configKey: string) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("nodeConfig", configKey);
+        url.searchParams.delete("graph");
+        url.searchParams.delete("html");
         url.searchParams.delete("sheet");
         url.searchParams.delete("node");
         window.history.pushState({}, "", url.toString());
@@ -513,6 +548,8 @@ export const AIChatPanel = memo(({
                                             onFitArea: handleFitArea,
                                             onChangeSheet: handleChangeSheet,
                                             onOpenGraph: handleOpenGraph,
+                                            onOpenHtml: handleOpenHtml,
+                                            onOpenNodeConfig: handleOpenNodeConfig,
                                             nodeDisplayNames,
                                             sheetDisplayNames,
                                         })
