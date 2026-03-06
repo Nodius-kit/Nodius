@@ -52,7 +52,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_graph_overview",
-                description: "Obtenir les metadonnees du graph courant : nom, sheets, nombre de nodes/edges par sheet",
+                description: "Metadonnees du graph : nom, sheets, nombre de nodes/edges",
                 parameters: {
                     type: "object",
                     properties: {
@@ -66,13 +66,13 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "search_nodes",
-                description: "Chercher des nodes dans le graph par leur nom, type, description ou contenu",
+                description: "Chercher des nodes par nom, type, description ou contenu",
                 parameters: {
                     type: "object",
                     properties: {
-                        query: { type: "string", description: "Texte de recherche" },
-                        sheetId: { type: "string", description: "Filtrer par sheet (optionnel)" },
-                        maxResults: { type: "number", description: "Nombre max de resultats (defaut: 10)" },
+                        query: { type: "string" },
+                        sheetId: { type: "string", description: "Filtrer par sheet" },
+                        maxResults: { type: "number", description: "Max resultats (defaut: 10)" },
                     },
                     required: ["query"],
                 },
@@ -82,13 +82,13 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "explore_neighborhood",
-                description: "Explorer les nodes connectes autour d'un node (voisins directs et indirects)",
+                description: "Explorer les nodes connectes autour d'un node (voisins)",
                 parameters: {
                     type: "object",
                     properties: {
-                        nodeKey: { type: "string", description: "localKey du node de depart" },
-                        maxDepth: { type: "number", description: "Profondeur max (1-3, defaut: 2)" },
-                        direction: { type: "string", enum: ["outbound", "inbound", "any"], description: "Direction (defaut: any)" },
+                        nodeKey: { type: "string", description: "localKey" },
+                        maxDepth: { type: "number", description: "Profondeur 1-3 (defaut: 2)" },
+                        direction: { type: "string", enum: ["outbound", "inbound", "any"] },
                     },
                     required: ["nodeKey"],
                 },
@@ -98,11 +98,11 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_node_detail",
-                description: "Obtenir tous les details d'un node specifique : type, data, handles, position",
+                description: "Details d'un node : type, data, handles, position",
                 parameters: {
                     type: "object",
                     properties: {
-                        nodeKey: { type: "string", description: "localKey du node" },
+                        nodeKey: { type: "string", description: "localKey" },
                     },
                     required: ["nodeKey"],
                 },
@@ -112,7 +112,7 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_node_config",
-                description: "Obtenir la definition d'un type de node : code process (JS), handles, taille par defaut, description",
+                description: "Definition d'un type de node : code process, handles, taille, description",
                 parameters: {
                     type: "object",
                     properties: {
@@ -126,23 +126,20 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "list_available_node_types",
-                description: "Lister tous les types de nodes disponibles (built-in + custom)",
-                parameters: {
-                    type: "object",
-                    properties: {},
-                },
+                description: "Lister tous les types de nodes (built-in + custom)",
+                parameters: { type: "object", properties: {} },
             },
         },
         {
             type: "function",
             function: {
                 name: "list_node_edges",
-                description: "Lister toutes les connexions (edges) d'un node : entrantes et sortantes",
+                description: "Lister les edges d'un node (entrantes/sortantes)",
                 parameters: {
                     type: "object",
                     properties: {
-                        nodeKey: { type: "string", description: "localKey du node" },
-                        direction: { type: "string", enum: ["inbound", "outbound", "any"], description: "Direction (defaut: any)" },
+                        nodeKey: { type: "string", description: "localKey" },
+                        direction: { type: "string", enum: ["inbound", "outbound", "any"] },
                     },
                     required: ["nodeKey"],
                 },
@@ -152,28 +149,14 @@ export function getReadToolDefinitions(): OpenAI.Chat.Completions.ChatCompletion
             type: "function",
             function: {
                 name: "read_subgraph",
-                description: "Read info for multiple nodes at once. Default fields: _key, type, sheet, posX, posY (compact). Add \"handles\", \"data\", \"size\" only when needed.",
+                description: "Lire plusieurs nodes. Champs par defaut: _key,type,sheet,posX,posY. Extras: handles,data,size",
                 parameters: {
                     type: "object",
                     properties: {
-                        nodeKeys: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "Array of node _key values to read",
-                        },
-                        fields: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "Fields per node. Default: [\"_key\",\"type\",\"sheet\",\"posX\",\"posY\"]. Extras: \"handles\",\"data\",\"size\"",
-                        },
-                        includeConfigs: {
-                            type: "boolean",
-                            description: "Also include nodeConfig for each node (default: true)",
-                        },
-                        includeEdges: {
-                            type: "boolean",
-                            description: "Also include edges connected to these nodes (default: true)",
-                        },
+                        nodeKeys: { type: "array", items: { type: "string" } },
+                        fields: { type: "array", items: { type: "string" }, description: "Champs (defaut: _key,type,sheet,posX,posY)" },
+                        includeConfigs: { type: "boolean", description: "Inclure nodeConfigs (defaut: true)" },
+                        includeEdges: { type: "boolean", description: "Inclure edges (defaut: true)" },
                     },
                     required: ["nodeKeys"],
                 },

@@ -19,7 +19,7 @@
 
 import React, { memo } from "react";
 import { useDynamicClass } from "../../hooks/useDynamicClass";
-import { MapPin, MousePointerClick, Maximize2, Layers, Network, ExternalLink, FileCode, Settings } from "lucide-react";
+import { MapPin, MousePointerClick, Crosshair, Maximize2, Layers, Network, ExternalLink, FileCode, Settings } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -28,6 +28,8 @@ export interface ClientActionHandlers {
     onNodeClick?: (nodeKey: string) => void;
     /** Select multiple nodes. */
     onSelectNodes?: (nodeKeys: string[]) => void;
+    /** Select multiple nodes AND zoom camera to fit them all. */
+    onHighlightNodes?: (nodeKeys: string[]) => void;
     /** Fit camera to a bounding area. */
     onFitArea?: (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => void;
     /** Switch the active sheet. */
@@ -102,6 +104,23 @@ const SelectNodesLink = memo(({ nodeKeys, displayNames, onClick }: {
     );
 });
 SelectNodesLink.displayName = "SelectNodesLink";
+
+const HighlightNodesLink = memo(({ nodeKeys, displayNames, onClick }: {
+    nodeKeys: string[];
+    displayNames: Map<string, string>;
+    onClick?: (keys: string[]) => void;
+}) => {
+    const cls = useDynamicClass(actionLinkStyle);
+    const label = nodeKeys.length <= 2
+        ? nodeKeys.map(k => displayNames.get(k) ?? k).join(", ")
+        : `${nodeKeys.length} nodes`;
+    return (
+        <span className={cls} onClick={() => onClick?.(nodeKeys)} title={`Highlight & zoom: ${nodeKeys.join(", ")}`}>
+            <Crosshair size={11} />{label}
+        </span>
+    );
+});
+HighlightNodesLink.displayName = "HighlightNodesLink";
 
 const FitAreaLink = memo(({ bounds, onClick }: {
     bounds: { minX: number; minY: number; maxX: number; maxY: number };
@@ -227,6 +246,11 @@ function renderAction(action: string, params: string, key: string, options?: Ren
             if (keys.length === 0) return null;
             return <SelectNodesLink key={key} nodeKeys={keys} displayNames={options?.nodeDisplayNames ?? new Map()} onClick={options?.onSelectNodes} />;
         }
+        case "highlight": {
+            const keys = params.split(",").map(k => k.trim()).filter(Boolean);
+            if (keys.length === 0) return null;
+            return <HighlightNodesLink key={key} nodeKeys={keys} displayNames={options?.nodeDisplayNames ?? new Map()} onClick={options?.onHighlightNodes} />;
+        }
         case "fitArea": {
             const nums = params.split(",").map(s => parseFloat(s.trim()));
             if (nums.length !== 4 || nums.some(isNaN)) return null;
@@ -313,11 +337,11 @@ function parseInline(text: string, options?: RenderOptions): (string | React.JSX
                 parts.push(match[2]);
             }
         } else if (match[5]) {
-            // Bold: **text**
-            parts.push(<strong key={key}>{match[5].slice(2, -2)}</strong>);
+            // Bold: **text** — recursively parse inner content for nested actions/formatting
+            parts.push(<strong key={key}>{parseInline(match[5].slice(2, -2), options)}</strong>);
         } else if (match[6]) {
-            // Italic: *text*
-            parts.push(<em key={key}>{match[6].slice(1, -1)}</em>);
+            // Italic: *text* — recursively parse inner content for nested actions/formatting
+            parts.push(<em key={key}>{parseInline(match[6].slice(1, -1), options)}</em>);
         }
 
         lastIndex = match.index + match[0].length;

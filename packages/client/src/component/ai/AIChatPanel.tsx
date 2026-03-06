@@ -238,6 +238,28 @@ export const AIChatPanel = memo(({
         projectRef.current.dispatch({ field: "selectedNode", value: nodeKeys });
     };
 
+    const handleHighlightNodes = (nodeKeys: string[]) => {
+        const state = projectRef.current.state;
+        const motor = state.getMotor();
+        const sheet = state.graph?.sheets[state.selectedSheetId!];
+        if (sheet && motor && nodeKeys.length > 0) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const key of nodeKeys) {
+                const node = sheet.nodeMap.get(key);
+                if (!node) continue;
+                const size = typeof node.size === "string" ? { width: 200, height: 100 } : node.size;
+                minX = Math.min(minX, node.posX);
+                minY = Math.min(minY, node.posY);
+                maxX = Math.max(maxX, node.posX + size.width);
+                maxY = Math.max(maxY, node.posY + size.height);
+            }
+            if (minX !== Infinity) {
+                motor.smoothFitToArea({ minX, minY, maxX, maxY }, { padding: 100 });
+            }
+        }
+        projectRef.current.dispatch({ field: "selectedNode", value: nodeKeys });
+    };
+
     const handleFitArea = (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
         const motor = projectRef.current.state.getMotor();
         motor?.smoothFitToArea?.(bounds, { padding: 50 });
@@ -545,6 +567,7 @@ export const AIChatPanel = memo(({
                                         ? renderMessageContent(msg.content, {
                                             onNodeClick: handleNodeClick,
                                             onSelectNodes: handleSelectNodes,
+                                            onHighlightNodes: handleHighlightNodes,
                                             onFitArea: handleFitArea,
                                             onChangeSheet: handleChangeSheet,
                                             onOpenGraph: handleOpenGraph,

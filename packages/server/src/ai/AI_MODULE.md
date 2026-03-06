@@ -284,6 +284,35 @@ processPatches: [
 - `tools/codeDetector.ts` : `isCodeString()`, `isKnownCodeField()`, `isCodeValue()`
 - `types.ts` : `CodePatchEntry`, `CodeDiffInfo`, champ `processPatches` dans `ConfigureNodeTypePayload`
 
+### Etape 4c — Optimisation des tokens
+
+Le cout fixe par conversation a ete reduit par plusieurs optimisations :
+
+**System prompt compact :**
+- Prompt systeme condense (~40% de reduction) : suppression des exemples HTML verbeux, consolidation des regles, references concises
+- Les informations detaillees sont dans les tool descriptions, pas dupliquees dans le prompt
+
+**Tool definitions compactes :**
+- Descriptions de tools reduites a l'essentiel (1 ligne vs phrases completes)
+- Suppression des descriptions redondantes sur les parametres evidents (ex: `posX: "Position X"` → `posX: {}`)
+- Les descriptions contextuelles restent dans le system prompt, pas repetees par tool
+
+**Strategie d'outils :**
+- Le prompt instruit le LLM a repondre directement depuis le contexte RAG sans appeler d'outils inutiles
+- `propose_reorganize_layout` au lieu de multiples `propose_move_node` (1 appel vs N)
+- `propose_batch` pour grouper les modifications connexes
+- `read_subgraph` avec `fields` pour ne demander que les champs necessaires
+- Truncation des anciens tool results a 2000 chars (`truncateOldToolResults`)
+
+**Estimation du cout fixe :**
+| Composant | Tokens approximatifs |
+|-----------|---------------------|
+| System prompt | ~800 |
+| Read tools (8) | ~600 |
+| Write tools (10) | ~1200 |
+| RAG context | ~500-4000 (variable) |
+| **Total fixe** | **~2600-6600** |
+
 ### Etape 5 — Resume apres validation (HITL)
 
 Quand le client envoie `POST /api/ai/resume { threadId, approved: true/false }` :
@@ -1345,10 +1374,13 @@ Syntaxe inline distincte des tool_calls LLM. Le LLM insere ces tokens dans son t
 | Action | Params | Composant | Icone | Description |
 |--------|--------|-----------|-------|-------------|
 | `node` | `localKey` | `NodeRefLink` | MapPin | Zoom + selection du node |
-| `select` | `key1,key2,...` | `SelectNodesLink` | MousePointerClick | Selection multiple |
+| `select` | `key1,key2,...` | `SelectNodesLink` | MousePointerClick | Selection multiple (sans zoom) |
+| `highlight` | `key1,key2,...` | `HighlightNodesLink` | Crosshair | Selection multiple + zoom camera sur le groupe |
 | `fitArea` | `minX,minY,maxX,maxY` | `FitAreaLink` | Maximize2 | Zoom camera sur zone |
 | `sheet` | `sheetKey` | `SheetLink` | Layers | Changement de sheet |
 | `graph` | `graphKey` | `GraphLink` | Network | Ouverture d'un autre graph |
+| `html` | `htmlKey` | `HtmlLink` | FileCode | Ouverture d'une classe HTML |
+| `nodeConfig` | `configKey` | `NodeConfigLink` | Settings | Ouverture d'un node config |
 | `link` | `url\|label` | `ExternalLinkComp` | ExternalLink | Hyperlien externe |
 
 **Interface :**
@@ -1357,15 +1389,20 @@ Syntaxe inline distincte des tool_calls LLM. Le LLM insere ces tokens dans son t
 interface ClientActionHandlers {
     onNodeClick?: (nodeKey: string) => void;
     onSelectNodes?: (nodeKeys: string[]) => void;
+    onHighlightNodes?: (nodeKeys: string[]) => void;
     onFitArea?: (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => void;
     onChangeSheet?: (sheetKey: string) => void;
     onOpenGraph?: (graphKey: string) => void;
+    onOpenHtml?: (htmlKey: string) => void;
+    onOpenNodeConfig?: (configKey: string) => void;
 }
 
 interface RenderOptions extends ClientActionHandlers {
     nodeDisplayNames?: Map<string, string>;
     sheetDisplayNames?: Map<string, string>;
     graphDisplayNames?: Map<string, string>;
+    htmlDisplayNames?: Map<string, string>;
+    nodeConfigDisplayNames?: Map<string, string>;
 }
 ```
 
