@@ -9,8 +9,8 @@
 import { InstructionBuilder, createNodeFromConfig } from "@nodius/utils";
 import type { GraphInstructions } from "@nodius/utils";
 import type { Node, Edge, NodeTypeConfig, NodeTypeConfigBorder } from "@nodius/utils";
-import type { ProposedAction, CreateNodeWithEdgesPayload, ConfigureNodeTypePayload, ReorganizeLayoutPayload } from "./types.js";
-import { createUniqueToken, ensureCollection } from "../utils/arangoUtils.js";
+import type { ProposedAction, CreateNodeWithEdgesPayload, ConfigureNodeTypePayload, ReorganizeLayoutPayload } from "../types.js";
+import { createUniqueToken, ensureCollection } from "../../utils/arangoUtils.js";
 import { computeAutoLayout } from "./autoLayout.js";
 
 // ─── Result type ────────────────────────────────────────────────────

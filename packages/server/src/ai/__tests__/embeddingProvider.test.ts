@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { EMBEDDING_MODELS, OpenAIEmbeddingProvider, detectEmbeddingProvider } from "./providers/embeddingProvider.js";
+import { EMBEDDING_MODELS, OpenAIEmbeddingProvider, detectEmbeddingProvider } from "../providers/embeddingProvider.js";
 
 describe("EmbeddingProvider", () => {
     describe("EMBEDDING_MODELS", () => {

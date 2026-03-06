@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { convertAction, type ActionConversionResult } from "./actionConverter.js";
-import type { ProposedAction } from "./types.js";
+import { convertAction, type ActionConversionResult } from "../tools/actionConverter.js";
+import type { ProposedAction } from "../types.js";
 import { OpType } from "@nodius/utils";
 
 // ─── Mock arangoUtils so tests don't need a real DB ──────────────────

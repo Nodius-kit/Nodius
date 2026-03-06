@@ -11,7 +11,7 @@
  */
 
 import type { Edge, Node, NodeTypeConfig } from "@nodius/utils";
-import type { GraphDataSource, GraphRAGContext } from "./types.js";
+import type { GraphDataSource, GraphRAGContext } from "../types.js";
 import { ArangoGraphDataSource } from "./arangoDataSource.js";
 
 // ─── Types ──────────────────────────────────────────────────────────

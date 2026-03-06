@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { createLLMProvider } from "./providers/providerFactory.js";
-import { OpenAICompatibleProvider } from "./providers/openaiProvider.js";
+import { createLLMProvider } from "../providers/providerFactory.js";
+import { OpenAICompatibleProvider } from "../providers/openaiProvider.js";
 import {
     AnthropicProvider,
     convertMessagesToAnthropic,
     convertToolsToAnthropic,
     convertAnthropicResponse,
-} from "./providers/anthropicProvider.js";
-import { PROVIDER_REGISTRY } from "./config/providerRegistry.js";
-import { getPricing } from "./tokenTracker.js";
+} from "../providers/anthropicProvider.js";
+import { PROVIDER_REGISTRY } from "../config/providerRegistry.js";
+import { getPricing } from "../tokenTracker.js";
 import type OpenAI from "openai";
 import type Anthropic from "@anthropic-ai/sdk";
 

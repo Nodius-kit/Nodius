@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AIAgent, type AgentResponse, type AgentInterrupt } from "./aiAgent.js";
-import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../../test-ai/mock-data.js";
-import type { LLMProvider, LLMResponse } from "./providers/llmProvider.js";
-import type { LLMStreamChunk, StreamCallbacks } from "./types.js";
-import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
+import { AIAgent, type AgentResponse, type AgentInterrupt } from "../aiAgent.js";
+import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../../../test-ai/mock-data.js";
+import type { LLMProvider, LLMResponse } from "../providers/llmProvider.js";
+import type { LLMStreamChunk, StreamCallbacks } from "../types.js";
+import type { EmbeddingProvider } from "../providers/embeddingProvider.js";
 
 /** Create a mock LLM provider that returns pre-defined responses. */
 function createMockProvider(responses: LLMResponse[]): LLMProvider {

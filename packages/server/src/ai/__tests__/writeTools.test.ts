@@ -6,7 +6,7 @@ import {
     ProposeCreateNodeSchema,
     ProposeCreateEdgeSchema,
     ProposeDeleteNodeSchema,
-} from "./writeTools.js";
+} from "../tools/writeTools.js";
 
 describe("getWriteToolDefinitions()", () => {
     it("returns 3 tools", () => {

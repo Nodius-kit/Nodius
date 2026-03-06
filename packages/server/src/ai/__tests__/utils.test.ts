@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { createNodeEmbeddingText, hasNodeContentChanged, truncate, summarizeHandles } from "./utils.js";
+import { createNodeEmbeddingText, hasNodeContentChanged, truncate, summarizeHandles } from "../utils.js";
 import type { Node } from "@nodius/utils";
 
 // ─── Helper to build a minimal Node ──────────────────────────────────

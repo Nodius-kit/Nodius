@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSystemPrompt, buildContextSummary } from "./systemPrompt.js";
+import { buildSystemPrompt, buildContextSummary } from "../prompts/systemPrompt.js";
 import type { GraphRAGContext } from "../types.js";
 
 function makeContext(overrides?: Partial<GraphRAGContext>): GraphRAGContext {

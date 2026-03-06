@@ -5,7 +5,7 @@
  * Usage: npx tsx packages/server/test-ai/introspect/dump-context.ts "your query here"
  */
 
-import { GraphRAGRetriever } from "../../src/ai/graphRAGRetriever.js";
+import { GraphRAGRetriever } from "../../src/ai/data/graphRAGRetriever.js";
 import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../mock-data.js";
 
 async function main() {

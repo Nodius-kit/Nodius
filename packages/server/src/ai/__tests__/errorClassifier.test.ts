@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyLLMError } from "./errorClassifier.js";
+import { classifyLLMError } from "../errorClassifier.js";
 
 describe("classifyLLMError", () => {
     it("classifies a 429 rate limit error", () => {

@@ -1,8 +1,8 @@
 import type { Edge, Node, NodeTypeConfig } from "@nodius/utils";
-import type { GraphDataSource, GraphRAGContext, RelevantNode, RelevantEdge, NodeTypeConfigSummary } from "./types.js";
-import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
-import { truncate, summarizeHandles } from "./utils.js";
-import { debugAI } from "./aiLogger.js";
+import type { GraphDataSource, GraphRAGContext, RelevantNode, RelevantEdge, NodeTypeConfigSummary } from "../types.js";
+import type { EmbeddingProvider } from "../providers/embeddingProvider.js";
+import { truncate, summarizeHandles } from "../utils.js";
+import { debugAI } from "../aiLogger.js";
 
 export interface GraphRAGOptions {
     maxNodes?: number;

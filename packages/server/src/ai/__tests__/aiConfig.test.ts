@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { resolveAIConfig, getAIConfig, resetAIConfig } from "./aiConfig.js";
+import { resolveAIConfig, getAIConfig, resetAIConfig } from "../config/aiConfig.js";
 
 describe("resolveAIConfig", () => {
     const originalEnv = { ...process.env };

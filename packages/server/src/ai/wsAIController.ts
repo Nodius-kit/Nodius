@@ -9,22 +9,22 @@
 import { z } from "zod";
 import type WebSocket from "ws";
 import { AIAgent } from "./aiAgent.js";
-import { MemoryAwareDataSource } from "./memoryAwareDataSource.js";
+import { MemoryAwareDataSource } from "./data/memoryAwareDataSource.js";
 import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "./providers/providerFactory.js";
 import type { LLMProvider } from "./providers/llmProvider.js";
 import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { getAIConfig } from "./config/aiConfig.js";
 import { threadStore, defaultMetadata, type AIThread, type AIContextType } from "./threadStore.js";
 import type { StreamCallbacks } from "./types.js";
-import type { MemoryGraphProvider } from "./memoryAwareDataSource.js";
+import type { MemoryGraphProvider } from "./data/memoryAwareDataSource.js";
 import type { AuthenticatedClient } from "../cluster/webSocketManager.js";
 import { logLLMError, logClientDisconnect, logMalformedJSON, debugAI } from "./aiLogger.js";
 import { classifyLLMError, type ClassifiedError } from "./errorClassifier.js";
 import { getPricing } from "./tokenTracker.js";
-import { convertAction } from "./actionConverter.js";
+import { convertAction } from "./tools/actionConverter.js";
 import { parseProposedAction, isWriteTool } from "./tools/writeTools.js";
 import { parseHomeProposedAction, isHomeWriteTool } from "./tools/homeTools.js";
-import { computeAutoLayout } from "./autoLayout.js";
+import { computeAutoLayout } from "./tools/autoLayout.js";
 import { InstructionBuilder } from "@nodius/utils";
 import { ensureCollection, createUniqueToken } from "../utils/arangoUtils.js";
 

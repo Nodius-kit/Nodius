@@ -4,7 +4,7 @@ import {
     getProviderPricing,
     detectAvailableProvider,
     detectEmbeddingCapableProvider,
-} from "./providerRegistry.js";
+} from "../config/providerRegistry.js";
 
 describe("PROVIDER_REGISTRY", () => {
     it("contains deepseek, openai, openai-mini, anthropic", () => {

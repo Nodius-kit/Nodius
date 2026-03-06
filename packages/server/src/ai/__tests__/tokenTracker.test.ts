@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { TokenTracker, TokenLimitError, getTokenTracker, initTokenTracker } from "./tokenTracker.js";
+import { TokenTracker, TokenLimitError, getTokenTracker, initTokenTracker } from "../tokenTracker.js";
 
 describe("TokenTracker", () => {
     let tracker: TokenTracker;

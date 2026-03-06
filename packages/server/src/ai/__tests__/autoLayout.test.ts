@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeAutoLayout, type LayoutResult } from "./autoLayout.js";
+import { computeAutoLayout, type LayoutResult } from "../tools/autoLayout.js";
 import type { Node, Edge } from "@nodius/utils";
 
 // ─── Helpers ─────────────────────────────────────────────────────────

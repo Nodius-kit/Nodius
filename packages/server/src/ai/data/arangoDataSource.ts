@@ -12,8 +12,8 @@
 import { aql } from "arangojs";
 import { cleanNode, cleanEdge } from "@nodius/utils";
 import type { Edge, Node, NodeTypeConfig } from "@nodius/utils";
-import type { GraphDataSource, GraphRAGContext, GraphSummary, HtmlClassSummary } from "./types.js";
-import { db } from "../server.js";
+import type { GraphDataSource, GraphRAGContext, GraphSummary, HtmlClassSummary } from "../types.js";
+import { db } from "../../server.js";
 
 export class ArangoGraphDataSource implements GraphDataSource {
     private workspace: string;

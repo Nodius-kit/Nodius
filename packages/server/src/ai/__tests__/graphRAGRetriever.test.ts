@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { GraphRAGRetriever } from "./graphRAGRetriever.js";
-import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../../test-ai/mock-data.js";
-import type { EmbeddingProvider } from "./embeddingProvider.js";
+import { GraphRAGRetriever } from "../data/graphRAGRetriever.js";
+import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../../../test-ai/mock-data.js";
+import type { EmbeddingProvider } from "../providers/embeddingProvider.js";
 
 const ds = new MockGraphDataSource();
 

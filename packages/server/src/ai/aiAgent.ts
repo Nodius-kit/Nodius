@@ -2,7 +2,7 @@ import type OpenAI from "openai";
 import { getReadToolDefinitions, createReadToolExecutor } from "./tools/readTools.js";
 import { getWriteToolDefinitions, isWriteTool, parseProposedAction } from "./tools/writeTools.js";
 import { getHomeReadToolDefinitions, getHomeWriteToolDefinitions, createHomeReadToolExecutor, isHomeWriteTool, parseHomeProposedAction } from "./tools/homeTools.js";
-import { GraphRAGRetriever } from "./graphRAGRetriever.js";
+import { GraphRAGRetriever } from "./data/graphRAGRetriever.js";
 import { buildSystemPrompt, buildContextSummary } from "./prompts/systemPrompt.js";
 import { buildHomeSystemPrompt } from "./prompts/homePrompt.js";
 import type { GraphDataSource, GraphRAGContext, ProposedAction, StreamCallbacks, LLMStreamChunk } from "./types.js";
@@ -11,7 +11,7 @@ import type { EmbeddingProvider } from "./providers/embeddingProvider.js";
 import { encode } from "@toon-format/toon";
 import { getTokenTracker } from "./tokenTracker.js";
 import { logMalformedJSON, debugAI, isAIDebugEnabled } from "./aiLogger.js";
-import { htmlToHtmlObject } from "./htmlToHtmlObject.js";
+import { htmlToHtmlObject } from "./tools/htmlToHtmlObject.js";
 
 // ─── XML tool-call text filter ───────────────────────────────────────
 // Some providers (e.g. DeepSeek) emit tool calls as XML text in content

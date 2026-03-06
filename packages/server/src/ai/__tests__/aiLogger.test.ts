@@ -9,7 +9,7 @@ import {
     logClientDisconnect,
     logTokenUsage,
     type AILogEntry,
-} from "./aiLogger.js";
+} from "../aiLogger.js";
 
 describe("aiLogger", () => {
     const entries: AILogEntry[] = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { getReadToolDefinitions, createReadToolExecutor, SearchNodesSchema, ExploreNeighborhoodSchema, ReadNodeDetailSchema, ReadNodeConfigSchema, ListNodeEdgesSchema } from "./readTools.js";
+import { getReadToolDefinitions, createReadToolExecutor, SearchNodesSchema, ExploreNeighborhoodSchema, ReadNodeDetailSchema, ReadNodeConfigSchema, ListNodeEdgesSchema } from "../tools/readTools.js";
 import { MockGraphDataSource, MOCK_GRAPH_KEY } from "../../../test-ai/mock-data.js";
 
 const ds = new MockGraphDataSource();

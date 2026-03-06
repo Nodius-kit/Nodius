@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { Request, Response } from "../http/HttpServer.js";
 import type { HttpServer } from "../http/HttpServer.js";
 import { AIAgent } from "../ai/aiAgent.js";
-import { MemoryAwareDataSource } from "../ai/memoryAwareDataSource.js";
+import { MemoryAwareDataSource } from "../ai/data/memoryAwareDataSource.js";
 import { createLLMProviderFromConfig, createEmbeddingProviderFromConfig } from "../ai/providers/providerFactory.js";
 import type { LLMProvider } from "../ai/providers/llmProvider.js";
 import type { EmbeddingProvider } from "../ai/providers/embeddingProvider.js";
