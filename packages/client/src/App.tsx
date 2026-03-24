@@ -105,8 +105,8 @@ export const App = () => {
                     if(!sheets) return;
                     const edges = Array.from(sheets.edgeMap.values()).flat();
                     sessionStorage.setItem("copiedEdgeNode", JSON.stringify({
-                        node: Project.state.selectedNode.map((n) => sheets.nodeMap.get(n)),
-                        edge: Project.state.selectedEdge.map((e) => edges.find((edge) => edge._key === e)),
+                        node: Project.state.selectedNode.map((n) => sheets.nodeMap.get(n)).filter((n) => n !== undefined) as Node<any>[],
+                        edge: Project.state.selectedEdge.map((e) => edges.find((edge) => edge._key === e)).filter((e) => e !== undefined) as Edge[],
                     }));
                 }
             } else if (event.ctrlKey && key === "v") {
@@ -146,7 +146,7 @@ export const App = () => {
                             }
                         }
                     }
-                } else if(Project.state.selectedNode.length > 0 && !Project.state.editedNodeConfig) {
+                } else if(!Project.state.editedNodeConfig && sessionStorage.getItem("copiedEdgeNode")) {
                     const copiedObject = sessionStorage.getItem("copiedEdgeNode")
                         ? JSON.parse(sessionStorage.getItem("copiedEdgeNode")!) as {node:Node<any>[], edge:Edge[]}
                         : undefined;

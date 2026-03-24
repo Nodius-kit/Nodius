@@ -4,6 +4,7 @@
  update: 6am, it's even worse...
 
  ho btw, this handle dragged new edge to connect handle to another one
+ 
  */
 
 
@@ -244,6 +245,20 @@ export const useEdgeHandler = () => {
             }
 
             if(previousFound) {
+                const sourceNodeKey = handleInfo.point.type === "out" ? nodeId : temporaryEdge.source!;
+                const targetNodeKey = handleInfo.point.type === "out" ? temporaryEdge.target! : nodeId;
+                const sourceHandleId = handleInfo.point.type === "out" ? pointId : temporaryEdge.sourceHandle!;
+                const targetHandleId = handleInfo.point.type === "out" ? temporaryEdge.targetHandle! : pointId;
+
+                const sourceNode = P.state.graph.sheets[P.state.selectedSheetId].nodeMap.get(sourceNodeKey);
+                const targetNode = P.state.graph.sheets[P.state.selectedSheetId].nodeMap.get(targetNodeKey);
+
+                if (!sourceNode || !targetNode) return;
+                if (!getHandleInfo(sourceNode, sourceHandleId) || !getHandleInfo(targetNode, targetHandleId)) {
+                    console.warn(`[useEdgeHandler] Aborting edge creation: handle no longer exists on node`);
+                    return;
+                }
+
                 const output = await P.state.batchCreateElements([], [temporaryEdge as Edge], projectRef.current.state.selectedSheetId!);
             }
 
