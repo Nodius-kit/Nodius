@@ -48,7 +48,8 @@ import {
     HtmlObject,
     travelHtmlObject,
     deepCopy, travelObject,
-    Graph
+    Graph,
+    getHandleInfo
 } from "@nodius/utils";
 
 import {clusterManager, db} from "../server";
@@ -543,7 +544,23 @@ export class WebSocketManager {
                     const targetExists = nodeMap.has(edge.target);
 
                     if (!sourceExists || !targetExists) {
-                        console.warn(`[WebSocketManager] Removing invalid edge ${edge._key} in graph ${graphKey}, sheet ${sheetId}: source=${edge.source} (exists: ${sourceExists}), target=${edge.target} (exists: ${targetExists})`);
+                        invalidEdgeKeys.push(edge._key);
+                        hasInvalidEdges = true;
+                        return false;
+                    }
+
+                    const sourceNode = nodeMap.get(edge.source)!;
+                    const targetNode = nodeMap.get(edge.target)!;
+                    const sourceHandleExists = !!getHandleInfo(sourceNode, edge.sourceHandle);
+                    const targetHandleExists = !!getHandleInfo(targetNode, edge.targetHandle);
+
+                    if (!sourceHandleExists || !targetHandleExists) {
+                        console.warn(
+                            `[WebSocketManager] Removing edge ${edge._key} with invalid handles` +
+                            ` in graph ${graphKey}, sheet ${sheetId}:` +
+                            ` sourceHandle=${edge.sourceHandle} (exists: ${sourceHandleExists}),` +
+                            ` targetHandle=${edge.targetHandle} (exists: ${targetHandleExists})`
+                        );
                         invalidEdgeKeys.push(edge._key);
                         hasInvalidEdges = true;
                         return false;
@@ -1372,6 +1389,25 @@ export class WebSocketManager {
                         return;
                     }
 
+                    const sourceNode = targetSheet.nodeMap.get(edge.source) ?? nodesToAdd.get(edge.source)!;
+                    const targetNode = targetSheet.nodeMap.get(edge.target) ?? nodesToAdd.get(edge.target)!;
+
+                    if (!getHandleInfo(sourceNode, edge.sourceHandle)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: { status: false, message: `Edge ${edge._key} has invalid sourceHandle: handle ${edge.sourceHandle} not found on node ${edge.source}` }
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
+                    if (!getHandleInfo(targetNode, edge.targetHandle)) {
+                        if (messageId) return this.sendMessage(ws, {
+                            _id: messageId,
+                            _response: { status: false, message: `Edge ${edge._key} has invalid targetHandle: handle ${edge.targetHandle} not found on node ${edge.target}` }
+                        } as WSMessage<WSResponseMessage<unknown>>);
+                        return;
+                    }
+
                     edgesToAdd.push(edge);
                 }
 
@@ -1407,17 +1443,13 @@ export class WebSocketManager {
                     // Track this ID as used
                     this.usedIds[graphKey].add(edge._key);
 
-                    // Add to target map
+                    // Add to target map (new array to preserve originalEdgeMap reference)
                     const targetKey = `target-${edge.target}`;
-                    let targetEdges = targetSheet.edgeMap.get(targetKey) || [];
-                    targetEdges.push(edge);
-                    targetSheet.edgeMap.set(targetKey, targetEdges);
+                    targetSheet.edgeMap.set(targetKey, [...(targetSheet.edgeMap.get(targetKey) || []), edge]);
 
-                    // Add to source map
+                    // Add to source map (new array to preserve originalEdgeMap reference)
                     const sourceKey = `source-${edge.source}`;
-                    let sourceEdges = targetSheet.edgeMap.get(sourceKey) || [];
-                    sourceEdges.push(edge);
-                    targetSheet.edgeMap.set(sourceKey, sourceEdges);
+                    targetSheet.edgeMap.set(sourceKey, [...(targetSheet.edgeMap.get(sourceKey) || []), edge]);
 
                 }
                 if(edgesToAdd.length > 0) {
@@ -2180,7 +2212,12 @@ export class WebSocketManager {
 
                 // Delete removed nodes
                 for (const nodeKey of nodesToDelete) {
-                    await node_collection.remove(graphKey+"-"+nodeKey);
+                    try {
+                        await node_collection.remove(graphKey+"-"+nodeKey);
+                    } catch (e: any) {
+                        if (e?.code !== 404) throw e;
+                        console.warn(`[WebSocketManager] Node ${nodeKey} already absent from DB during delete (graph ${graphKey})`);
+                    }
                 }
 
                 // Create new edges
@@ -2197,7 +2234,12 @@ export class WebSocketManager {
 
                 // Delete removed edges
                 for (const edgeKey of edgesToDelete) {
-                    await edge_collection.remove(graphKey+"-"+edgeKey);
+                    try {
+                        await edge_collection.remove(graphKey+"-"+edgeKey);
+                    } catch (e: any) {
+                        if (e?.code !== 404) throw e;
+                        console.warn(`[WebSocketManager] Edge ${edgeKey} already absent from DB during delete (graph ${graphKey})`);
+                    }
                 }
 
                 // Update the original state after successful save
