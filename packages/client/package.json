@@ -39,7 +39,7 @@
     "barrelize": "^1.7.4",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^8.0.2"
   },
   "dependencies": {
     "@codemirror/lang-html": "^6.4.11",
