@@ -51,7 +51,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "^0.80.0",
     "@nodius/layouting": "^0.1.0",
     "@toon-format/toon": "^2.1.0",
     "arangojs": "^10.2.2",
