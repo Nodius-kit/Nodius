@@ -438,7 +438,7 @@ export class MockGraphDataSource implements MutableGraphDataSource {
         return mockNodeTypeConfigs;
     }
 
-    async searchNodes(graphKey: string, query: string, maxResults = 10, _queryEmbedding?: number[]) {
+    async searchNodes(graphKey: string, query: string, maxResults = 10) {
         const graphNodes = this.mutableNodes.filter(n => n.graphKey === graphKey);
 
         // Empty or very short query → return all nodes (simulates BM25 on whole collection)
@@ -470,6 +470,31 @@ export class MockGraphDataSource implements MutableGraphDataSource {
             .filter(s => s.score > 0)
             .sort((a, b) => b.score - a.score)
             .map(s => s.node)
+            .slice(0, maxResults);
+    }
+
+    async searchNodeConfigs(query: string, maxResults = 10, queryEmbedding?: number[]) {
+        // When an embedding is provided, simulate a vector hit by returning
+        // configs ranked by token match (the mock doesn't carry real vectors).
+        const q = query.toLowerCase().trim();
+
+        if (q.length <= 2) {
+            return mockNodeTypeConfigs.slice(0, maxResults);
+        }
+
+        const tokens = q.split(/\s+/).filter(t => t.length > 2);
+        const scored = mockNodeTypeConfigs.map(c => {
+            const text = [c._key, c.displayName, c.description, c.category].join(" ").toLowerCase();
+            const score = tokens.reduce((s, t) => s + (text.includes(t) ? 1 : 0), 0);
+            // Embedding-present bias: any non-zero token match counts double when
+            // embedding is supplied (lets tests assert different behaviour).
+            return { config: c, score: queryEmbedding ? score * 2 : score };
+        });
+
+        return scored
+            .filter(s => s.score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(s => s.config)
             .slice(0, maxResults);
     }
 

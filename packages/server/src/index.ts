@@ -30,7 +30,7 @@ export * from './auth/AuthManager';
 export * from './auth/AuthProvider';
 export * from './auth/DefaultAuthProvider';
 export * from './auth/workspaceAccess';
-export * from './cli/ai-embed-nodes';
+export * from './cli/ai-embed-node-configs';
 export * from './cli/createAdmin';
 export * from './cli/export';
 export * from './cli/import';

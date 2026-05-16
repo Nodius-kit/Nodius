@@ -102,9 +102,9 @@ export class MemoryAwareDataSource implements GraphDataSource {
 
     // ─── Search ─────────────────────────────────────────────────────
 
-    async searchNodes(graphKey: string, query: string, maxResults = 10, queryEmbedding?: number[]): Promise<Node<unknown>[]> {
+    async searchNodes(graphKey: string, query: string, maxResults = 10): Promise<Node<unknown>[]> {
         const memSheets = this.getMemorySheets(graphKey);
-        if (!memSheets) return this.arango.searchNodes(graphKey, query, maxResults, queryEmbedding);
+        if (!memSheets) return this.arango.searchNodes(graphKey, query, maxResults);
 
         // In-memory token-based search (same logic as ArangoDB but on live data)
         const q = query.toLowerCase().trim();
@@ -134,6 +134,11 @@ export class MemoryAwareDataSource implements GraphDataSource {
             .sort((a, b) => b.score - a.score)
             .slice(0, maxResults)
             .map(s => s.node);
+    }
+
+    /** Semantic search on primitives — always delegated to Arango (configs are not held in memory). */
+    async searchNodeConfigs(query: string, maxResults = 10, queryEmbedding?: number[]): Promise<NodeTypeConfig[]> {
+        return this.arango.searchNodeConfigs(query, maxResults, queryEmbedding);
     }
 
     // ─── Neighborhood ───────────────────────────────────────────────

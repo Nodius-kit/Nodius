@@ -6,6 +6,7 @@ import { debugAI } from "../aiLogger.js";
 
 export interface GraphRAGOptions {
     maxNodes?: number;
+    maxConfigs?: number;
     maxDepth?: number;
     truncateData?: number;
     /** Cache TTL in ms. Default 120000 (2 min). Set to 0 to disable. */
@@ -14,6 +15,7 @@ export interface GraphRAGOptions {
 
 const DEFAULT_OPTIONS: Required<GraphRAGOptions> = {
     maxNodes: 20,
+    maxConfigs: 12,
     maxDepth: 2,
     truncateData: 2000,
     cacheTTLMs: 120_000,
@@ -22,6 +24,12 @@ const DEFAULT_OPTIONS: Required<GraphRAGOptions> = {
 /**
  * GraphRAG Retriever — assembles a compact context for the LLM
  * from a user query + graph data source.
+ *
+ * Semantic search runs on **NodeTypeConfig primitives** (the catalog of
+ * available node types), not on instances. The retriever then materialises
+ * instances of the matched primitives from the user's graph and expands
+ * their neighbourhood. This lets the assistant recommend a primitive even
+ * when the user hasn't placed one yet.
  */
 export class GraphRAGRetriever {
     private dataSource: GraphDataSource;
@@ -41,11 +49,13 @@ export class GraphRAGRetriever {
 
     /**
      * Build the full GraphRAG context from a user query.
-     * 1. Search nodes matching the query
-     * 2. Expand neighborhood around top results
-     * 3. Collect edges between found nodes
-     * 4. Gather referenced NodeTypeConfigs
-     * 5. Assemble into compact context
+     * 1. Embed the query (when an embedding provider is available)
+     * 2. Semantic-search NodeTypeConfig primitives → top-N relevant types
+     * 3. Token-search instances by query (independent of primitives)
+     * 4. Materialise instances whose `type` matches a relevant primitive
+     * 5. Expand BFS neighbourhood around the seed instances
+     * 6. Keep edges between found instances
+     * 7. Assemble compact context (relevant primitives + relevant instances)
      */
     async retrieve(graphKey: string, query: string): Promise<GraphRAGContext> {
         // Check cache
@@ -63,7 +73,7 @@ export class GraphRAGRetriever {
             throw new Error(`Graph not found: ${graphKey}`);
         }
 
-        // Step 0: Generate embedding for the query (if provider available)
+        // Step 1: Generate embedding for the query (if provider available)
         let queryEmbedding: number[] | undefined;
         if (this.embeddingProvider && query.trim().length > 0) {
             try {
@@ -74,19 +84,49 @@ export class GraphRAGRetriever {
             }
         }
 
-        // Step 1: Search nodes (fallback to all nodes if search returns nothing)
-        let searchResults = await this.dataSource.searchNodes(graphKey, query, this.options.maxNodes, queryEmbedding);
-        if (searchResults.length === 0) {
-            searchResults = await this.dataSource.getNodes(graphKey);
-            searchResults = searchResults.slice(0, this.options.maxNodes);
+        // Step 2: Semantic search on primitives (the catalog of node types)
+        const relevantPrimitives = await this.dataSource.searchNodeConfigs(
+            query,
+            this.options.maxConfigs,
+            queryEmbedding,
+        );
+        const relevantPrimitiveKeys = new Set(relevantPrimitives.map(c => c._key));
+
+        // Step 3: Token-search instances by query (find user nodes named/data-matching)
+        const tokenMatchedInstances = await this.dataSource.searchNodes(
+            graphKey,
+            query,
+            this.options.maxNodes,
+        );
+
+        // Step 4: Materialise instances of relevant primitives from the graph
+        const allInstances = await this.dataSource.getNodes(graphKey);
+        const primitiveInstances = allInstances.filter(n => relevantPrimitiveKeys.has(n.type));
+
+        // Merge candidate seeds: token matches first (most specific), then
+        // primitive-driven instances. Deduplicate by _key, cap at maxNodes.
+        const seedMap = new Map<string, Node<unknown>>();
+        for (const n of tokenMatchedInstances) seedMap.set(n._key, n);
+        for (const n of primitiveInstances) {
+            if (seedMap.size >= this.options.maxNodes) break;
+            if (!seedMap.has(n._key)) seedMap.set(n._key, n);
         }
 
-        // Step 2: Expand neighborhood for top results (max 5 seed nodes)
-        const seedNodes = searchResults.slice(0, 5);
-        const expandedNodeKeys = new Set<string>(searchResults.map(n => n._key));
+        // Fallback: if nothing matched at all (no relevant primitive instances
+        // and no token hits), seed with whatever the graph has.
+        if (seedMap.size === 0) {
+            for (const n of allInstances.slice(0, this.options.maxNodes)) {
+                seedMap.set(n._key, n);
+            }
+        }
+
+        const seedNodes = [...seedMap.values()];
+
+        // Step 5: Expand neighbourhood for the first few seeds
+        const expandedNodeKeys = new Set<string>(seedNodes.map(n => n._key));
         const expandedEdges: Edge[] = [];
 
-        for (const seed of seedNodes) {
+        for (const seed of seedNodes.slice(0, 5)) {
             const neighborhood = await this.dataSource.getNeighborhood(
                 graphKey,
                 seed._key,
@@ -99,7 +139,7 @@ export class GraphRAGRetriever {
             expandedEdges.push(...neighborhood.edges);
         }
 
-        // Step 3: Fetch all found nodes
+        // Fetch every unique node (cap at maxNodes)
         const allNodes: Node<unknown>[] = [];
         for (const key of expandedNodeKeys) {
             if (allNodes.length >= this.options.maxNodes) break;
@@ -107,7 +147,7 @@ export class GraphRAGRetriever {
             if (node) allNodes.push(node);
         }
 
-        // Step 4: Filter edges to only those between found nodes
+        // Step 6: Keep only edges whose endpoints are both in our node set
         const nodeKeySet = new Set(allNodes.map(n => n._key));
         const uniqueEdges = new Map<string, Edge>();
         for (const e of expandedEdges) {
@@ -116,12 +156,25 @@ export class GraphRAGRetriever {
             }
         }
 
-        // Step 5: Collect referenced NodeTypeConfigs
-        const configs = await this.dataSource.getNodeConfigs(graphKey);
+        // Step 7: Final config set = semantically-relevant primitives ∪
+        // primitives actually used by the instances we kept. The union is
+        // important: the LLM needs the spec for any type it sees in
+        // relevantNodes, even when that type wasn't a top semantic match.
         const usedTypes = new Set(allNodes.map(n => n.type));
-        const relevantConfigs = configs.filter(c => usedTypes.has(c._key));
+        const configsByKey = new Map<string, NodeTypeConfig>();
+        for (const c of relevantPrimitives) configsByKey.set(c._key, c);
+        if (usedTypes.size > 0) {
+            const missingTypes = [...usedTypes].filter(t => !configsByKey.has(t));
+            if (missingTypes.length > 0) {
+                const extraConfigs = await this.dataSource.getNodeConfigs(graphKey);
+                for (const c of extraConfigs) {
+                    if (missingTypes.includes(c._key)) configsByKey.set(c._key, c);
+                }
+            }
+        }
+        const finalConfigs = [...configsByKey.values()];
 
-        // Step 6: Assemble context
+        // Assemble context
         const result: GraphRAGContext = {
             graph: {
                 _key: graph._key,
@@ -130,12 +183,18 @@ export class GraphRAGRetriever {
                 sheets: graph.sheets,
                 metadata: graph.metadata,
             },
-            relevantNodes: allNodes.map(n => this.nodeToRelevant(n, graph.sheets, relevantConfigs)),
+            relevantNodes: allNodes.map(n => this.nodeToRelevant(n, graph.sheets, finalConfigs)),
             relevantEdges: [...uniqueEdges.values()].map(e => this.edgeToRelevant(e)),
-            nodeTypeConfigs: relevantConfigs.map(c => this.configToSummary(c)),
+            nodeTypeConfigs: finalConfigs.map(c => this.configToSummary(c)),
         };
 
-        debugAI("rag_retrieve", { graphKey, query, nodeCount: allNodes.length, cacheHit: false });
+        debugAI("rag_retrieve", {
+            graphKey,
+            query,
+            nodeCount: allNodes.length,
+            primitiveCount: finalConfigs.length,
+            cacheHit: false,
+        });
 
         // Store in cache
         if (this.options.cacheTTLMs > 0) {
@@ -209,4 +268,3 @@ export class GraphRAGRetriever {
         };
     }
 }
-

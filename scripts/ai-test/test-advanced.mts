@@ -85,6 +85,19 @@ class TestDataSource implements GraphDataSource {
         return (await cursor.all()).map(n => this.toLocal(n, graphKey));
     }
 
+    async searchNodeConfigs(query: string, maxResults = 10): Promise<NodeTypeConfig[]> {
+        const q = query.toLowerCase().trim();
+        if (q.length <= 2) return (await this.getNodeConfigs("")).slice(0, maxResults);
+        const tokens = q.split(/\s+/).filter(t => t.length > 2);
+        const cursor = await db.query(aql`
+            FOR c IN nodius_node_config
+                LET searchText = LOWER(CONCAT_SEPARATOR(" ", c._key, c.displayName || "", c.description || "", c.category || ""))
+                LET score = LENGTH(FOR token IN ${tokens} FILTER CONTAINS(searchText, token) RETURN 1)
+                FILTER score > 0 SORT score DESC LIMIT ${maxResults} RETURN c
+        `);
+        return await cursor.all();
+    }
+
     async getNeighborhood(graphKey: string, nodeKey: string, maxDepth = 2): Promise<{ nodes: Node<unknown>[]; edges: Edge[] }> {
         const startId = `nodius_nodes/${graphKey}-${nodeKey}`;
         const cursor = await db.query(aql`

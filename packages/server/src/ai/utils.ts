@@ -2,7 +2,7 @@
  * Shared utilities for the AI module.
  */
 
-import {deepEqual, type Node } from "@nodius/utils";
+import { deepEqual, type NodeTypeConfig } from "@nodius/utils";
 import type { HandleSummary } from "./types.js";
 
 /**
@@ -19,25 +19,20 @@ export function truncate(str: string, maxLen: number): string {
 const EMBEDDING_TEXT_MAX_LEN = 15000;
 
 /**
- * Build a plain-text representation of a node for embedding generation.
- * Concatenates type and data into a single string.
- * Truncated to EMBEDDING_TEXT_MAX_LEN to stay within model token limits.
+ * Build a plain-text representation of a NodeTypeConfig (primitive) for
+ * embedding generation. The RAG semantic search runs on these vectors so the
+ * LLM can suggest a node *type* even when no instance of it exists in the
+ * user's graph yet.
  */
-export function createNodeEmbeddingText(node: Node<unknown>): string {
+export function createNodeConfigEmbeddingText(config: NodeTypeConfig): string {
     const parts: string[] = [];
 
-    // Node type (e.g. "html", "starter", custom types)
-    if (node.type) {
-        parts.push(`type: ${node.type}`);
-    }
+    if (config.displayName) parts.push(`name: ${config.displayName}`);
+    if (config.category) parts.push(`category: ${config.category}`);
+    if (config.description) parts.push(`description: ${config.description}`);
 
-    // Data payload (arbitrary JSON attached to the node)
-    if (node.data !== undefined && node.data !== null) {
-        const dataStr = typeof node.data === "string" ? node.data : JSON.stringify(node.data);
-        if (dataStr.length > 0 && dataStr !== "{}") {
-            parts.push(`data: ${dataStr}`);
-        }
-    }
+    const handlesSummary = summarizeConfigHandles(config);
+    if (handlesSummary) parts.push(`handles: ${handlesSummary}`);
 
     const text = parts.join("\n");
     return text.length > EMBEDDING_TEXT_MAX_LEN
@@ -46,16 +41,34 @@ export function createNodeEmbeddingText(node: Node<unknown>): string {
 }
 
 /**
- * Determine if a node's *content* has changed compared to its original version.
- * Returns false for position-only or size-only moves (posX, posY, size).
- * Used to avoid regenerating embeddings when a node is just dragged around.
+ * Decide whether an updated NodeTypeConfig needs a fresh embedding. Skips
+ * re-embedding when only fields irrelevant to semantic meaning changed
+ * (icon, border colors, sizes, timestamps).
  */
-export function hasNodeContentChanged(original: Node<unknown>, current: Node<unknown>): boolean {
-    // Compare the fields that affect semantic meaning
-    if (original.type !== current.type) return true;
-    if(!deepEqual(original.data, current.data)) return true;
-    if(!deepEqual(original.handles, current.handles)) return true;
+export function hasNodeConfigContentChanged(
+    original: NodeTypeConfig | undefined,
+    current: NodeTypeConfig,
+): boolean {
+    if (!original) return true;
+    if (original.displayName !== current.displayName) return true;
+    if ((original.description ?? "") !== (current.description ?? "")) return true;
+    if ((original.category ?? "") !== (current.category ?? "")) return true;
+    if (!deepEqual(original.node?.handles, current.node?.handles)) return true;
     return false;
+}
+
+function summarizeConfigHandles(config: NodeTypeConfig): string {
+    const handles = config.node?.handles;
+    if (!handles) return "";
+    const parts: string[] = [];
+    for (const [side, group] of Object.entries(handles)) {
+        const points = (group as { point?: Array<{ type: string; accept: string; display?: string }> }).point ?? [];
+        for (const p of points) {
+            const display = p.display ? `:${p.display}` : "";
+            parts.push(`${side}:${p.type}(${p.accept})${display}`);
+        }
+    }
+    return parts.join(", ");
 }
 
 // ─── LLM context helpers ─────────────────────────────────────────────

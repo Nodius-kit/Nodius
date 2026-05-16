@@ -59,6 +59,40 @@ import {aql} from "arangojs";
 import {db} from "../server";
 import escapeHTML from 'escape-html';
 import {getUserWorkspace, verifyWorkspaceAccess} from "../auth/workspaceAccess";
+import {detectEmbeddingProvider, type EmbeddingProvider} from "../ai/providers/embeddingProvider";
+import {createNodeConfigEmbeddingText, hasNodeConfigContentChanged} from "../ai/utils";
+
+/** Lazily-resolved embedding provider shared across the REST endpoints. */
+let embeddingProvider: EmbeddingProvider | null | undefined;
+function getEmbeddingProvider(): EmbeddingProvider | null {
+    if (embeddingProvider === undefined) {
+        embeddingProvider = detectEmbeddingProvider();
+    }
+    return embeddingProvider;
+}
+
+/**
+ * Fire-and-forget embedding generation for a NodeTypeConfig. Powers the
+ * semantic RAG search on the primitives catalog. Errors are logged but
+ * never propagated — embedding is best-effort and must not break the API.
+ */
+function embedNodeConfigInBackground(
+    config: NodeTypeConfig,
+    collection: DocumentCollection,
+): void {
+    const provider = getEmbeddingProvider();
+    if (!provider) return;
+    void (async () => {
+        try {
+            const text = createNodeConfigEmbeddingText(config);
+            if (text.trim().length === 0) return;
+            const embedding = await provider.generateEmbedding(text);
+            await collection.update(config._key, { embedding });
+        } catch (err) {
+            console.warn(`AI: Failed to embed node config ${config._key}:`, err);
+        }
+    })();
+}
 
 export class RequestNodeConfig {
 
@@ -216,6 +250,8 @@ export class RequestNodeConfig {
 
                 const meta = await nodeConfig_collection.save(nodeConfigDoc);
 
+                embedNodeConfigInBackground(nodeConfigDoc as NodeTypeConfig, nodeConfig_collection);
+
                 return res.status(200).json({...nodeConfigDoc, _key: meta._key});
             } catch (err) {
                 console.error("Error creating node config:", err);
@@ -284,6 +320,10 @@ export class RequestNodeConfig {
                     lastUpdatedTime: Date.now(),
                 };
                 const meta = await nodeConfig_collection.replace(body.nodeConfig._key, updatedConfig);
+
+                if (hasNodeConfigContentChanged(existing as NodeTypeConfig, updatedConfig as NodeTypeConfig)) {
+                    embedNodeConfigInBackground(updatedConfig as NodeTypeConfig, nodeConfig_collection);
+                }
 
                 return res.status(200).json({...updatedConfig, _rev: meta._rev});
             } catch (err) {
@@ -384,10 +424,16 @@ export class RequestNodeConfig {
                 }
 
                 // Update the displayName
+                const newDisplayName = escapeHTML(body.newDisplayName);
                 await nodeConfig_collection.update(body._key, {
-                    displayName: escapeHTML(body.newDisplayName),
+                    displayName: newDisplayName,
                     //lastUpdatedTime: Date.now()
                 });
+
+                embedNodeConfigInBackground(
+                    { ...existing, displayName: newDisplayName } as NodeTypeConfig,
+                    nodeConfig_collection,
+                );
 
                 return res.status(200).json({ success: true });
             } catch (err) {

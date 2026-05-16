@@ -673,6 +673,9 @@ class TestDataSource implements GraphDataSource {
     async searchNodes(graphKey: string, _query: string, maxResults = 10): Promise<Node<unknown>[]> {
         return (await this.getNodes(graphKey)).slice(0, maxResults);
     }
+    async searchNodeConfigs(_query: string, maxResults = 10): Promise<NodeTypeConfig[]> {
+        return (await this.getNodeConfigs("")).slice(0, maxResults);
+    }
     async getNeighborhood(graphKey: string, nodeKey: string, maxDepth = 2): Promise<{ nodes: Node<unknown>[]; edges: Edge[] }> {
         const startId = `nodius_nodes/${graphKey}-${nodeKey}`;
         try {

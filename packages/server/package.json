@@ -9,7 +9,7 @@
     "create-admin": "tsx ./src/cli/createAdmin.ts",
     "export": "tsx ./src/cli/export.ts",
     "import": "tsx ./src/cli/import.ts",
-    "ai:embed-nodes": "tsx ./src/cli/ai-embed-nodes.ts"
+    "ai:embed-node-configs": "tsx ./src/cli/ai-embed-node-configs.ts"
   },
   "repository": {
     "type": "git",

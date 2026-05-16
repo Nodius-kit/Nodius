@@ -4,7 +4,7 @@
 
 Le module AI permet a un utilisateur de **discuter avec un LLM** (DeepSeek, OpenAI, Anthropic) qui "voit" et comprend le contenu d'un graph Nodius. L'IA peut explorer les nodes, edges, configs, repondre a des questions, et **proposer des modifications** (creation/suppression de nodes/edges) soumises a validation humaine (Human-in-the-Loop). La recherche utilise optionnellement des **embeddings vectoriels** (OpenAI) avec `COSINE_SIMILARITY` pour une comprehension semantique, avec fallback sur la recherche par tokens.
 
-**Write-path embeddings :** Le `WebSocketManager` genere automatiquement les embeddings des nodes lors de l'auto-save (toutes les 30s) pour les nodes crees ou dont le contenu a change (pas les deplacements). Un script CLI `ai:embed-nodes` permet de migrer les nodes existants.
+**Write-path embeddings :** Les embeddings sont calcules sur les **primitives** (`nodius_node_config`), pas sur les instances. Le `WebSocketManager` (canal node-config) et les endpoints REST `requestNodeConfig.ts` generent automatiquement un embedding apres save quand un champ semantique a change (`displayName`, `description`, `category`, `handles`). Le script CLI `ai:embed-node-configs` permet de migrer le catalogue existant.
 
 ```
 Client React
@@ -115,44 +115,50 @@ Le `GraphRAGRetriever` construit un sous-ensemble pertinent du graph :
 ```
 retrieve(graphKey, "fetch api NBA") :
 
-  0. Si EmbeddingProvider disponible :
+  0. Cache check (cle `{graphKey}:{query}`, TTL 2 min)
+
+  1. Si EmbeddingProvider disponible et query non vide :
      → Genere l'embedding de la query (vecteur 1536 dims)
-     → Passe queryEmbedding a searchNodes()
 
-  1. searchNodes("fetch api NBA", queryEmbedding?)
-     → Si queryEmbedding fourni : COSINE_SIMILARITY sur les nodes embeddes en ArangoDB
-       (score > 0.3, tries par score DESC). Fallback tokens si aucun resultat.
-     → Sinon : Tokenise la query, score chaque node sur ses champs
-       (_key, type, data, config.displayName, config.description)
-     → Retourne les nodes tries par score descendant
+  2. searchNodeConfigs(query, maxConfigs, queryEmbedding?)
+     → Recherche SEMANTIQUE sur les PRIMITIVES (nodius_node_config)
+     → Si queryEmbedding fourni : COSINE_SIMILARITY sur c.embedding
+       (score > 0.3, tries par score DESC). Fallback tokens si aucun hit.
+     → Sinon : tokenise la query, score sur _key/displayName/description/category
+     → Retourne les TOP primitives (types) pertinents
 
-  2. Si aucun resultat → fallback: prend tous les nodes (slice maxNodes)
+  3. searchNodes(graphKey, query, maxNodes)
+     → Recherche TEXTUELLE sur les instances (nodius_nodes)
+     → Tokenise la query, score sur _key/type/data/config
+     → Retourne les instances dont le contenu matche directement
 
-  3. Expansion du voisinage (5 seed nodes max) :
+  4. Fusion des seeds :
+     a. Instances token-matched (Etape 3) en premier
+     b. Plus les instances dont le `type` est dans les primitives pertinentes
+     c. Deduplique, cape a maxNodes
+     d. Si aucun match → fallback : premieres instances du graphe
+
+  5. Expansion du voisinage (5 seeds max) :
      Pour chaque seed, BFS profondeur 2 (ANY direction)
-     → Collecte les nodes et edges voisins
 
-  4. Fetch tous les nodes uniques trouves (max 20)
-
-  5. Filtre les edges : garde seulement celles dont
+  6. Filtre les edges : garde seulement celles dont
      source ET target sont dans les nodes trouves
 
-  6. Collecte les NodeTypeConfigs references par les types des nodes
+  7. Jeu final de NodeTypeConfigs :
+     union(primitives semantiques) + backfill(configs des types utilises
+     par les nodes finaux, pour que le LLM ait la spec de tout ce qu'il voit)
 
-  7. Assemblage : tronque data (2000 chars)
-     Resout les noms de sheets (ID → nom lisible)
-     → Stocke dans le cache TTL (si active, cle `{graphKey}:{query}`)
+  8. Assemblage : tronque data (2000 chars)
+     → Stocke dans le cache TTL
      → Retourne un GraphRAGContext compact
-
-  Note : le cache est verifie en etape 0 (avant l'embedding).
-  Si une entree valide existe, le pipeline retourne immediatement.
 ```
 
 **Options configurables** (`GraphRAGOptions`) :
 
 | Option | Defaut | Description |
 |--------|--------|-------------|
-| `maxNodes` | 20 | Nombre max de nodes dans le contexte |
+| `maxNodes` | 20 | Nombre max d'instances dans le contexte |
+| `maxConfigs` | 12 | Nombre max de primitives semantiques retournees |
 | `maxDepth` | 2 | Profondeur BFS pour l'expansion |
 | `truncateData` | 2000 | Taille max des data serialisees (chars) |
 | `cacheTTLMs` | 120000 | TTL du cache RAG en ms (0 pour desactiver) |
@@ -448,7 +454,7 @@ Quand `AI_DEBUG=true`, `debugAI()` emet des logs structurés a chaque etape :
 
 | Interface | Description |
 |-----------|-------------|
-| `GraphDataSource` | Interface abstraite, 7 methodes (getGraph, getNodes, getEdges, getNodeByKey, getNodeConfigs, searchNodes(+queryEmbedding?), getNeighborhood) |
+| `GraphDataSource` | Interface abstraite, 8 methodes (getGraph, getNodes, getEdges, getNodeByKey, getNodeConfigs, searchNodes, searchNodeConfigs(+queryEmbedding?), getNeighborhood) |
 | `MutableGraphDataSource` | Etend GraphDataSource avec 4 methodes de mutation (createNode, deleteNode, createEdge, deleteEdge) |
 | `AIChatMessage` | Message generique (role, content, toolCallId?, toolCalls?) |
 | `AIToolCall` | Appel d'outil (id, name, arguments) |
@@ -460,8 +466,8 @@ Fonctions utilitaires extraites pour eviter la duplication entre `graphRAGRetrie
 
 - **`truncate(str, maxLen)`** — Tronque une string, ajoute "..." si depassement
 - **`summarizeHandles(handles)`** — Convertit les handles bruts en `HandleSummary[]` compact
-- **`createNodeEmbeddingText(node)`** — Construit un texte semantique a partir d'un node pour la generation d'embedding (concatene `type` et `data`). Tronque a 15000 caracteres. Utilise par le write-path (auto-save) et le script de migration.
-- **`hasNodeContentChanged(original, current)`** — Compare deux versions d'un node et retourne `true` uniquement si le contenu semantique a change (`type`, `data`, `handles`). Ignore les changements de position (`posX`, `posY`) et de taille (`size`). Utilise par le write-path pour eviter de regenerer un embedding lors d'un simple deplacement.
+- **`createNodeConfigEmbeddingText(config)`** — Construit un texte semantique a partir d'une PRIMITIVE (`NodeTypeConfig`) : `displayName`, `description`, `category`, `handles`. Tronque a 15000 caracteres. Alimente le vector store sur lequel tourne la recherche semantique RAG. Utilise par les endpoints REST `requestNodeConfig.ts`, `webSocketManager.ts` (canal node-config) et le script CLI `ai:embed-node-configs`.
+- **`hasNodeConfigContentChanged(original, current)`** — Compare deux versions d'une primitive et retourne `true` uniquement si un champ semantique a change (`displayName`, `description`, `category`, `handles`). Ignore les changements purement cosmetiques (icon, border, size). Evite de regenerer un embedding pour un simple changement d'icone.
 
 ### `htmlToHtmlObject.ts` — Convertisseur HTML → HtmlObject
 
@@ -498,8 +504,9 @@ getCacheSize(): number
 **Pipeline interne :**
 1. **Cache check** : si le cache contient une entree valide pour `{graphKey}:{query}`, retourne directement
 2. **Embedding** (optionnel) : si `embeddingProvider` est fourni et la query non vide, genere l'embedding vectoriel de la query (`generateEmbedding(query)` → `number[]`). En cas d'erreur, continue sans embedding (fallback tokens).
-3. **Search** : `searchNodes(graphKey, query, maxNodes, queryEmbedding?)` — passe l'embedding si disponible
-4. **Expand neighbors** → **fetch nodes** → **filter edges** → **collect configs** → **assemble**
+3. **Search primitives** : `searchNodeConfigs(query, maxConfigs, queryEmbedding?)` — vector search semantique sur le catalogue
+4. **Search instances** : `searchNodes(graphKey, query, maxNodes)` — token search sur le graphe utilisateur
+5. **Fusion seeds** → **expand neighbors** → **filter edges** → **union+backfill configs** → **assemble**
 5. **Cache store** : stocke le resultat dans le cache
 
 Methodes privees :
@@ -521,11 +528,12 @@ Constructeur prend le `workspace` pour l'isolation multi-tenant.
 | `getEdges` | `FOR e IN nodius_edges FILTER e.graphKey == @gk [AND e.sheet == @s]` |
 | `getNodeByKey` | `FOR n IN nodius_nodes FILTER n._key == @compositeKey` (compose: `{graphKey}-{nodeKey}`) |
 | `getNodeConfigs` | `FOR c IN nodius_node_config FILTER c.workspace == @ws` |
-| `searchNodes` | **Vectoriel** (si `queryEmbedding` fourni) : `COSINE_SIMILARITY(n.embedding, @queryEmbedding)` score > 0.3, tri DESC. **Fallback tokens** : concatene champs texte + config, tokenise, score par CONTAINS |
+| `searchNodes` | **Tokens only** : concatene champs texte (_key, type, data) + config.displayName/description, tokenise, score par CONTAINS. Pas de vector search (les instances ne sont pas embeddees). |
+| `searchNodeConfigs` | **Vectoriel** (si `queryEmbedding` fourni) : `COSINE_SIMILARITY(c.embedding, @queryEmbedding)` sur `nodius_node_config`, score > 0.3, tri DESC. **Fallback tokens** : score sur _key/displayName/description/category par CONTAINS. |
 | `getNeighborhood` | AQL graph traversal `FOR v, e IN 1..@depth ANY/INBOUND/OUTBOUND @startId nodius_edges` avec BFS + uniqueVertices |
 
-**Recherche vectorielle (`searchNodes`)** :
-- Si `queryEmbedding` est fourni (non vide), tente d'abord une recherche par `COSINE_SIMILARITY` sur le champ `n.embedding` des documents ArangoDB
+**Recherche vectorielle (`searchNodeConfigs`)** :
+- Si `queryEmbedding` est fourni (non vide), tente d'abord une recherche par `COSINE_SIMILARITY` sur le champ `c.embedding` des documents `nodius_node_config`
 - Filtre `n.embedding != null` (les nodes sans embedding sont ignores)
 - Seuil de similarite : `score > 0.3`
 - Si aucun resultat vectoriel ou erreur → fallback vers la recherche par tokens classique
@@ -650,7 +658,7 @@ Appelle `client.embeddings.create({ model, input: text })` et enregistre l'usage
 
 **Factory : `detectEmbeddingProvider()`** — auto-detecte via `OPENAI_API_KEY`. Modele configurable via `EMBEDDING_MODEL` env var (defaut: `text-embedding-3-small`). Retourne `null` si pas de cle API → le systeme utilise la recherche par tokens.
 
-**Injection :** Le provider est detecte au demarrage dans `WsAIController` et `RequestAI`, puis transmis a `AIAgent` → `GraphRAGRetriever` → `searchNodes(queryEmbedding)`.
+**Injection :** Le provider est detecte au demarrage dans `WsAIController` et `RequestAI`, puis transmis a `AIAgent` → `GraphRAGRetriever` → `searchNodeConfigs(queryEmbedding)`.
 
 ---
 
@@ -661,73 +669,73 @@ Appelle `client.embeddings.create({ model, input: text })` et enregistre l'usage
 Le write-path assure que les nodes en base ArangoDB contiennent un champ `embedding` (vecteur `number[]`) a jour, utilise par la recherche vectorielle du read-path.
 
 ```
-Node cree/modifie
+NodeTypeConfig (primitive) cree/renomme/modifie
        │
        ▼
-WebSocketManager.saveGraphChanges()  ← auto-save toutes les 30s
+Soit canal REST : POST /api/nodeconfig/{create,update,rename}     ← requestNodeConfig.ts
+Soit canal WS   : WebSocketManager.saveNodeConfigChanges()        ← auto-save 30s
        │
-       ├── Sauvegarde classique (nodes, edges) → ArangoDB
+       ├── Sauvegarde classique (config) → nodius_node_config
        │
-       └── [fire-and-forget] generateNodeEmbeddings()
+       └── [fire-and-forget] embedNodeConfigInBackground()
               │
-              ├── hasNodeContentChanged(original, current)?
-              │     → false (position/taille seule) → skip
-              │     → true (type, data, handles) → continue
+              ├── hasNodeConfigContentChanged(original, current)?
+              │     → false (icon/border/size seul) → skip
+              │     → true (displayName, description, category, handles) → continue
               │
-              ├── createNodeEmbeddingText(node) → texte semantique
+              ├── createNodeConfigEmbeddingText(config) → texte semantique
               │
               ├── EmbeddingProvider.generateEmbedding(text) → number[]
               │
-              └── collection.update(arangoKey, { embedding }) → ArangoDB
+              └── nodeConfig_collection.update(_key, { embedding }) → ArangoDB
 ```
 
-### `webSocketManager.ts` — Integration write-path
+### `webSocketManager.ts` + `requestNodeConfig.ts` — Integration write-path
 
 **Changements :**
-- Import de `createNodeEmbeddingText`, `hasNodeContentChanged` (depuis `ai/utils.ts`) et `detectEmbeddingProvider` (depuis `ai/embeddingProvider.ts`)
-- Nouveau champ `private embeddingProvider: EmbeddingProvider | null` — detecte au constructeur
-- Apres la sauvegarde classique dans `saveGraphChanges()`, les nodes crees (`nodesToCreate`) et les nodes dont le contenu a change (`nodesToUpdate` filtres par `hasNodeContentChanged`) sont passes a `generateNodeEmbeddings()` en fire-and-forget (`.catch()`)
-- Nouvelle methode privee `generateNodeEmbeddings(nodes, graphKey, collection, provider)` — itere les nodes, genere embedding via `createNodeEmbeddingText` + `provider.generateEmbedding()`, et `collection.update(arangoKey, { embedding })`. Chaque node est protege par try/catch individuel.
+- Le write-path tourne sur **`nodius_node_config`** (primitives), plus sur les instances `nodius_nodes`.
+- `requestNodeConfig.ts` declenche un embedding apres `/api/nodeconfig/create`, `/api/nodeconfig/update` (si `hasNodeConfigContentChanged`) et `/api/nodeconfig/rename`.
+- `webSocketManager.saveNodeConfigChanges()` declenche le meme embedding apres chaque save auto, en utilisant l'`originalConfig` comme reference de diff.
+- Le helper interne `generateNodeConfigEmbedding(config, collection, provider)` est protege par try/catch individuel.
 
 **Garanties de securite :**
-- L'appel d'embedding ne bloque jamais l'auto-save classique (fire-and-forget avec `.catch()`)
-- Un echec d'embedding sur un node n'affecte pas les autres (try/catch par node)
-- Les nodes simplement deplaces (posX/posY) ou redimensionnes (size) ne declenchent pas de re-embedding
+- L'appel d'embedding ne bloque jamais le save (fire-and-forget avec `.catch()`)
+- Les changements purement cosmetiques (icon, border, size) ne declenchent pas de re-embedding
 - Si aucun `EmbeddingProvider` n'est configure (`OPENAI_API_KEY` absent), tout le write-path est ignore
 
-### `src/cli/ai-embed-nodes.ts` — Script de migration CLI
+### `src/cli/ai-embed-node-configs.ts` — Script de migration CLI
 
-Script d'administration pour generer les embeddings des nodes existants en base.
+Script d'administration pour generer les embeddings du catalogue de primitives existant.
 
 **Usage :**
 ```bash
-# Embed uniquement les nodes sans embedding existant
-npm run ai:embed-nodes
+# Embed uniquement les configs sans embedding existant
+npm run ai:embed-node-configs
 
-# Force re-embed tous les nodes
-npm run ai:embed-nodes -- --force
+# Force re-embed tous les configs
+npm run ai:embed-node-configs -- --force
 
 # Configuration personnalisee
-npm run ai:embed-nodes -- arangodb=http://localhost:8529 arangodb_name=nodius batch=50 delay=200
+npm run ai:embed-node-configs -- arangodb=http://localhost:8529 arangodb_name=nodius batch=50 delay=200
 ```
 
 **Parametres :**
 | Parametre | Defaut | Description |
 |-----------|--------|-------------|
-| `--force` | — | Re-genere les embeddings meme pour les nodes qui en ont deja |
+| `--force` | — | Re-genere les embeddings meme pour les configs qui en ont deja |
 | `arangodb` | `http://127.0.0.1:8529` | URL ArangoDB |
 | `arangodb_name` | `nodius` | Nom de la base |
 | `arangodb_user` | `root` | Utilisateur ArangoDB |
 | `arangodb_pass` | `azerty` | Mot de passe ArangoDB |
-| `batch` | `100` | Nombre de nodes par batch |
+| `batch` | `100` | Nombre de configs par batch |
 | `delay` | `100` | Delai en ms entre chaque appel API (rate limiting) |
 
 **Fonctionnement :**
 1. Detecte le provider d'embedding via `detectEmbeddingProvider()` (necessite `OPENAI_API_KEY`)
-2. Requete AQL : filtre `doc.embedding == null` (ou tous si `--force`)
-3. Pour chaque node : `createNodeEmbeddingText()` → `generateEmbedding()` → `collection.update()`
+2. Requete AQL : filtre `doc.embedding == null` dans `nodius_node_config` (ou tous si `--force`)
+3. Pour chaque config : `createNodeConfigEmbeddingText()` → `generateEmbedding()` → `collection.update()`
 4. Rate limiting : `delay` ms entre chaque appel API
-5. Rapport final : nodes traites, embeddes, ignores (texte vide), echoues
+5. Rapport final : configs traites, embeddes, ignores (texte vide), echoues
 
 **Prerequis :** `OPENAI_API_KEY` dans l'environnement.
 
@@ -1164,7 +1172,8 @@ Le `WebSocketManager` implemente cette interface directement via sa methode `get
 | `getNodes(graphKey, sheetId?)` | Itere `nodeMap` de chaque sheet | Fallback si graph pas en memoire |
 | `getEdges(graphKey, sheetId?)` | Itere `edgeMap` avec deduplication par `_key` | Fallback |
 | `getNodeByKey(graphKey, nodeKey)` | Cherche dans tous les sheets | Fallback |
-| `searchNodes(graphKey, query, maxResults, queryEmbedding?)` | En memoire : recherche par tokens (pas d'embedding). Fallback ArangoDB : passe `queryEmbedding` pour recherche vectorielle | Fallback avec embedding |
+| `searchNodes(graphKey, query, maxResults)` | En memoire : recherche par tokens. Fallback ArangoDB : token search aussi (pas de vector sur les instances) | Fallback |
+| `searchNodeConfigs(query, maxResults, queryEmbedding?)` | Toujours delegue a Arango — les configs ne sont pas tenus en memoire | Toujours Arango |
 | `getNeighborhood(graphKey, nodeKey)` | BFS en memoire | Fallback |
 
 **Deduplication des edges :** L'`edgeMap` du `WebSocketManager` stocke chaque edge sous deux cles (`"source-{nodeId}"` et `"target-{nodeId}"`). Le `MemoryAwareDataSource` deduplique via un `Set<string>` par `_key`.
@@ -1493,7 +1502,7 @@ Commande : `cd packages/server && npx vitest run`
 
 | Fichier | Tests | Description |
 |---------|-------|-------------|
-| `utils.test.ts` | 25 | `createNodeEmbeddingText` (type, data, truncation, cas vides), `hasNodeContentChanged` (position-only, size-only, type/data/handles changes), `truncate`, `summarizeHandles` |
+| `utils.test.ts` | ~20 | `createNodeConfigEmbeddingText` (displayName, description, category, handles, cas vides), `hasNodeConfigContentChanged` (icon/border-only vs semantic), `truncate`, `summarizeHandles` |
 | `tokenTracker.test.ts` | 24 | Calcul de cout, tokens caches, `recordEmbedding()`, limites, callbacks, singleton, reset, formatting |
 | `systemPrompt.test.ts` | 8 | Prompt contient le graph/sheets/configs, viewer vs editor, TOON format nodes/edges |
 | `readTools.test.ts` | 20 | 7 outils avec MockGraphDataSource, filtrage, erreurs, validation Zod |
@@ -1573,7 +1582,7 @@ packages/server/
 │   ├── ai/
 │   │   ├── AI_MODULE.md                   # Cette documentation
 │   │   ├── types.ts                       # GraphDataSource, GraphRAGContext, ProposedAction, LLMStreamChunk, StreamCallbacks
-│   │   ├── utils.ts                       # Helpers partages (truncate, summarizeHandles, createNodeEmbeddingText, hasNodeContentChanged)
+│   │   ├── utils.ts                       # Helpers partages (truncate, summarizeHandles, createNodeConfigEmbeddingText, hasNodeConfigContentChanged)
 │   │   ├── utils.test.ts                 # 25 tests
 │   │   ├── threadStore.ts                 # ThreadStore class (cache memoire + persistence ArangoDB nodius_ai_threads)
 │   │   ├── actionConverter.ts             # Convertisseur ProposedAction → GraphInstructions/Node/Edge/Delete
@@ -1616,7 +1625,7 @@ packages/server/
 │   │       ├── writeTools.ts              # 3 outils propose_* (HITL) + schemas Zod strict
 │   │       └── writeTools.test.ts         # 17 tests
 │   ├── cli/
-│   │   └── ai-embed-nodes.ts              # Script migration : genere embeddings pour les nodes existants (--force, batch, delay)
+│   │   └── ai-embed-node-configs.ts       # Script migration : genere embeddings pour les NodeTypeConfig existants (--force, batch, delay)
 │   ├── cluster/
 │   │   └── webSocketManager.ts            # Delegation ai:* → WsAIController + write-path embeddings + abort-on-disconnect
 │   └── request/
@@ -1678,9 +1687,9 @@ packages/server/
 - [x] **Authentification JWT** — Token optionnel dans les messages `ai:*`, valide via `AuthManager.getProvider().validateToken()`
 - [x] **Composants React AI** — `AIChatPanel`, `AIChatInput`, `AIInterruptModal`, `AIToolLimitBanner`, `AIThreadList`, `AIChatFloating`, `renderMessageContent` (useDynamicClass, memo, ThemeContext)
 - [x] **EmbeddingProvider** — Interface separee du LLM, implementation OpenAI (text-embedding-3-small/large/ada-002), detection auto via `OPENAI_API_KEY`
-- [x] **Recherche vectorielle** — `COSINE_SIMILARITY` dans ArangoDataSource, fallback gracieux sur tokens, `recordEmbedding()` dans TokenTracker
-- [x] **Write-path embeddings** — Generation automatique des embeddings lors de l'auto-save dans `webSocketManager.ts` (fire-and-forget, try/catch, skip position-only). Helpers `createNodeEmbeddingText()` et `hasNodeContentChanged()` dans `utils.ts`.
-- [x] **Script migration `ai:embed-nodes`** — CLI pour embedder les nodes existants (`src/cli/ai-embed-nodes.ts`, `--force`, rate limiting, batch)
+- [x] **Recherche vectorielle sur primitives** — `COSINE_SIMILARITY` sur `nodius_node_config.embedding` dans ArangoDataSource (`searchNodeConfigs`), fallback gracieux sur tokens, `recordEmbedding()` dans TokenTracker
+- [x] **Write-path embeddings** — Generation automatique des embeddings sur les NodeTypeConfig lors du save (REST `requestNodeConfig.ts` + WS `webSocketManager.saveNodeConfigChanges`). Fire-and-forget, try/catch, skip cosmetique. Helpers `createNodeConfigEmbeddingText()` et `hasNodeConfigContentChanged()` dans `utils.ts`.
+- [x] **Script migration `ai:embed-node-configs`** — CLI pour embedder les primitives existantes (`src/cli/ai-embed-node-configs.ts`, `--force`, rate limiting, batch)
 - [x] **AnthropicProvider** — Implementation complete (chat + tools + streaming) via `@anthropic-ai/sdk`, fonctions de conversion messages/tools/reponse, support cache tokens
 - [x] **Cache TTL GraphRAG** — Cache en memoire avec TTL configurable (defaut 2 min), invalidation automatique dans `resumeConversation()` et `resumeConversationStream()` apres actions HITL
 - [x] **Abort on disconnect** — `onClientDisconnect(ws)` dans `WsAIController`, mapping inverse `wsSessions`, propagation `AbortSignal` aux SDK LLM (OpenAI + Anthropic `{ signal }`)

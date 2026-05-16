@@ -5,6 +5,10 @@
  * against the Nodius collections (nodius_graphs, nodius_nodes, nodius_edges,
  * nodius_node_config).
  *
+ * Semantic vector search lives on `nodius_node_config.embedding` (the catalog
+ * of node-type primitives). Node *instances* are searched by tokens only —
+ * they share their `type` field with a config, so the meaning lives upstream.
+ *
  * Handles composite key conversion: ArangoDB stores `{graphKey}-{localKey}`,
  * but the AI module works with localKeys only (like the client does).
  */
@@ -92,7 +96,7 @@ export class ArangoGraphDataSource implements GraphDataSource {
         return this.toLocalNode(node, graphKey);
     }
 
-    async getNodeConfigs(graphKey: string): Promise<NodeTypeConfig[]> {
+    async getNodeConfigs(_graphKey: string): Promise<NodeTypeConfig[]> {
         const workspaces = [this.workspace, "root"];
         const cursor = await db.query(aql`
             FOR c IN nodius_node_config
@@ -104,10 +108,10 @@ export class ArangoGraphDataSource implements GraphDataSource {
 
     private static vectorIndexEnsured = false;
 
-    static async ensureVectorIndex(dimension: number = 1536): Promise<void> {
+    static async ensureVectorIndex(_dimension: number = 1536): Promise<void> {
         if (ArangoGraphDataSource.vectorIndexEnsured) return;
         try {
-            const collection = db.collection("nodius_nodes");
+            const collection = db.collection("nodius_node_config");
             await collection.ensureIndex({
                 type: "inverted",
                 fields: [{ name: "embedding" }],
@@ -115,35 +119,11 @@ export class ArangoGraphDataSource implements GraphDataSource {
             ArangoGraphDataSource.vectorIndexEnsured = true;
         } catch (err) {
             // Silently fail — COSINE_SIMILARITY works without a dedicated index
-            console.warn("AI: Failed to create vector index (non-critical):", err);
+            console.warn("AI: Failed to create vector index on nodius_node_config (non-critical):", err);
         }
     }
 
-    async searchNodes(graphKey: string, query: string, maxResults = 10, queryEmbedding?: number[]): Promise<Node<unknown>[]> {
-        // Vector search branch: use COSINE_SIMILARITY when embedding is provided
-        if (queryEmbedding?.length) {
-            try {
-                await ArangoGraphDataSource.ensureVectorIndex(queryEmbedding.length);
-                const cursor = await db.query(aql`
-                    FOR n IN nodius_nodes
-                        FILTER n.graphKey == ${graphKey}
-                        FILTER n.embedding != null
-                        LET score = COSINE_SIMILARITY(n.embedding, ${queryEmbedding})
-                        FILTER score > 0.3
-                        SORT score DESC
-                        LIMIT ${maxResults}
-                        RETURN n
-                `);
-                const nodes = await cursor.all();
-                if (nodes.length > 0) {
-                    return nodes.map((n) => this.toLocalNode(n, graphKey));
-                }
-                // No results with embeddings → fall through to token search
-            } catch (err) {
-                console.warn("AI: Vector search failed, falling back to token search:", err);
-            }
-        }
-
+    async searchNodes(graphKey: string, query: string, maxResults = 10): Promise<Node<unknown>[]> {
         const q = query.toLowerCase().trim();
 
         // Short/empty query: return all nodes
@@ -159,7 +139,6 @@ export class ArangoGraphDataSource implements GraphDataSource {
         }
 
         // Token-based text search across node fields
-        // Uses LIKE for each token against a concatenated text representation
         const tokens = q.split(/\s+/).filter(t => t.length > 2);
 
         const cursor = await db.query(aql`
@@ -190,6 +169,65 @@ export class ArangoGraphDataSource implements GraphDataSource {
         `);
         const nodes = await cursor.all();
         return nodes.map((n) => this.toLocalNode(n, graphKey));
+    }
+
+    async searchNodeConfigs(query: string, maxResults = 10, queryEmbedding?: number[]): Promise<NodeTypeConfig[]> {
+        const workspaces = [this.workspace, "root"];
+
+        // Vector search branch
+        if (queryEmbedding?.length) {
+            try {
+                await ArangoGraphDataSource.ensureVectorIndex(queryEmbedding.length);
+                const cursor = await db.query(aql`
+                    FOR c IN nodius_node_config
+                        FILTER c.workspace IN ${workspaces}
+                        FILTER c.embedding != null
+                        LET score = COSINE_SIMILARITY(c.embedding, ${queryEmbedding})
+                        FILTER score > 0.3
+                        SORT score DESC
+                        LIMIT ${maxResults}
+                        RETURN c
+                `);
+                const configs = await cursor.all();
+                if (configs.length > 0) return configs;
+                // No hits with embeddings → fall through to token search
+            } catch (err) {
+                console.warn("AI: Config vector search failed, falling back to token search:", err);
+            }
+        }
+
+        const q = query.toLowerCase().trim();
+        if (q.length <= 2) {
+            const cursor = await db.query(aql`
+                FOR c IN nodius_node_config
+                    FILTER c.workspace IN ${workspaces}
+                    LIMIT ${maxResults}
+                    RETURN c
+            `);
+            return await cursor.all();
+        }
+
+        const tokens = q.split(/\s+/).filter(t => t.length > 2);
+        const cursor = await db.query(aql`
+            FOR c IN nodius_node_config
+                FILTER c.workspace IN ${workspaces}
+                LET searchText = LOWER(CONCAT_SEPARATOR(" ",
+                    c._key,
+                    c.displayName || "",
+                    c.description || "",
+                    c.category || ""
+                ))
+                LET score = LENGTH(
+                    FOR token IN ${tokens}
+                        FILTER CONTAINS(searchText, token)
+                        RETURN 1
+                )
+                FILTER score > 0
+                SORT score DESC
+                LIMIT ${maxResults}
+                RETURN c
+        `);
+        return await cursor.all();
     }
 
     async getNeighborhood(

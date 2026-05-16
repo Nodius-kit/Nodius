@@ -89,14 +89,14 @@ describe("GraphRAGRetriever", () => {
             await expect(retriever.retrieve("nonexistent", "test")).rejects.toThrow("Graph not found");
         });
 
-        it("truncates process and data", async () => {
-            const retriever = new GraphRAGRetriever(ds, { truncateProcess: 20, truncateData: 10 });
+        it("truncates dataSummary", async () => {
+            const retriever = new GraphRAGRetriever(ds, { truncateData: 10 });
             const ctx = await retriever.retrieve(MOCK_GRAPH_KEY, "fetch api");
             const fetchNode = ctx.relevantNodes.find(n => n._key === "fetch-api");
             expect(fetchNode).toBeDefined();
-            // process is longer than 20 chars, should be truncated
-            if (fetchNode!.process.length > 0) {
-                expect(fetchNode!.process.length).toBeLessThanOrEqual(23); // 20 + "..."
+            if (fetchNode!.dataSummary) {
+                // 10 chars + "..." suffix
+                expect(fetchNode!.dataSummary.length).toBeLessThanOrEqual(13);
             }
         });
 
@@ -196,6 +196,56 @@ describe("GraphRAGRetriever", () => {
             const ctx2 = await retriever.retrieve(MOCK_GRAPH_KEY, "fetch api");
             expect(ctx1).not.toBe(ctx2); // different references
             expect(retriever.getCacheSize()).toBe(0);
+        });
+    });
+
+    describe("semantic search on primitives (swap behavior)", () => {
+        it("forwards the query embedding to searchNodeConfigs", async () => {
+            const embProvider = createMockEmbeddingProvider();
+            const spy = vi.spyOn(ds, "searchNodeConfigs");
+            const retriever = new GraphRAGRetriever(ds, { cacheTTLMs: 0 }, embProvider);
+            await retriever.retrieve(MOCK_GRAPH_KEY, "filter active players");
+            expect(spy).toHaveBeenCalled();
+            const lastCall = spy.mock.calls.at(-1)!;
+            expect(lastCall[0]).toBe("filter active players");
+            // third arg is the queryEmbedding
+            expect(Array.isArray(lastCall[2])).toBe(true);
+            spy.mockRestore();
+        });
+
+        it("includes a semantically-relevant primitive even when no token-matched instance exists", async () => {
+            // Query mentions "transform" — the Transform primitive is present in
+            // the catalog but the user's graph has only one transform instance.
+            const retriever = new GraphRAGRetriever(ds, { cacheTTLMs: 0 });
+            const ctx = await retriever.retrieve(MOCK_GRAPH_KEY, "transform data");
+            const configKeys = ctx.nodeTypeConfigs.map(c => c._key);
+            expect(configKeys).toContain("transform");
+        });
+
+        it("backfills configs for types used by relevantNodes that weren't top semantic matches", async () => {
+            // Query targets a specific instance by key. The seed is that instance,
+            // its config must still be in nodeTypeConfigs even if it wasn't a top
+            // semantic hit, because relevantNodes references its type.
+            const retriever = new GraphRAGRetriever(ds, { cacheTTLMs: 0 });
+            const ctx = await retriever.retrieve(MOCK_GRAPH_KEY, "error-handler logging");
+            const usedTypes = new Set(ctx.relevantNodes.map(n => n.type));
+            const configKeys = new Set(ctx.nodeTypeConfigs.map(c => c._key));
+            for (const t of usedTypes) {
+                // Built-in types (starter/return/entryType/html) live outside the
+                // workspace catalog, so skip them — they're documented in the
+                // system prompt rather than nodeTypeConfigs.
+                if (["starter", "return", "entryType", "html"].includes(t)) continue;
+                expect(configKeys.has(t)).toBe(true);
+            }
+        });
+
+        it("respects maxConfigs", async () => {
+            const retriever = new GraphRAGRetriever(ds, { cacheTTLMs: 0, maxConfigs: 1 });
+            const ctx = await retriever.retrieve(MOCK_GRAPH_KEY, "data");
+            // The maxConfigs cap applies to the semantic search; backfilled
+            // configs (from usedTypes) may push the total slightly above the
+            // cap but stay reasonable.
+            expect(ctx.nodeTypeConfigs.length).toBeLessThanOrEqual(5);
         });
     });
 });

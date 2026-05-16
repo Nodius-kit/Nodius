@@ -1,156 +1,160 @@
 /**
- * Tests for AI utility functions: createNodeEmbeddingText, hasNodeContentChanged.
+ * Tests for AI utility functions:
+ * - createNodeConfigEmbeddingText: builds the text we send to the embedding model
+ *   for each NodeTypeConfig primitive (semantic search input)
+ * - hasNodeConfigContentChanged: gates re-embedding to semantic field changes
  */
 
 import { describe, it, expect } from "vitest";
-import { createNodeEmbeddingText, hasNodeContentChanged, truncate, summarizeHandles } from "../utils.js";
-import type { Node } from "@nodius/utils";
+import {
+    createNodeConfigEmbeddingText,
+    hasNodeConfigContentChanged,
+    truncate,
+    summarizeHandles,
+} from "../utils.js";
+import type { NodeTypeConfig } from "@nodius/utils";
 
-// ─── Helper to build a minimal Node ──────────────────────────────────
+// ─── Helper to build a minimal NodeTypeConfig ────────────────────────
 
-function makeNode(overrides: Partial<Node<any>> = {}): Node<any> {
+function makeConfig(overrides: Partial<NodeTypeConfig> = {}): NodeTypeConfig {
     return {
-        _key: "n1",
-        graphKey: "g1",
-        type: "html",
-        typeVersion: 1,
-        sheet: "main",
-        size: { width: 200, height: 100 },
-        posX: 0,
-        posY: 0,
-        process: "",
-        handles: {},
+        _key: "primitive-key",
+        workspace: "test",
+        version: 1,
+        displayName: "Primitive",
+        description: "",
+        category: "default",
+        alwaysRendered: false,
+        content: { type: "text", tag: "span", name: "label", identifier: "r", css: [], domEvents: [], content: { en: "Primitive" } },
+        node: {
+            type: "primitive-key",
+            posX: 0,
+            posY: 0,
+            process: "",
+            handles: {
+                L: { position: "separate", point: [{ id: "0", type: "in", accept: "any" }] },
+            },
+            size: { width: 200, height: 100 },
+        },
+        border: { radius: 0, width: 0, type: "solid", normal: { color: "#000" }, hover: { color: "#000" } },
+        icon: "Square",
+        createdTime: 0,
+        lastUpdatedTime: 0,
         ...overrides,
     };
 }
 
-// ─── createNodeEmbeddingText ─────────────────────────────────────────
+// ─── createNodeConfigEmbeddingText ───────────────────────────────────
 
-describe("createNodeEmbeddingText", () => {
-    it("includes node type", () => {
-        const text = createNodeEmbeddingText(makeNode({ type: "starter" }));
-        expect(text).toContain("type: starter");
+describe("createNodeConfigEmbeddingText", () => {
+    it("includes displayName", () => {
+        const text = createNodeConfigEmbeddingText(makeConfig({ displayName: "API Call" }));
+        expect(text).toContain("name: API Call");
     });
 
-    it("includes process code", () => {
-        const text = createNodeEmbeddingText(makeNode({ process: "next(node.data);" }));
-        expect(text).toContain("process: next(node.data);");
+    it("includes description", () => {
+        const text = createNodeConfigEmbeddingText(makeConfig({ description: "Makes an HTTP request" }));
+        expect(text).toContain("description: Makes an HTTP request");
     });
 
-    it("includes data as JSON", () => {
-        const text = createNodeEmbeddingText(makeNode({ data: { name: "test", value: 42 } }));
-        expect(text).toContain("data:");
-        expect(text).toContain('"name"');
-        expect(text).toContain('"test"');
+    it("includes category", () => {
+        const text = createNodeConfigEmbeddingText(makeConfig({ category: "data" }));
+        expect(text).toContain("category: data");
     });
 
-    it("includes string data directly", () => {
-        const text = createNodeEmbeddingText(makeNode({ data: "hello world" }));
-        expect(text).toContain("data: hello world");
+    it("includes handles", () => {
+        const config = makeConfig({
+            node: {
+                type: "x",
+                posX: 0,
+                posY: 0,
+                process: "",
+                handles: {
+                    L: { position: "separate", point: [{ id: "0", type: "in", accept: "any" }] },
+                    R: { position: "separate", point: [{ id: "0", type: "out", accept: "any", display: "ok" }] },
+                },
+                size: { width: 100, height: 100 },
+            },
+        });
+        const text = createNodeConfigEmbeddingText(config);
+        expect(text).toContain("L:in(any)");
+        expect(text).toContain("R:out(any):ok");
     });
 
-    it("skips empty process", () => {
-        const text = createNodeEmbeddingText(makeNode({ process: "" }));
-        expect(text).not.toContain("process:");
+    it("omits empty description and category lines", () => {
+        const text = createNodeConfigEmbeddingText(makeConfig({ description: "", category: "" }));
+        expect(text).not.toContain("description:");
+        expect(text).not.toContain("category:");
     });
 
-    it("skips whitespace-only process", () => {
-        const text = createNodeEmbeddingText(makeNode({ process: "   " }));
-        expect(text).not.toContain("process:");
-    });
-
-    it("skips undefined data", () => {
-        const text = createNodeEmbeddingText(makeNode({ data: undefined }));
-        expect(text).not.toContain("data:");
-    });
-
-    it("skips null data", () => {
-        const text = createNodeEmbeddingText(makeNode({ data: null }));
-        expect(text).not.toContain("data:");
-    });
-
-    it("skips empty object data", () => {
-        const text = createNodeEmbeddingText(makeNode({ data: {} }));
-        expect(text).not.toContain("data:");
-    });
-
-    it("truncates at 8000 characters", () => {
-        const longProcess = "x".repeat(10000);
-        const text = createNodeEmbeddingText(makeNode({ process: longProcess }));
-        expect(text.length).toBeLessThanOrEqual(8000);
-    });
-
-    it("returns non-empty string for a typical node", () => {
-        const text = createNodeEmbeddingText(makeNode({
-            type: "html",
-            process: "const result = node.data.x + node.data.y;\nnext(result);",
-            data: { x: 10, y: 20 },
+    it("returns non-empty string for a typical primitive", () => {
+        const text = createNodeConfigEmbeddingText(makeConfig({
+            displayName: "Filter",
+            description: "Filters data based on a condition",
+            category: "transform",
         }));
         expect(text.length).toBeGreaterThan(0);
-        expect(text).toContain("type: html");
-        expect(text).toContain("process:");
-        expect(text).toContain("data:");
+        expect(text).toContain("name: Filter");
+        expect(text).toContain("description:");
+        expect(text).toContain("category: transform");
     });
 });
 
-// ─── hasNodeContentChanged ───────────────────────────────────────────
+// ─── hasNodeConfigContentChanged ─────────────────────────────────────
 
-describe("hasNodeContentChanged", () => {
-    it("returns false for identical nodes", () => {
-        const node = makeNode();
-        expect(hasNodeContentChanged(node, { ...node })).toBe(false);
+describe("hasNodeConfigContentChanged", () => {
+    it("returns true when original is undefined (first save)", () => {
+        expect(hasNodeConfigContentChanged(undefined, makeConfig())).toBe(true);
     });
 
-    it("returns false for position-only change", () => {
-        const original = makeNode({ posX: 0, posY: 0 });
-        const moved = makeNode({ posX: 500, posY: 300 });
-        expect(hasNodeContentChanged(original, moved)).toBe(false);
+    it("returns false for identical configs", () => {
+        const config = makeConfig();
+        expect(hasNodeConfigContentChanged(config, { ...config })).toBe(false);
     });
 
-    it("returns false for size-only change", () => {
-        const original = makeNode({ size: { width: 200, height: 100 } });
-        const resized = makeNode({ size: { width: 400, height: 200 } });
-        expect(hasNodeContentChanged(original, resized)).toBe(false);
+    it("returns false for icon-only change (cosmetic)", () => {
+        const original = makeConfig({ icon: "Square" });
+        const changed = makeConfig({ icon: "Star" });
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(false);
     });
 
-    it("returns false for position + size change (drag & resize)", () => {
-        const original = makeNode({ posX: 0, posY: 0, size: { width: 200, height: 100 } });
-        const changed = makeNode({ posX: 100, posY: 200, size: { width: 300, height: 150 } });
-        expect(hasNodeContentChanged(original, changed)).toBe(false);
+    it("returns false for border-only change (cosmetic)", () => {
+        const original = makeConfig();
+        const changed = makeConfig({
+            border: { radius: 99, width: 5, type: "dashed", normal: { color: "#fff" }, hover: { color: "#aaa" } },
+        });
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(false);
     });
 
-    it("returns true for type change", () => {
-        const original = makeNode({ type: "html" });
-        const changed = makeNode({ type: "starter" });
-        expect(hasNodeContentChanged(original, changed)).toBe(true);
+    it("returns true for displayName change", () => {
+        const original = makeConfig({ displayName: "A" });
+        const changed = makeConfig({ displayName: "B" });
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(true);
     });
 
-    it("returns true for process change", () => {
-        const original = makeNode({ process: "next();" });
-        const changed = makeNode({ process: "next(node.data);" });
-        expect(hasNodeContentChanged(original, changed)).toBe(true);
+    it("returns true for description change", () => {
+        const original = makeConfig({ description: "old" });
+        const changed = makeConfig({ description: "new" });
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(true);
     });
 
-    it("returns true for data change", () => {
-        const original = makeNode({ data: { value: 1 } });
-        const changed = makeNode({ data: { value: 2 } });
-        expect(hasNodeContentChanged(original, changed)).toBe(true);
+    it("returns true for category change", () => {
+        const original = makeConfig({ category: "data" });
+        const changed = makeConfig({ category: "transform" });
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(true);
     });
 
-    it("returns true for handles change", () => {
-        const original = makeNode({ handles: {} });
-        const changed = makeNode({
-            handles: {
-                R: { position: "separate", point: [{ id: "out1", type: "out", accept: "*" }] },
+    it("returns true when handles change", () => {
+        const original = makeConfig();
+        const changed = makeConfig({
+            node: {
+                ...makeConfig().node,
+                handles: {
+                    R: { position: "separate", point: [{ id: "out1", type: "out", accept: "*" }] },
+                },
             },
         });
-        expect(hasNodeContentChanged(original, changed)).toBe(true);
-    });
-
-    it("returns true for data added to node that had none", () => {
-        const original = makeNode({ data: undefined });
-        const changed = makeNode({ data: { name: "test" } });
-        expect(hasNodeContentChanged(original, changed)).toBe(true);
+        expect(hasNodeConfigContentChanged(original, changed)).toBe(true);
     });
 });
 

@@ -54,7 +54,7 @@ import {
 import {clusterManager, db} from "../server";
 import {RequestWorkFlow} from "../request/requestWorkFlow";
 import {WsAIController} from "../ai/wsAIController";
-import {createNodeEmbeddingText, hasNodeContentChanged} from "../ai/utils";
+import {createNodeConfigEmbeddingText, hasNodeConfigContentChanged} from "../ai/utils";
 import {detectEmbeddingProvider, type EmbeddingProvider} from "../ai/providers/embeddingProvider";
 import {AuthManager} from "../auth/AuthManager";
 import {hasWorkspaceAccess} from "../auth/workspaceAccess";
@@ -2213,25 +2213,6 @@ export class WebSocketManager {
                     edgesUpdated: edgesToUpdate.length,
                     edgesDeleted: edgesToDelete.length
                 });
-
-                // ─── Embedding write-path (fire-and-forget) ──────────
-                // Generate embeddings for new nodes and content-modified nodes.
-                // Runs asynchronously — never blocks or crashes the auto-save.
-                if (this.embeddingProvider) {
-                    const provider = this.embeddingProvider;
-                    // Content-modified updated nodes (skip position/size-only moves)
-                    const contentModifiedNodes = nodesToUpdate.filter(node => {
-                        const original = sheet.originalNodeMap.get(node._key);
-                        return original ? hasNodeContentChanged(original, node) : true;
-                    });
-                    const nodesToEmbed = [...nodesToCreate, ...contentModifiedNodes];
-
-                    if (nodesToEmbed.length > 0) {
-                        this.generateNodeEmbeddings(nodesToEmbed, graphKey, node_collection, provider).catch(err => {
-                            console.warn("AI: Embedding write-path error (non-blocking):", err);
-                        });
-                    }
-                }
             }
 
             // Update the graph's lastUpdatedTime if there were any changes
@@ -2247,28 +2228,22 @@ export class WebSocketManager {
     }
 
     /**
-     * Generate and persist embeddings for a batch of nodes.
+     * Generate and persist an embedding for a NodeTypeConfig (primitive).
      * Runs asynchronously after save — errors are logged but never propagated.
      */
-    private async generateNodeEmbeddings(
-        nodes: Node<any>[],
-        graphKey: string,
-        nodeCollection: ReturnType<typeof db.collection>,
+    private async generateNodeConfigEmbedding(
+        config: NodeTypeConfig,
+        nodeConfigCollection: ReturnType<typeof db.collection>,
         provider: EmbeddingProvider,
     ): Promise<void> {
-        for (const node of nodes) {
-            try {
-                const text = createNodeEmbeddingText(node);
-                if (text.trim().length === 0) continue;
+        try {
+            const text = createNodeConfigEmbeddingText(config);
+            if (text.trim().length === 0) return;
 
-                const embedding = await provider.generateEmbedding(text);
-                const arangoKey = `${graphKey}-${node._key}`;
-
-                await nodeCollection.update(arangoKey, { embedding });
-            } catch (err) {
-                // Log and continue — one failed embedding should not stop others
-                console.warn(`AI: Failed to embed node ${node._key}:`, err);
-            }
+            const embedding = await provider.generateEmbedding(text);
+            await nodeConfigCollection.update(config._key, { embedding });
+        } catch (err) {
+            console.warn(`AI: Failed to embed node config ${config._key}:`, err);
         }
     }
 
@@ -2297,6 +2272,10 @@ export class WebSocketManager {
                     lastUpdatedTime: Date.now()
                 };
 
+                // Capture the *previous* config before we overwrite it, so the
+                // embedding write-path can decide whether semantic content changed.
+                const previousConfig = managedConfig.originalConfig;
+
                 // Update the node config in the database
                 await nodeConfig_collection.replace(nodeConfigKey, updatedConfig);
 
@@ -2308,6 +2287,16 @@ export class WebSocketManager {
                 managedConfig.hasUnsavedChanges = false;
 
                 console.log(`Saved changes for node config ${nodeConfigKey}`);
+
+                // ─── Embedding write-path (fire-and-forget) ──────────
+                // Re-embed only when semantic fields (name, description,
+                // category, handles) actually moved. Never blocks the save.
+                if (this.embeddingProvider && hasNodeConfigContentChanged(previousConfig, updatedConfig)) {
+                    const provider = this.embeddingProvider;
+                    this.generateNodeConfigEmbedding(updatedConfig, nodeConfig_collection, provider).catch(err => {
+                        console.warn("AI: Node config embedding write-path error (non-blocking):", err);
+                    });
+                }
             } else {
                 // No actual changes, just mark as saved
                 managedConfig.hasUnsavedChanges = false;

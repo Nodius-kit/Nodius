@@ -36,10 +36,11 @@ Ce document detaille **chaque etape**, **chaque fichier**, et **chaque transform
       ├── [5a] GraphRAGRetriever.retrieve()  ── graphRAGRetriever.ts
       │         ├── Cache check (TTL 2 min)
       │         ├── Embedding de la query (optionnel)
-      │         ├── searchNodes() → MemoryAwareDataSource → memoire ou ArangoDB
+      │         ├── searchNodeConfigs() → vector search sur les PRIMITIVES (nodius_node_config)
+      │         ├── searchNodes() → token search sur les instances (nodius_nodes)
+      │         ├── Fusion: instances token-matched + instances des primitives pertinentes
       │         ├── Expansion BFS du voisinage
-      │         ├── Collecte nodes, edges, configs
-      │         └── Assemblage du GraphRAGContext
+      │         └── Assemblage du GraphRAGContext (primitives + instances + edges)
       │
       ├── [5b] buildSystemPrompt(context, role)  ── prompts/systemPrompt.ts
       │
@@ -264,33 +265,43 @@ Si EmbeddingProvider est configure (OPENAI_API_KEY present) :
 Si pas de provider ou erreur → continue sans embedding (fallback tokens)
 ```
 
-**Etape 2 — Recherche de nodes :**
+**Etape 2 — Recherche semantique sur les PRIMITIVES (`nodius_node_config`) :**
 ```
-MemoryAwareDataSource.searchNodes("nba-workflow", "Que fait le node fetch-api ?", 20, queryEmbedding?)
+dataSource.searchNodeConfigs(query, maxConfigs, queryEmbedding?)
 ```
 
-Deux strategies selon que l'embedding est disponible :
+La recherche vectorielle tourne sur le catalogue de types — pas sur les instances. Ca permet a l'IA de proposer un type que l'utilisateur n'a jamais pose dans le graphe.
 
 | Strategie | Quand | Comment |
 |-----------|-------|---------|
-| **Vectorielle** | `queryEmbedding` fourni | `COSINE_SIMILARITY(n.embedding, queryEmbedding)` en ArangoDB, score > 0.3, tri DESC |
-| **Tokens** | Pas d'embedding ou en memoire | Tokenise la query ("que", "fait", "node", "fetch", "api"), score chaque node sur ses champs texte (_key, type, data, config.displayName, config.description) |
+| **Vectorielle** | `queryEmbedding` fourni | `COSINE_SIMILARITY(c.embedding, queryEmbedding)` sur `nodius_node_config`, score > 0.3, tri DESC |
+| **Tokens** | Pas d'embedding ou aucun hit vectoriel | Tokenise la query, score chaque config sur `_key, displayName, description, category` |
 
-Si aucun resultat → fallback : prend tous les nodes (max 20).
-
-**Etape 3 — Expansion du voisinage (BFS) :**
+**Etape 3 — Recherche d'instances par tokens (`nodius_nodes`) :**
 ```
-Pour les 5 meilleurs nodes trouves :
+dataSource.searchNodes(graphKey, query, maxNodes)
+```
+
+Recherche purement textuelle sur les instances du graphe utilisateur, pour retrouver un node specifique par son `_key` ou ses donnees ("le node ou j'ai mis l'URL Stripe").
+
+**Etape 4 — Fusion des seeds :**
+1. Les instances token-matched (Etape 3) en premier
+2. Completees par les instances dont le `type` correspond a une primitive pertinente (Etape 2)
+3. Deduplique, cape a `maxNodes`
+4. Si vide → fallback : prend les premieres instances du graphe
+
+**Etape 5 — Expansion du voisinage (BFS) :**
+```
+Pour les 5 premiers seeds :
   → BFS profondeur 2, direction ANY
   → Collecte les nodes et edges voisins
-  → Ex: fetch-api → trouve root, filter-active, error-handler + les edges entre eux
 ```
 
-**Etape 4 — Fetch de tous les nodes uniques** (max 20)
+**Etape 6 — Filtrage des edges** : garde uniquement celles dont source ET target sont dans les nodes trouves
 
-**Etape 5 — Filtrage des edges** : garde uniquement celles dont source ET target sont dans les nodes trouves
-
-**Etape 6 — Collecte des NodeTypeConfigs** : recupere les definitions des types utilises (api-call, filter, etc.)
+**Etape 7 — Construction du jeu final de NodeTypeConfigs :**
+- Union des primitives semantiquement pertinentes (Etape 2)
+- Plus celles utilisees par les instances finales (backfill pour que le LLM ait la spec de chaque type qu'il voit)
 
 **Etape 7 — Assemblage** :
 ```

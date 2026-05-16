@@ -214,7 +214,18 @@ export interface GraphDataSource {
     getEdges(graphKey: string, sheetId?: string): Promise<Edge[]>;
     getNodeByKey(graphKey: string, nodeKey: string): Promise<Node<unknown> | null>;
     getNodeConfigs(graphKey: string): Promise<NodeTypeConfig[]>;
-    searchNodes(graphKey: string, query: string, maxResults?: number, queryEmbedding?: number[]): Promise<Node<unknown>[]>;
+    /**
+     * Token-only text search over node *instances* in a graph. Used to find
+     * specific nodes by their payload (data, key). Semantic similarity lives
+     * in searchNodeConfigs — instances are not embedded.
+     */
+    searchNodes(graphKey: string, query: string, maxResults?: number): Promise<Node<unknown>[]>;
+    /**
+     * Semantic search over NodeTypeConfig primitives (the catalog of types).
+     * When queryEmbedding is provided, runs vector similarity on
+     * nodius_node_config.embedding. Falls back to token search otherwise.
+     */
+    searchNodeConfigs(query: string, maxResults?: number, queryEmbedding?: number[]): Promise<NodeTypeConfig[]>;
     getNeighborhood(graphKey: string, nodeKey: string, maxDepth?: number, direction?: "inbound" | "outbound" | "any"): Promise<{ nodes: Node<unknown>[]; edges: Edge[] }>;
     /** List all workflow graphs for a workspace. Used by Home assistant. */
     listGraphs?(workspace: string): Promise<GraphSummary[]>;
