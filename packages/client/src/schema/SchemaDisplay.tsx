@@ -756,9 +756,13 @@ export const SchemaDisplay = memo(() => {
                 instruction.key(side).arrayRemoveIndex(index);
                 const edgeMap = projectRef.current.state.graph?.sheets[projectRef.current.state.selectedSheetId ?? ""]?.edgeMap;
                 if(!edgeMap) return false;
-                const edge = edgeMap.get(( point.type === "out" ? "source-" : "target-")+nodeId);
-                if(edge) {
-                    const output = await projectRef.current.state.batchDeleteElements!([], edge.map((e) => e._key), Project.state.selectedSheetId!);
+                const edgeMapKey = (point.type === "out" ? "source-" : "target-") + nodeId;
+                const allEdges = edgeMap.get(edgeMapKey) ?? [];
+                const edgesToDelete = allEdges.filter((e) =>
+                    point.type === "out" ? e.sourceHandle === pointId : e.targetHandle === pointId
+                );
+                if(edgesToDelete.length > 0) {
+                    const output = await projectRef.current.state.batchDeleteElements!([], edgesToDelete.map((e) => e._key), Project.state.selectedSheetId!);
                     if(!output.status) {
                         return false;
                     }

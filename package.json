@@ -15,7 +15,8 @@
     "version:minor": "npm version minor -ws --no-git-tag-version",
     "version:major": "npm version major -ws --no-git-tag-version"
   },
-  "devDependencies": {
-
+  "dependencies": {
+    "@nodius/editor": "github:Nodius-kit/Nodius_WYSIWYG",
+    "mongodb": "^7.1.0"
   }
 }
